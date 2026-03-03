@@ -9,11 +9,11 @@ import BuildQueue from '@/components/planet/BuildQueue'
 import MineDistribution from '@/components/planet/MineDistribution'
 import BunkerPanel from '@/components/planet/BunkerPanel'
 import TutorialOverlay from '@/components/planet/TutorialOverlay'
-import { Building2, Pickaxe, Shield, Settings } from 'lucide-react'
+import { Building2, Hammer, Shield, Settings } from 'lucide-react'
 
 const TABS = [
   { id: 'buildings', label: 'Gebäude', icon: Building2 },
-  { id: 'mines', label: 'Minen', icon: Pickaxe },
+  { id: 'mines', label: 'Minen', icon: Hammer },
   { id: 'bunker', label: 'Bunker', icon: Shield },
 ]
 
