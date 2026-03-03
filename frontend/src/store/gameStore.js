@@ -53,12 +53,10 @@ export const useGameStore = create((set, get) => ({
     x: Math.floor(Math.random() * 400) + 50,
     y: Math.floor(Math.random() * 400) + 50,
     z: 100,
-    quadrant: Math.floor(Math.random() * 4) + 1,
     titan: 5000, silizium: 4000, helium: 2000,
     nahrung: 2000, wasser: 2000, bauxit: 3000,
     aluminium: 3000, uran: 1000, plutonium: 500,
-    wasserstoff: 1500, credits: 2000,
-    energy_production: 0, energy_consumption: 0
+    wasserstoff: 1500, credits: 2000
   })
   if (planetError) throw new Error('Planet-Fehler: ' + planetError.message)
 
