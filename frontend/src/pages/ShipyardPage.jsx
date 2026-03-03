@@ -4,12 +4,34 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Rocket, ChevronDown, ChevronUp, Lock, Hammer, Clock } from 'lucide-react'
+import { Rocket, X, ChevronRight, Hammer, Lock, AlertTriangle } from 'lucide-react'
 
-const CLASS_LABELS = { Z: 'Klasse Z', A: 'Klasse A', B: 'Klasse B', C: 'Klasse C', D: 'Klasse D', E: 'Klasse E' }
-const CLASS_COLORS = { Z: '#94a3b8', A: '#34d399', B: '#38bdf8', C: '#a78bfa', D: '#fb923c', E: '#f472b6' }
-
+const CLASS_LABELS  = { Z: 'Klasse Z', A: 'Klasse A', B: 'Klasse B', C: 'Klasse C', D: 'Klasse D', E: 'Klasse E' }
+const CLASS_COLORS  = { Z: '#94a3b8', A: '#34d399', B: '#38bdf8', C: '#a78bfa', D: '#fb923c', E: '#f472b6' }
+const CLASS_DESC    = {
+  Z: 'Leichte Sonden und Frachter. Günstig, keine Bewaffnung.',
+  A: 'Mittlere Frachter. Gute Kapazität, geringe Kampfkraft.',
+  B: 'Leichte Kampfschiffe. Schnell und wendig.',
+  C: 'Mittelschwere Kampfschiffe. Solide Allrounder.',
+  D: 'Schwere Kreuzer. Hoher Schaden, träge.',
+  E: 'Schlachtschiffe. Nur für Admirale. Vernichtende Kraft.',
+}
 const PROFESSION_LABELS = { admiral: 'Admiral', trader: 'Händler', privateer: 'Freibeuter' }
+
+const PART_CATEGORIES = [
+  { id: 'engine',          label: 'Antrieb',      required: true  },
+  { id: 'booster',         label: 'Booster',      required: false },
+  { id: 'primary_weapon',  label: 'Primärwaffe',  required: false },
+  { id: 'turret',          label: 'Turret',       required: false },
+  { id: 'armor',           label: 'Panzerung',    required: false },
+  { id: 'shield_hp',       label: 'HP-Schild',    required: false },
+  { id: 'shield_def',      label: 'Def-Schild',   required: false },
+  { id: 'cargo',           label: 'Ladebucht',    required: false },
+  { id: 'mining',          label: 'Bergbau',      required: false },
+  { id: 'scanner_asteroid',label: 'Ast-Scanner',  required: false },
+  { id: 'scanner_npc',     label: 'NPC-Scanner',  required: false },
+  { id: 'extension',       label: 'Erweiterung',  required: false },
+]
 
 function fmt(n) {
   if (!n) return '0'
@@ -17,72 +39,73 @@ function fmt(n) {
   return n.toLocaleString()
 }
 
-function ChassisCard({ chassis, planet, player, shipyardLevel, hasTech }) {
-  const [expanded, setExpanded] = useState(false)
+function ShipDesigner({ chassis, planet, player, partDefs, onClose, onBuilt }) {
+  const [selectedParts, setSelectedParts] = useState([])
   const [building, setBuilding] = useState(false)
   const { addNotification } = useGameStore()
 
-  const locked = chassis.required_tech && !hasTech(chassis.required_tech)
-  const wrongProfession = chassis.required_profession && player?.profession !== chassis.required_profession
-  const noShipyard = shipyardLevel < 1
+  const getAvailableParts = (category) =>
+    (partDefs ?? []).filter(p => {
+      if (p.category !== category) return false
+      if (p.weapon_class && p.weapon_class !== chassis.class) return false
+      if (p.required_profession && p.required_profession !== player?.profession) return false
+      return true
+    })
 
-  const costs = {
-    titan:      chassis.cost_titan      || 0,
-    silizium:   chassis.cost_silizium   || 0,
-    aluminium:  chassis.cost_aluminium  || 0,
-    uran:       chassis.cost_uran       || 0,
-    plutonium:  chassis.cost_plutonium  || 0,
-  }
+  const baseStats = { hp: chassis.base_hp, attack: chassis.base_attack, defense: chassis.base_defense, speed: chassis.base_speed, maneuver: chassis.base_maneuver, cargo: chassis.base_cargo }
+  const stats = selectedParts.reduce((acc, pid) => {
+    const p = (partDefs ?? []).find(d => d.id === pid)
+    if (!p) return acc
+    return {
+      hp:       acc.hp       + (p.hp_bonus       || 0),
+      attack:   acc.attack   + (p.attack_bonus    || 0) - (p.attack_malus   || 0),
+      defense:  acc.defense  + (p.defense_bonus   || 0),
+      speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
+      maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
+      cargo:    acc.cargo    + (p.cargo_bonus     || 0),
+    }
+  }, { ...baseStats })
 
-  const canAfford = Object.entries(costs).every(([res, amt]) => (planet?.[res] ?? 0) >= amt)
-  const canBuild = !locked && !wrongProfession && !noShipyard && canAfford
+  const totalCells = selectedParts.reduce((sum, pid) => {
+    const p = (partDefs ?? []).find(d => d.id === pid)
+    return sum + (p?.cells_required || 0)
+  }, 0)
+
+  const COST_KEYS = ['titan','silizium','aluminium','uran','plutonium']
+  const costs = COST_KEYS.reduce((acc, k) => {
+    let total = chassis[`cost_${k}`] || 0
+    selectedParts.forEach(pid => { const p = (partDefs ?? []).find(d => d.id === pid); total += p?.[`cost_${k}`] || 0 })
+    if (total > 0) acc[k] = total
+    return acc
+  }, {})
+
+  const canAfford   = Object.entries(costs).every(([res, amt]) => (planet?.[res] ?? 0) >= amt)
+  const hasEngine   = selectedParts.some(pid => (partDefs ?? []).find(d => d.id === pid)?.category === 'engine')
+  const cellsOk     = totalCells <= chassis.total_cells
+  const canBuild    = hasEngine && cellsOk && canAfford
+
+  const togglePart = (pid) => setSelectedParts(prev => prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid])
 
   const handleBuild = async () => {
     if (!canBuild || building) return
     setBuilding(true)
     try {
-      // Kosten abziehen
       const updates = {}
-      for (const [res, amt] of Object.entries(costs)) {
-        if (amt > 0) updates[res] = (planet[res] || 0) - amt
-      }
+      for (const [res, amt] of Object.entries(costs)) updates[res] = (planet[res] || 0) - amt
       await supabase.from('planets').update(updates).eq('id', planet.id)
 
-      // Flotte erstellen oder zu bestehender hinzufügen
-      const { data: fleet } = await supabase
-        .from('fleets')
-        .select('id')
-        .eq('player_id', player.id)
-        .eq('status', 'docked')
-        .single()
-
+      const { data: fleet } = await supabase.from('fleets').select('id').eq('player_id', player.id).eq('status', 'docked').maybeSingle()
       let fleetId = fleet?.id
       if (!fleetId) {
-        const { data: newFleet } = await supabase
-          .from('fleets')
-          .insert({ player_id: player.id, planet_id: planet.id, status: 'docked', name: 'Flotte 1' })
-          .select()
-          .single()
-        fleetId = newFleet?.id
+        const { data: nf } = await supabase.from('fleets').insert({ player_id: player.id, planet_id: planet.id, status: 'docked', name: 'Flotte 1' }).select().single()
+        fleetId = nf?.id
       }
-
       if (fleetId) {
-        await supabase.from('ships').insert({
-          fleet_id: fleetId,
-          chassis_id: chassis.id,
-          name: chassis.name,
-          hp: chassis.base_hp,
-          max_hp: chassis.base_hp,
-          attack: chassis.base_attack,
-          defense: chassis.base_defense,
-          speed: chassis.base_speed,
-          maneuver: chassis.base_maneuver,
-          cargo_capacity: chassis.base_cargo,
-          status: 'active'
-        })
+        await supabase.from('ships').insert({ fleet_id: fleetId, chassis_id: chassis.id, name: chassis.name, hp: stats.hp, max_hp: stats.hp, attack: stats.attack, defense: stats.defense, speed: stats.speed, maneuver: stats.maneuver, cargo_capacity: stats.cargo, status: 'active', installed_parts: selectedParts })
       }
-
-      addNotification(`${chassis.name} gebaut!`, 'success')
+      addNotification(`✅ ${chassis.name} gebaut!`, 'success')
+      onBuilt?.()
+      onClose()
     } catch (err) {
       addNotification('Fehler: ' + err.message, 'error')
     } finally {
@@ -91,116 +114,165 @@ function ChassisCard({ chassis, planet, player, shipyardLevel, hasTech }) {
   }
 
   return (
-    <motion.div
-      layout
-      className="panel overflow-hidden"
-      style={{ opacity: (locked || wrongProfession || noShipyard) ? 0.5 : 1 }}
-      whileHover={{ borderColor: 'rgba(34,211,238,0.25)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-lg flex flex-col"
+        style={{ background: '#040d1a', border: '1px solid rgba(34,211,238,0.2)' }}>
 
-      {/* Header */}
-      <div className="panel-header cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <div className="flex items-center gap-2 flex-1">
-          <span className="px-1.5 py-0.5 rounded text-xs font-mono font-bold"
-            style={{ background: `${CLASS_COLORS[chassis.class]}20`, color: CLASS_COLORS[chassis.class], border: `1px solid ${CLASS_COLORS[chassis.class]}40` }}>
-            {chassis.class}
-          </span>
-          <span className="font-semibold text-sm text-slate-200">{chassis.name}</span>
-          {chassis.required_profession && (
-            <span className="text-xs px-1.5 py-0.5 rounded font-mono"
-              style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
-              {PROFESSION_LABELS[chassis.required_profession]}
+        <div className="flex items-center justify-between p-4 border-b border-cyan-500/15">
+          <div className="flex items-center gap-3">
+            <span className="px-2 py-0.5 rounded text-sm font-mono font-bold"
+              style={{ background: `${CLASS_COLORS[chassis.class]}20`, color: CLASS_COLORS[chassis.class], border: `1px solid ${CLASS_COLORS[chassis.class]}40` }}>
+              {chassis.class}
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {locked && <Lock size={13} className="text-slate-600" />}
-          {expanded ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
-        </div>
-      </div>
-
-      {/* Stats row */}
-      <div className="px-3 py-2 grid grid-cols-4 gap-2 text-xs font-mono border-b border-cyan-500/10">
-        {[
-          { label: 'HP', value: chassis.base_hp },
-          { label: 'ATK', value: chassis.base_attack },
-          { label: 'DEF', value: chassis.base_defense },
-          { label: 'SPD', value: chassis.base_speed },
-          { label: 'MNV', value: chassis.base_maneuver },
-          { label: 'Slots', value: chassis.total_cells },
-          { label: 'Cargo', value: fmt(chassis.base_cargo) },
-          { label: 'Werft', value: chassis.shipyard_space },
-        ].map(s => (
-          <div key={s.label} className="text-center">
-            <div className="text-slate-600 text-[10px]">{s.label}</div>
-            <div className="text-slate-300">{s.value}</div>
+            <h2 className="text-lg font-display font-bold text-slate-200">{chassis.name} — Designer</h2>
           </div>
-        ))}
-      </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={18} /></button>
+        </div>
 
-      {/* Expanded: costs + build button */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden">
-            <div className="p-3 space-y-3">
+        <div className="flex flex-1 overflow-hidden">
+          {/* Part selector */}
+          <div className="w-60 flex-shrink-0 border-r border-cyan-500/10 overflow-y-auto p-3 space-y-3">
+            <div>
+              <div className="flex justify-between text-xs font-mono text-slate-500 mb-1">
+                <span>Zellen</span>
+                <span className={totalCells > chassis.total_cells ? 'text-red-400' : 'text-cyan-400'}>{totalCells} / {chassis.total_cells}</span>
+              </div>
+              <div className="w-full rounded-full h-1.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-1.5 rounded-full transition-all" style={{ width: `${Math.min(totalCells/chassis.total_cells*100,100)}%`, background: totalCells > chassis.total_cells ? '#ef4444' : '#22d3ee' }} />
+              </div>
+            </div>
+            {PART_CATEGORIES.map(({ id, label, required }) => {
+              const parts = getAvailableParts(id)
+              if (parts.length === 0) return null
+              return (
+                <div key={id}>
+                  <p className="text-xs font-mono uppercase tracking-widest mb-1" style={{ color: required ? '#fbbf24' : '#475569' }}>
+                    {label}{required ? ' *' : ''}
+                  </p>
+                  <div className="space-y-0.5">
+                    {parts.map(part => {
+                      const sel = selectedParts.includes(part.id)
+                      const full = !sel && (totalCells + (part.cells_required || 0)) > chassis.total_cells
+                      return (
+                        <button key={part.id} onClick={() => !full && togglePart(part.id)} disabled={full && !sel}
+                          className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+                          style={{ background: sel ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)', border: sel ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)', color: sel ? '#22d3ee' : full ? '#1e293b' : '#94a3b8', cursor: full && !sel ? 'not-allowed' : 'pointer' }}>
+                          <div className="flex justify-between">
+                            <span className="truncate">{part.name}</span>
+                            <span className="text-slate-600 ml-1 flex-shrink-0">{part.cells_required}Z</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
 
-              {/* Unlock info */}
-              {locked && (
-                <div className="text-sm text-amber-400/70 px-2 py-1.5 rounded"
-                  style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.15)' }}>
-                  🔬 Benötigt Tech: {chassis.required_tech}
-                </div>
-              )}
-              {wrongProfession && (
-                <div className="text-sm text-red-400/70 px-2 py-1.5 rounded"
-                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                  ⚔️ Nur für {PROFESSION_LABELS[chassis.required_profession]}
-                </div>
-              )}
-              {noShipyard && (
-                <div className="text-sm text-red-400/70 px-2 py-1.5 rounded"
-                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                  🚀 Schiffswerft benötigt
-                </div>
-              )}
+          {/* Preview */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-44 h-44 rounded overflow-hidden" style={{ border: '1px solid rgba(34,211,238,0.15)' }}>
+                <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name} className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 grid grid-cols-2 gap-2">
+                {[['HP', stats.hp, baseStats.hp], ['Angriff', stats.attack, baseStats.attack], ['Verteidigung', stats.defense, baseStats.defense], ['Geschw.', stats.speed, baseStats.speed], ['Manöver', stats.maneuver, baseStats.maneuver], ['Laderaum', stats.cargo, baseStats.cargo]].map(([l, v, b]) => (
+                  <div key={l} className="px-3 py-2 rounded" style={{ background: 'rgba(7,20,40,0.6)', border: '1px solid rgba(34,211,238,0.08)' }}>
+                    <div className="text-xs text-slate-500 font-mono">{l}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-mono font-bold text-slate-200">{v}</span>
+                      {v - b !== 0 && <span className={`text-xs font-mono ${v > b ? 'text-green-400' : 'text-red-400'}`}>{v > b ? `+${v-b}` : v-b}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-              {/* Kosten */}
+            {!hasEngine && (
+              <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                <AlertTriangle size={14} /> Kein Antrieb — Schiff kann nicht gebaut werden
+              </div>
+            )}
+
+            {Object.keys(costs).length > 0 && (
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-widest font-mono mb-1.5">Baukosten</p>
-                <div className="space-y-1">
-                  {Object.entries(costs).filter(([,v]) => v > 0).map(([res, amt]) => {
-                    const have = planet?.[res] ?? 0
-                    const rest = have - amt
+                <p className="text-xs text-slate-500 uppercase tracking-widest font-mono mb-2">Gesamtkosten</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {Object.entries(costs).map(([res, amt]) => {
+                    const rest = (planet?.[res] ?? 0) - amt
                     const ok = rest >= 0
                     return (
-                      <div key={res} className="grid text-sm font-mono px-2 py-1 rounded"
-                        style={{ gridTemplateColumns: '1fr 70px 80px', background: 'rgba(4,13,26,0.6)' }}>
+                      <div key={res} className="grid text-sm font-mono px-2 py-1 rounded" style={{ gridTemplateColumns: '1fr 55px 65px', background: 'rgba(4,13,26,0.6)' }}>
                         <span className="text-slate-400 capitalize">{res}</span>
-                        <span className="text-right text-slate-300">{amt.toLocaleString()}</span>
-                        <span className={`text-right font-bold ${ok ? 'text-slate-500' : 'text-red-400'}`}>
-                          {ok ? rest.toLocaleString() : `−${Math.abs(rest).toLocaleString()}`}
-                        </span>
+                        <span className="text-right text-slate-300">{fmt(amt)}</span>
+                        <span className={`text-right font-bold ${ok ? 'text-slate-500' : 'text-red-400'}`}>{ok ? fmt(rest) : `−${fmt(Math.abs(rest))}`}</span>
                       </div>
                     )
                   })}
                 </div>
               </div>
+            )}
+          </div>
+        </div>
 
-              <button
-                onClick={handleBuild}
-                disabled={!canBuild || building}
-                className={`w-full btn-primary py-2 text-sm flex items-center justify-center gap-2 ${!canBuild ? 'opacity-40' : ''}`}>
-                {building
-                  ? <><Hammer size={14} className="animate-pulse" /> Wird gebaut...</>
-                  : <><Rocket size={14} /> {chassis.name} bauen</>}
-              </button>
-            </div>
-          </motion.div>
+        <div className="flex items-center justify-between p-4 border-t border-cyan-500/15">
+          <button onClick={onClose} className="btn-ghost text-sm">Abbrechen</button>
+          <button onClick={handleBuild} disabled={!canBuild || building} className={`btn-primary py-2 px-6 text-sm flex items-center gap-2 ${!canBuild ? 'opacity-40' : ''}`}>
+            {building ? <><Hammer size={14} className="animate-pulse" /> Wird gebaut...</> : <><Rocket size={14} /> {chassis.name} bauen</>}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
+  const noYard   = shipyardLevel < 1
+  const wrongProf = chassis.required_profession && player?.profession !== chassis.required_profession
+  const disabled  = noYard || wrongProf
+  const color     = CLASS_COLORS[chassis.class]
+
+  return (
+    <motion.div className="panel overflow-hidden cursor-pointer" style={{ opacity: disabled ? 0.4 : 1 }}
+      whileHover={!disabled ? { borderColor: `${color}50` } : {}}
+      onClick={() => !disabled && onSelect(chassis)}>
+      <div className="relative overflow-hidden" style={{ height: 300 }}>
+        <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name} className="w-full h-full object-cover"
+          style={{ filter: disabled ? 'grayscale(80%) brightness(0.5)' : 'brightness(0.9)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(4,13,26,0.97) 100%)' }} />
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-xs font-mono font-bold"
+          style={{ background: `${color}25`, color, border: `1px solid ${color}50` }}>{chassis.class}</div>
+        {!disabled && (
+          <div className="absolute bottom-8 right-2 text-xs text-cyan-400/50 font-mono flex items-center gap-1">
+            <ChevronRight size={11} /> Designer
+          </div>
         )}
-      </AnimatePresence>
+      </div>
+      <div className="p-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="font-semibold text-sm text-slate-200">{chassis.name}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{CLASS_DESC[chassis.class]}</p>
+          </div>
+          {chassis.required_profession && (
+            <span className="text-xs px-1.5 py-0.5 rounded font-mono flex-shrink-0"
+              style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+              {PROFESSION_LABELS[chassis.required_profession]}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-4 gap-1 text-xs font-mono text-center">
+          {[['HP', chassis.base_hp], ['ATK', chassis.base_attack], ['SPD', chassis.base_speed], ['MNV', chassis.base_maneuver]].map(([l, v]) => (
+            <div key={l} className="rounded py-1" style={{ background: 'rgba(7,20,40,0.5)' }}>
+              <div className="text-slate-600">{l}</div>
+              <div className="text-slate-300">{v}</div>
+            </div>
+          ))}
+        </div>
+        {wrongProf && <p className="text-xs text-red-400/60 font-mono">⚔️ Nur für {PROFESSION_LABELS[chassis.required_profession]}</p>}
+      </div>
     </motion.div>
   )
 }
@@ -208,87 +280,78 @@ function ChassisCard({ chassis, planet, player, shipyardLevel, hasTech }) {
 export default function ShipyardPage() {
   const { planet, player, buildings, hasTech } = useGameStore()
   const [classFilter, setClassFilter] = useState('all')
+  const [designer, setDesigner] = useState(null)
 
   const shipyardLevel = buildings.find(b => b.building_id === 'shipyard')?.level ?? 0
 
   const { data: chassisDefs } = useQuery({
     queryKey: ['chassis-defs'],
-    queryFn: async () => {
-      const { data } = await supabase.from('chassis_definitions').select('*').order('class')
-      return data ?? []
-    },
+    queryFn: async () => { const { data } = await supabase.from('chassis_definitions').select('*').order('class'); return data ?? [] },
     staleTime: Infinity
   })
-
-  const { data: myShips } = useQuery({
+  const { data: partDefs } = useQuery({
+    queryKey: ['part-defs'],
+    queryFn: async () => { const { data } = await supabase.from('ship_part_definitions').select('*'); return data ?? [] },
+    staleTime: Infinity
+  })
+  const { data: myShips, refetch: refetchShips } = useQuery({
     queryKey: ['my-ships', player?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('ships')
-        .select('*, fleets!inner(player_id)')
-        .eq('fleets.player_id', player.id)
-      return data ?? []
-    },
-    enabled: !!player,
-    refetchInterval: 10000
+    queryFn: async () => { const { data } = await supabase.from('ships').select('*, fleets!inner(player_id)').eq('fleets.player_id', player.id); return data ?? [] },
+    enabled: !!player, refetchInterval: 15000
   })
 
-  const classes = ['all', ...new Set((chassisDefs ?? []).map(c => c.class))]
-  const filtered = (chassisDefs ?? []).filter(c => classFilter === 'all' || c.class === classFilter)
+  // Only show chassis the player has researched or needs no tech
+  const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
+  const classes   = ['all', ...new Set(available.map(c => c.class))]
+  const filtered  = available.filter(c => classFilter === 'all' || c.class === classFilter)
 
-  if (shipyardLevel < 1) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="panel p-8 text-center space-y-3">
-          <Rocket size={48} className="mx-auto text-slate-600" />
-          <h2 className="text-xl font-display text-slate-300">Schiffswerft nicht gebaut</h2>
-          <p className="text-slate-500">Baue zuerst eine Schiffswerft auf deinem Planeten um Schiffe zu bauen.</p>
-        </div>
+  if (shipyardLevel < 1) return (
+    <div className="max-w-2xl mx-auto">
+      <div className="panel p-8 text-center space-y-3">
+        <Rocket size={48} className="mx-auto text-slate-600" />
+        <h2 className="text-xl font-display text-slate-300">Schiffswerft nicht gebaut</h2>
+        <p className="text-slate-500">Baue zuerst eine Schiffswerft auf deinem Planeten.</p>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">Schiffswerft</h2>
-          <p className="text-sm text-slate-500 font-mono">Lvl {shipyardLevel} · {shipyardLevel * 500} Kapazität</p>
-        </div>
-        <div className="text-sm text-slate-400 font-mono">
-          {myShips?.length ?? 0} Schiffe in deiner Flotte
+          <p className="text-sm text-slate-500 font-mono">Lvl {shipyardLevel} · {myShips?.length ?? 0} Schiffe</p>
         </div>
       </div>
 
-      {/* Klassen Filter */}
       <div className="flex gap-1.5 flex-wrap">
         {classes.map(cls => (
           <button key={cls} onClick={() => setClassFilter(cls)}
             className="px-3 py-1.5 rounded text-sm font-mono transition-all"
-            style={{
-              background: classFilter === cls ? `${CLASS_COLORS[cls] ?? 'rgba(34,211,238,1)'}20` : 'rgba(255,255,255,0.04)',
-              border: classFilter === cls ? `1px solid ${CLASS_COLORS[cls] ?? 'rgba(34,211,238,0.5)'}60` : '1px solid rgba(255,255,255,0.08)',
-              color: classFilter === cls ? (CLASS_COLORS[cls] ?? '#22d3ee') : '#64748b'
-            }}>
+            style={{ background: classFilter === cls ? `${CLASS_COLORS[cls] ?? '#22d3ee'}20` : 'rgba(255,255,255,0.04)', border: classFilter === cls ? `1px solid ${CLASS_COLORS[cls] ?? '#22d3ee'}50` : '1px solid rgba(255,255,255,0.08)', color: classFilter === cls ? (CLASS_COLORS[cls] ?? '#22d3ee') : '#64748b' }}>
             {cls === 'all' ? 'Alle' : CLASS_LABELS[cls]}
           </button>
         ))}
       </div>
 
-      {/* Chassis Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {filtered.length === 0 && (
+        <div className="panel p-8 text-center text-slate-500 text-sm">
+          Keine Schiffe verfügbar. Erforsche neue Technologien im Forschungszentrum.
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map(chassis => (
-          <ChassisCard
-            key={chassis.id}
-            chassis={chassis}
-            planet={planet}
-            player={player}
-            shipyardLevel={shipyardLevel}
-            hasTech={hasTech}
-          />
+          <ChassisCard key={chassis.id} chassis={chassis} player={player} shipyardLevel={shipyardLevel} onSelect={setDesigner} />
         ))}
       </div>
+
+      <AnimatePresence>
+        {designer && (
+          <ShipDesigner chassis={designer} planet={planet} player={player} partDefs={partDefs}
+            onClose={() => setDesigner(null)} onBuilt={() => refetchShips()} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
