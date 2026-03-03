@@ -537,6 +537,82 @@ function BranchSection({
 }
 
 // ─────────────────────────────────────────────
+// CHEAT BUTTON — temporär zum Testen
+// ─────────────────────────────────────────────
+function CheatButton({ allTechs, player, onRefresh }) {
+  const [loading, setLoading] = useState(false)
+  const [done, setDone]       = useState(false)
+
+  const handleCheat = async () => {
+    if (!player || loading) return
+    setLoading(true)
+    try {
+      // Alle Techs auf max_level oder 99 setzen
+      const upserts = allTechs.map(t => ({
+        player_id: player.id,
+        tech_id:   t.id,
+        level:     t.max_level ?? 99,
+      }))
+
+      // In Batches von 50
+      for (let i = 0; i < upserts.length; i += 50) {
+        await supabase.from('player_technologies')
+          .upsert(upserts.slice(i, i + 50), { onConflict: 'player_id,tech_id' })
+      }
+
+      // Alle Techs auch als discovered markieren
+      const discoveries = allTechs.map(t => ({
+        player_id: player.id,
+        tech_id:   t.id,
+      }))
+      for (let i = 0; i < discoveries.length; i += 50) {
+        await supabase.from('player_discoveries')
+          .upsert(discoveries.slice(i, i + 50), { onConflict: 'player_id,tech_id' })
+      }
+
+      setDone(true)
+      onRefresh()
+    } catch (err) {
+      console.error('Cheat error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleReset = async () => {
+    if (!player || loading) return
+    setLoading(true)
+    try {
+      await supabase.from('player_technologies').delete().eq('player_id', player.id)
+      await supabase.from('player_discoveries').delete().eq('player_id', player.id)
+      setDone(false)
+      onRefresh()
+    } catch (err) {
+      console.error('Reset error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex gap-2 items-center px-3 py-2 rounded"
+      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+      <span className="text-xs font-mono text-red-400">🧪 DEV</span>
+      <button onClick={handleCheat} disabled={loading || done}
+        className="px-2 py-1 rounded text-xs font-mono transition-all"
+        style={{ background: 'rgba(239,68,68,0.15)', color: done ? '#64748b' : '#f87171', border: '1px solid rgba(239,68,68,0.3)', opacity: done ? 0.5 : 1 }}>
+        {loading ? <Loader2 size={11} className="animate-spin inline" /> : done ? '✓ Alle erforscht' : 'Alles freischalten'}
+      </button>
+      <button onClick={handleReset} disabled={loading}
+        className="px-2 py-1 rounded text-xs font-mono transition-all"
+        style={{ background: 'rgba(100,116,139,0.1)', color: '#64748b', border: '1px solid rgba(100,116,139,0.2)' }}>
+        Reset
+      </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────
 export default function ResearchPage() {
@@ -684,6 +760,8 @@ export default function ResearchPage() {
             {researcherCount > 0 && ` · ${researcherCount} Forscher (+${researcherCount * 5}%)`}
           </p>
         </div>
+
+        <CheatButton allTechs={allTechs} player={player} onRefresh={handleRefresh} />
 
         {/* Global queue overview */}
         {totalQueue > 0 && (
