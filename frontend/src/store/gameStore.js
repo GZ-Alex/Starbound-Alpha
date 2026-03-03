@@ -47,7 +47,7 @@ export const useGameStore = create((set, get) => ({
     .single()
   if (error) throw new Error(error.message)
 
-  await supabase.from('planets').insert({
+  const { error: planetError } = await supabase.from('planets').insert({
     owner_id: player.id,
     name: `${username}s Heimatwelt`,
     x: Math.floor(Math.random() * 400) + 50,
@@ -60,6 +60,7 @@ export const useGameStore = create((set, get) => ({
     wasserstoff: 1500, credits: 2000,
     energy_production: 0, energy_consumption: 0
   })
+  if (planetError) throw new Error('Planet-Fehler: ' + planetError.message)
 
   const token = player.id
   localStorage.setItem('sb_token', token)
