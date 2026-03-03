@@ -40,48 +40,59 @@ export const useGameStore = create((set, get) => ({
   },
 
   register: async (username, profession, raceId) => {
-  const { data: player, error } = await supabase
-    .from('players')
-    .insert({ username, profession, race_id: raceId })
-    .select()
-    .single()
-  if (error) throw new Error(error.message)
+    const { data: player, error } = await supabase
+      .from('players')
+      .insert({ username, profession, race_id: raceId })
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
 
-  const { error: planetError } = await supabase.from('planets').insert({
-    owner_id: player.id,
-    name: `${username}s Heimatwelt`,
-    x: Math.floor(Math.random() * 400) + 50,
-    y: Math.floor(Math.random() * 400) + 50,
-    z: 100,
-    titan: 5000, silizium: 4000, helium: 2000,
-    nahrung: 2000, wasser: 2000, bauxit: 3000,
-    aluminium: 3000, uran: 1000, plutonium: 500,
-    wasserstoff: 1500, credits: 2000
-  })
-  if (planetError) throw new Error('Planet-Fehler: ' + planetError.message)
+    const { error: planetError } = await supabase.from('planets').insert({
+      owner_id: player.id,
+      name: `${username}s Heimatwelt`,
+      x: Math.floor(Math.random() * 400) + 50,
+      y: Math.floor(Math.random() * 400) + 50,
+      z: 100,
+      is_homeworld: true,
+      titan: 5000, silizium: 4000, helium: 2000,
+      nahrung: 2000, wasser: 2000, bauxit: 3000,
+      aluminium: 3000, uran: 1000, plutonium: 500,
+      wasserstoff: 1500, credits: 2000,
+      energie: 0,
+      energy_capacity: 0,
+      energy_consumed: 0,
+      prod_titan: 0, prod_silizium: 0, prod_helium: 0,
+      prod_nahrung: 0, prod_wasser: 0, prod_bauxit: 0,
+      prod_aluminium: 0, prod_uran: 0, prod_plutonium: 0,
+      prod_wasserstoff: 0, prod_energie: 0, prod_credits: 0,
+      total_mine_slots: 50,
+      mine_distribution: {},
+      scan_range: 10
+    })
+    if (planetError) throw new Error('Planet-Fehler: ' + planetError.message)
 
-  const token = player.id
-  localStorage.setItem('sb_token', token)
-  localStorage.setItem('sb_player', JSON.stringify(player))
-  set({ player, token })
-  get().loadGameData()
-  return player
-},
+    const token = player.id
+    localStorage.setItem('sb_token', token)
+    localStorage.setItem('sb_player', JSON.stringify(player))
+    set({ player, token })
+    get().loadGameData()
+    return player
+  },
 
-login: async (username) => {
-  const { data, error } = await supabase
-    .from('players')
-    .select('*')
-    .eq('username', username)
-    .single()
-  if (error) throw new Error('Spieler nicht gefunden')
-  const token = data.id
-  localStorage.setItem('sb_token', token)
-  localStorage.setItem('sb_player', JSON.stringify(data))
-  set({ player: data, token })
-  get().loadGameData()
-  return data
-},
+  login: async (username) => {
+    const { data, error } = await supabase
+      .from('players')
+      .select('*')
+      .eq('username', username)
+      .single()
+    if (error) throw new Error('Spieler nicht gefunden')
+    const token = data.id
+    localStorage.setItem('sb_token', token)
+    localStorage.setItem('sb_player', JSON.stringify(data))
+    set({ player: data, token })
+    get().loadGameData()
+    return data
+  },
 
   logout: () => {
     localStorage.removeItem('sb_token')
@@ -140,11 +151,11 @@ login: async (username) => {
         if (payload.new) set({ planet: payload.new })
       })
       .subscribe()
-  },
 
-  // Am Ende von loadGameData, nach dem subscribe():
-setInterval(() => get().processBuildQueue(), 10000)
-get().processBuildQueue() // Sofort einmal ausführen
+    // Client-seitiger Tick: alle 10 Sekunden Bauqueue prüfen
+    get().processBuildQueue()
+    setInterval(() => get().processBuildQueue(), 10000)
+  },
 
   loadPlanetData: async (planetId) => {
     const { data: buildings } = await supabase
@@ -168,128 +179,125 @@ get().processBuildQueue() // Sofort einmal ausführen
     if (data) set({ planet: data })
   },
 
+  processBuildQueue: async () => {
+    const { planet } = get()
+    if (!planet) return
+
+    const { data: queue } = await supabase
+      .from('build_queue')
+      .select('*')
+      .eq('planet_id', planet.id)
+      .order('queue_position')
+
+    if (!queue || queue.length === 0) return
+
+    const now = new Date()
+    for (const item of queue) {
+      if (new Date(item.finish_at) <= now) {
+        // Gebäude fertigstellen
+        const { data: existing } = await supabase
+          .from('planet_buildings')
+          .select('*')
+          .eq('planet_id', planet.id)
+          .eq('building_id', item.building_id)
+          .single()
+
+        if (existing) {
+          await supabase.from('planet_buildings')
+            .update({ level: item.target_level })
+            .eq('planet_id', planet.id)
+            .eq('building_id', item.building_id)
+        } else {
+          await supabase.from('planet_buildings')
+            .insert({ planet_id: planet.id, building_id: item.building_id, level: item.target_level })
+        }
+
+        // Aus Queue entfernen
+        await supabase.from('build_queue').delete().eq('id', item.id)
+      }
+    }
+
+    await get().loadPlanetData(planet.id)
+    await get().refreshPlanet()
+  },
+
   // -------------------------------------------------------
   // BUILDINGS
   // -------------------------------------------------------
   queueBuild: async (buildingId) => {
-  const { planet, buildings } = get()
+    const { planet, buildings } = get()
 
-  // Aktuellen Level holen
-  const currentLevel = buildings.find(b => b.building_id === buildingId)?.level ?? 0
-  const nextLevel = currentLevel + 1
+    const currentLevel = buildings.find(b => b.building_id === buildingId)?.level ?? 0
+    const nextLevel = currentLevel + 1
 
-  // Gebäude-Definition laden
-  const { data: def } = await supabase
-    .from('building_definitions')
-    .select('*')
-    .eq('id', buildingId)
-    .single()
-  if (!def) throw new Error('Gebäude nicht gefunden')
+    const { data: def } = await supabase
+      .from('building_definitions')
+      .select('*')
+      .eq('id', buildingId)
+      .single()
+    if (!def) throw new Error('Gebäude nicht gefunden')
 
-  // Kosten berechnen
-  const scale = Math.pow(def.cost_scale_factor, currentLevel)
-  const costs = {
-    titan:       Math.floor((def.cost_titan       || 0) * scale),
-    silizium:    Math.floor((def.cost_silizium    || 0) * scale),
-    helium:      Math.floor((def.cost_helium      || 0) * scale),
-    nahrung:     Math.floor((def.cost_nahrung     || 0) * scale),
-    wasser:      Math.floor((def.cost_wasser      || 0) * scale),
-    bauxit:      Math.floor((def.cost_bauxit      || 0) * scale),
-    aluminium:   Math.floor((def.cost_aluminium   || 0) * scale),
-    uran:        Math.floor((def.cost_uran        || 0) * scale),
-    plutonium:   Math.floor((def.cost_plutonium   || 0) * scale),
-    wasserstoff: Math.floor((def.cost_wasserstoff || 0) * scale),
-    credits:     Math.floor((def.cost_credits     || 0) * scale),
-  }
-
-  // Ressourcen prüfen
-  for (const [res, amount] of Object.entries(costs)) {
-    if (amount > 0 && (planet[res] || 0) < amount) {
-      throw new Error(`Zu wenig ${res} (benötigt: ${amount})`)
+    const scale = Math.pow(def.cost_scale_factor, currentLevel)
+    const costs = {
+      titan:       Math.floor((def.cost_titan       || 0) * scale),
+      silizium:    Math.floor((def.cost_silizium    || 0) * scale),
+      helium:      Math.floor((def.cost_helium      || 0) * scale),
+      nahrung:     Math.floor((def.cost_nahrung     || 0) * scale),
+      wasser:      Math.floor((def.cost_wasser      || 0) * scale),
+      bauxit:      Math.floor((def.cost_bauxit      || 0) * scale),
+      aluminium:   Math.floor((def.cost_aluminium   || 0) * scale),
+      uran:        Math.floor((def.cost_uran        || 0) * scale),
+      plutonium:   Math.floor((def.cost_plutonium   || 0) * scale),
+      wasserstoff: Math.floor((def.cost_wasserstoff || 0) * scale),
+      credits:     Math.floor((def.cost_credits     || 0) * scale),
     }
-  }
 
-  // Ressourcen abziehen
-  const updates = {}
-  for (const [res, amount] of Object.entries(costs)) {
-    if (amount > 0) updates[res] = (planet[res] || 0) - amount
-  }
-  await supabase.from('planets').update(updates).eq('id', planet.id)
-
-  // Bauzeit berechnen
-  const buildSeconds = Math.floor(def.base_build_seconds * Math.pow(def.growth_factor, currentLevel))
-
-  // In Queue eintragen
-  const { data: existingQueue } = await supabase
-    .from('build_queue')
-    .select('*')
-    .eq('planet_id', planet.id)
-    .order('queue_position')
-
-  const position = (existingQueue?.length ?? 0) + 1
-  if (position > 2) throw new Error('Bauqueue ist voll (max. 2 Einträge)')
-
-  await supabase.from('build_queue').insert({
-    planet_id: planet.id,
-    building_id: buildingId,
-    target_level: nextLevel,
-    queue_position: position,
-    ticks_remaining: Math.ceil(buildSeconds / 60),
-    finish_at: new Date(Date.now() + buildSeconds * 1000).toISOString()
-  })
-
-  await get().loadPlanetData(planet.id)
-  await get().refreshPlanet()
-},
-
-  processBuildQueue: async () => {
-  const { planet } = get()
-  if (!planet) return
-
-  const { data: queue } = await supabase
-    .from('build_queue')
-    .select('*')
-    .eq('planet_id', planet.id)
-    .order('queue_position')
-
-  if (!queue || queue.length === 0) return
-
-  const now = new Date()
-  for (const item of queue) {
-    if (new Date(item.finish_at) <= now) {
-      // Gebäude fertigstellen
-      const { data: existing } = await supabase
-        .from('planet_buildings')
-        .select('*')
-        .eq('planet_id', planet.id)
-        .eq('building_id', item.building_id)
-        .single()
-
-      if (existing) {
-        await supabase.from('planet_buildings')
-          .update({ level: item.target_level })
-          .eq('planet_id', planet.id)
-          .eq('building_id', item.building_id)
-      } else {
-        await supabase.from('planet_buildings')
-          .insert({ planet_id: planet.id, building_id: item.building_id, level: item.target_level })
+    for (const [res, amount] of Object.entries(costs)) {
+      if (amount > 0 && (planet[res] || 0) < amount) {
+        throw new Error(`Zu wenig ${res} (benötigt: ${amount})`)
       }
-
-      // Aus Queue entfernen
-      await supabase.from('build_queue').delete().eq('id', item.id)
     }
-  }
 
-  await get().loadPlanetData(planet.id)
-  await get().refreshPlanet()
-},
+    const updates = {}
+    for (const [res, amount] of Object.entries(costs)) {
+      if (amount > 0) updates[res] = (planet[res] || 0) - amount
+    }
+    await supabase.from('planets').update(updates).eq('id', planet.id)
+
+    const buildSeconds = Math.floor(def.base_build_seconds * Math.pow(def.growth_factor, currentLevel))
+
+    const { data: existingQueue } = await supabase
+      .from('build_queue')
+      .select('*')
+      .eq('planet_id', planet.id)
+      .order('queue_position')
+
+    const position = (existingQueue?.length ?? 0) + 1
+    if (position > 2) throw new Error('Bauqueue ist voll (max. 2 Einträge)')
+
+    await supabase.from('build_queue').insert({
+      planet_id: planet.id,
+      building_id: buildingId,
+      target_level: nextLevel,
+      queue_position: position,
+      ticks_remaining: Math.ceil(buildSeconds / 60),
+      finish_at: new Date(Date.now() + buildSeconds * 1000).toISOString()
+    })
+
+    await get().loadPlanetData(planet.id)
+    await get().refreshPlanet()
+  },
+
+  getBuildingLevel: (buildingId) => {
+    const { buildings } = get()
+    return buildings.find(b => b.building_id === buildingId)?.level ?? 0
+  },
 
   // -------------------------------------------------------
   // RESEARCH
   // -------------------------------------------------------
   startResearch: async (techId, planetId) => {
     const result = await callFunction('research-action', { tech_id: techId, planet_id: planetId })
-    // Refresh research queue
     const { planet } = get()
     await get().loadPlanetData(planet.id)
     return result
@@ -299,7 +307,7 @@ get().processBuildQueue() // Sofort einmal ausführen
     return get().technologies.includes(techId)
   },
 
-  // ------------------------------------------------------
+  // -------------------------------------------------------
   // FLEET
   // -------------------------------------------------------
   moveFleet: async (fleetId, targetX, targetY, targetZ, speedPercent, flightMode) => {
