@@ -8,17 +8,17 @@ import BuildingCard from '@/components/planet/BuildingCard'
 import BuildQueue from '@/components/planet/BuildQueue'
 import MineDistribution from '@/components/planet/MineDistribution'
 import BunkerPanel from '@/components/planet/BunkerPanel'
-import TutorialOverlay from '@/components/planet/TutorialOverlay'
-import { Building2, Hammer, Shield, Settings } from 'lucide-react'
+import TutorialOverlay, { TUTORIAL_BUILDINGS } from '@/components/planet/TutorialOverlay'
+import { Building2, Hammer, Shield } from 'lucide-react'
 
 const TABS = [
-  { id: 'buildings', label: 'Gebäude', icon: Building2 },
-  { id: 'mines', label: 'Minen', icon: Hammer },
-  { id: 'bunker', label: 'Bunker', icon: Shield },
+  { id: 'buildings', label: 'Gebäude',  icon: Building2 },
+  { id: 'mines',     label: 'Minen',    icon: Hammer },
+  { id: 'bunker',    label: 'Bunker',   icon: Shield },
 ]
 
 export default function PlanetPage() {
-  const { planet, player, buildings, buildQueue, loadPlanetData } = useGameStore()
+  const { planet, player, buildings, buildQueue, loadPlanetData, tutorialStep } = useGameStore()
   const [tab, setTab] = useState('buildings')
 
   const { data: buildingDefs } = useQuery({
@@ -42,12 +42,29 @@ export default function PlanetPage() {
   }, [planet?.id])
 
   if (!planet) return (
-    <div className="flex items-center justify-center h-64 text-slate-500">
+    <div className="flex items-center justify-center h-64 text-slate-400 text-base">
       Kein Planet gefunden...
     </div>
   )
 
   const getBuildingLevel = (id) => buildings.find(b => b.building_id === id)?.level ?? 0
+
+  // Tutorial: welches Gebäude ist gerade dran?
+  const tutorialActive = player && !player.tutorial_done
+  const currentTutorialBuilding = tutorialActive
+    ? TUTORIAL_BUILDINGS[Math.min(tutorialStep, TUTORIAL_BUILDINGS.length - 1)]
+    : null
+
+  // Ob ein Gebäude im Tutorial gebaut werden darf
+  const isTutorialAllowed = (defId) => {
+    if (!tutorialActive) return true
+    if (!currentTutorialBuilding) return true
+    // Das aktuelle Tutorial-Gebäude ist immer erlaubt
+    if (defId === currentTutorialBuilding) return true
+    // Bereits gebaute Gebäude können weiter ausgebaut werden
+    if (getBuildingLevel(defId) >= 1) return true
+    return false
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -55,7 +72,7 @@ export default function PlanetPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">{planet.name}</h2>
-          <p className="text-sm text-slate-500 font-mono">
+          <p className="text-sm text-slate-500 font-mono mt-0.5">
             Koordinaten: {planet.x} / {planet.y} / {planet.z}
           </p>
         </div>
@@ -69,14 +86,14 @@ export default function PlanetPage() {
       {buildQueue.length > 0 && <BuildQueue queue={buildQueue} defs={buildingDefs ?? []} />}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-cyan-500/15 pb-0">
+      <div className="flex gap-1 border-b border-cyan-500/15">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-display font-medium tracking-wide transition-all
               ${tab === id
                 ? 'text-cyan-400 border-b-2 border-cyan-400 -mb-px'
                 : 'text-slate-500 hover:text-slate-300'}`}>
-            <Icon size={14} />
+            <Icon size={15} />
             {label}
           </button>
         ))}
@@ -90,7 +107,7 @@ export default function PlanetPage() {
         transition={{ duration: 0.15 }}>
 
         {tab === 'buildings' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {(buildingDefs ?? []).map(def => (
               <BuildingCard
                 key={def.id}
@@ -100,6 +117,7 @@ export default function PlanetPage() {
                 queueFull={buildQueue.length >= 2}
                 inQueue={buildQueue.some(q => q.building_id === def.id)}
                 isBuilding={buildQueue.find(q => q.building_id === def.id && q.queue_position === 1)}
+                tutorialAllowed={isTutorialAllowed(def.id)}
               />
             ))}
           </div>
@@ -110,7 +128,7 @@ export default function PlanetPage() {
       </motion.div>
 
       {/* Tutorial */}
-      {!player?.tutorial_done && <TutorialOverlay />}
+      {tutorialActive && <TutorialOverlay />}
     </div>
   )
 }
