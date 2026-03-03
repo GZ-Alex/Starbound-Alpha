@@ -168,20 +168,75 @@ login: async (username) => {
   // BUILDINGS
   // -------------------------------------------------------
   queueBuild: async (buildingId) => {
-    const { planet } = get()
-    const result = await callFunction('build-action', {
-      planet_id: planet.id,
-      building_id: buildingId
-    })
-    await get().loadPlanetData(planet.id)
-    await get().refreshPlanet()
-    return result
-  },
+  const { planet, buildings } = get()
 
-  getBuildingLevel: (buildingId) => {
-    const { buildings } = get()
-    return buildings.find(b => b.building_id === buildingId)?.level ?? 0
-  },
+  // Aktuellen Level holen
+  const currentLevel = buildings.find(b => b.building_id === buildingId)?.level ?? 0
+  const nextLevel = currentLevel + 1
+
+  // Gebäude-Definition laden
+  const { data: def } = await supabase
+    .from('building_definitions')
+    .select('*')
+    .eq('id', buildingId)
+    .single()
+  if (!def) throw new Error('Gebäude nicht gefunden')
+
+  // Kosten berechnen
+  const scale = Math.pow(def.cost_scale_factor, currentLevel)
+  const costs = {
+    titan:       Math.floor((def.cost_titan       || 0) * scale),
+    silizium:    Math.floor((def.cost_silizium    || 0) * scale),
+    helium:      Math.floor((def.cost_helium      || 0) * scale),
+    nahrung:     Math.floor((def.cost_nahrung     || 0) * scale),
+    wasser:      Math.floor((def.cost_wasser      || 0) * scale),
+    bauxit:      Math.floor((def.cost_bauxit      || 0) * scale),
+    aluminium:   Math.floor((def.cost_aluminium   || 0) * scale),
+    uran:        Math.floor((def.cost_uran        || 0) * scale),
+    plutonium:   Math.floor((def.cost_plutonium   || 0) * scale),
+    wasserstoff: Math.floor((def.cost_wasserstoff || 0) * scale),
+    credits:     Math.floor((def.cost_credits     || 0) * scale),
+  }
+
+  // Ressourcen prüfen
+  for (const [res, amount] of Object.entries(costs)) {
+    if (amount > 0 && (planet[res] || 0) < amount) {
+      throw new Error(`Zu wenig ${res} (benötigt: ${amount})`)
+    }
+  }
+
+  // Ressourcen abziehen
+  const updates = {}
+  for (const [res, amount] of Object.entries(costs)) {
+    if (amount > 0) updates[res] = (planet[res] || 0) - amount
+  }
+  await supabase.from('planets').update(updates).eq('id', planet.id)
+
+  // Bauzeit berechnen
+  const buildSeconds = Math.floor(def.base_build_seconds * Math.pow(def.growth_factor, currentLevel))
+
+  // In Queue eintragen
+  const { data: existingQueue } = await supabase
+    .from('build_queue')
+    .select('*')
+    .eq('planet_id', planet.id)
+    .order('queue_position')
+
+  const position = (existingQueue?.length ?? 0) + 1
+  if (position > 2) throw new Error('Bauqueue ist voll (max. 2 Einträge)')
+
+  await supabase.from('build_queue').insert({
+    planet_id: planet.id,
+    building_id: buildingId,
+    target_level: nextLevel,
+    queue_position: position,
+    ticks_remaining: Math.ceil(buildSeconds / 60),
+    finish_at: new Date(Date.now() + buildSeconds * 1000).toISOString()
+  })
+
+  await get().loadPlanetData(planet.id)
+  await get().refreshPlanet()
+},
 
   // -------------------------------------------------------
   // RESEARCH
