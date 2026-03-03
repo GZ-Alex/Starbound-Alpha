@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
-import { formatTime, formatNumber } from '@/lib/utils'
+import { formatTime } from '@/lib/utils'
 import { Hammer, ChevronUp, Lock, Clock } from 'lucide-react'
 
 const BUILDING_IMAGES = {
@@ -19,16 +19,9 @@ const BUILDING_IMAGES = {
 }
 
 const BUILDING_ICONS = {
-  hq:           '🏛️',
-  power_plant:  '⚡',
-  shipyard:     '🚀',
-  ship_dock:    '🔧',
-  research_lab: '🔬',
-  university:   '🎓',
-  bunker:       '🛡️',
-  defense_base: '🔫',
-  gov_center:   '⚖️',
-  comm_network: '📡',
+  hq: '🏛️', power_plant: '⚡', shipyard: '🚀', ship_dock: '🔧',
+  research_lab: '🔬', university: '🎓', bunker: '🛡️',
+  defense_base: '🔫', gov_center: '⚖️', comm_network: '📡',
 }
 
 const BUILDING_EFFECTS = {
@@ -42,6 +35,13 @@ const BUILDING_EFFECTS = {
   defense_base: (lvl) => `${lvl * 500} Turmkapazität`,
   gov_center:   (lvl) => `+${lvl * 5} Credits/Tick`,
   comm_network: (lvl) => `${10 + Math.floor(lvl / 2)}pc Scanradius`,
+}
+
+const RESOURCE_LABELS = {
+  titan: 'Titan', silizium: 'Silizium', helium: 'Helium',
+  nahrung: 'Nahrung', wasser: 'Wasser', bauxit: 'Bauxit',
+  aluminium: 'Aluminium', uran: 'Uran', plutonium: 'Plutonium',
+  wasserstoff: 'H₂', credits: 'Credits'
 }
 
 function calcCost(def, targetLevel) {
@@ -58,7 +58,6 @@ function calcCost(def, targetLevel) {
 
 function calcBuildSecs(def, level) {
   if (!def) return 0
-  if (import.meta.env.VITE_ALPHA_MODE === 'true') return 10
   return Math.max(10, Math.floor(def.base_build_seconds * Math.pow(def.growth_factor, level - 1)))
 }
 
@@ -69,15 +68,7 @@ function canAfford(planet, costs) {
   return true
 }
 
-const RESOURCE_LABELS = {
-  titan: 'Titan', silizium: 'Silizium', helium: 'Helium',
-  nahrung: 'Nahrung', wasser: 'Wasser', bauxit: 'Bauxit',
-  aluminium: 'Alu', uran: 'Uran', plutonium: 'Pluto',
-  wasserstoff: 'H₂', credits: 'Credits'
-}
-
-export default function BuildingCard({ def, level, planet, queueFull, inQueue, isBuilding }) {
-  const [showCosts, setShowCosts] = useState(false)
+export default function BuildingCard({ def, level, planet, queueFull, inQueue, isBuilding, tutorialAllowed }) {
   const [loading, setLoading] = useState(false)
   const { queueBuild, addNotification } = useGameStore()
 
@@ -85,11 +76,11 @@ export default function BuildingCard({ def, level, planet, queueFull, inQueue, i
   const costs = calcCost(def, targetLevel)
   const affordable = canAfford(planet, costs)
   const buildSecs = calcBuildSecs(def, targetLevel)
-  const effect = BUILDING_EFFECTS[def.id]?.(targetLevel)
   const image = BUILDING_IMAGES[def.id]
+  const blocked = tutorialAllowed === false
 
   const handleBuild = async () => {
-    if (loading || queueFull || inQueue) return
+    if (loading || queueFull || inQueue || blocked) return
     setLoading(true)
     try {
       await queueBuild(def.id)
@@ -105,37 +96,42 @@ export default function BuildingCard({ def, level, planet, queueFull, inQueue, i
     <motion.div
       layout
       className="panel overflow-hidden"
-      whileHover={{ borderColor: 'rgba(34,211,238,0.3)' }}>
+      style={{ opacity: blocked ? 0.45 : 1 }}
+      whileHover={!blocked ? { borderColor: 'rgba(34,211,238,0.3)' } : {}}>
 
-      {/* Gebäudebild */}
+      {/* Gebäudebild — exakt 300px hoch */}
       {image && (
-        <div className="relative w-full h-36 overflow-hidden">
+        <div className="relative overflow-hidden" style={{ height: 300 }}>
           <img
             src={image}
             alt={def.name}
             className="w-full h-full object-cover"
             style={{ filter: level === 0 ? 'grayscale(60%) brightness(0.6)' : 'brightness(0.85)' }}
           />
-          {/* Overlay Gradient */}
           <div className="absolute inset-0"
-            style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(4,13,26,0.95) 100%)' }} />
-          {/* Level Badge */}
+            style={{ background: 'linear-gradient(to bottom, transparent 55%, rgba(4,13,26,0.97) 100%)' }} />
           {level > 0 && (
-            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-xs font-mono font-bold"
+            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-sm font-mono font-bold"
               style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)', color: '#22d3ee' }}>
               Lvl {level}
             </div>
           )}
           {level === 0 && (
-            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-xs font-mono"
-              style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#64748b' }}>
+            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-sm font-mono"
+              style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)', color: '#64748b' }}>
               Nicht gebaut
             </div>
           )}
           {isBuilding && (
-            <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono text-amber-400"
-              style={{ background: 'rgba(0,0,0,0.6)' }}>
-              <Hammer size={10} className="animate-pulse" /> In Bau
+            <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded text-sm font-mono text-amber-400"
+              style={{ background: 'rgba(0,0,0,0.7)' }}>
+              <Hammer size={12} className="animate-pulse" /> In Bau
+            </div>
+          )}
+          {blocked && (
+            <div className="absolute inset-0 flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.45)' }}>
+              <span className="text-slate-300 text-sm font-mono bg-black/60 px-3 py-1.5 rounded">🔒 Im Tutorial gesperrt</span>
             </div>
           )}
         </div>
@@ -143,81 +139,95 @@ export default function BuildingCard({ def, level, planet, queueFull, inQueue, i
 
       {/* Header */}
       <div className="panel-header">
-        <span className="text-base">{BUILDING_ICONS[def.id]}</span>
-        <span>{def.name}</span>
+        <span className="text-lg">{BUILDING_ICONS[def.id]}</span>
+        <span className="text-base font-semibold">{def.name}</span>
       </div>
 
       <div className="p-3 space-y-3">
         {/* Level progress dots */}
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           {Array.from({ length: Math.min(level + 3, 10) }).map((_, i) => (
-            <div key={i} className="w-2 h-2 rounded-full transition-all"
+            <div key={i} className="w-2.5 h-2.5 rounded-full transition-all"
               style={{
                 background: i < level ? '#22d3ee' :
                   i === level ? 'rgba(34,211,238,0.4)' : 'rgba(34,211,238,0.1)'
               }} />
           ))}
-          {level > 7 && <span className="text-xs text-slate-500 font-mono">+{level - 7}</span>}
+          {level > 7 && <span className="text-sm text-slate-500 font-mono">+{level - 7}</span>}
         </div>
 
-        {/* Effect */}
-        {effect && level > 0 && (
-          <p className="text-xs text-slate-400 font-mono">{effect}</p>
+        {/* Current effect */}
+        {level > 0 && (
+          <p className="text-sm text-slate-400 font-mono">{BUILDING_EFFECTS[def.id]?.(level)}</p>
         )}
 
         {/* Next level effect */}
-        <p className="text-xs text-cyan-600">
-          → Lvl {targetLevel}: {BUILDING_EFFECTS[def.id]?.(targetLevel) ?? ''}
+        <p className="text-sm text-cyan-600">
+          → Lvl {targetLevel}: {BUILDING_EFFECTS[def.id]?.(targetLevel)}
         </p>
 
-        {/* Costs toggle */}
-        <div>
-          <button
-            onClick={() => setShowCosts(!showCosts)}
-            className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1">
-            {showCosts ? '▾' : '▸'} Kosten für Lvl {targetLevel}
-          </button>
-
-          {showCosts && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="mt-2 grid grid-cols-2 gap-1">
-              {Object.entries(costs).map(([res, amt]) => (
-                <div key={res} className={`flex justify-between text-xs px-2 py-1 rounded
-                  ${(planet[res] ?? 0) >= amt ? 'text-slate-400' : 'text-red-400'}`}
-                  style={{ background: 'rgba(4,13,26,0.5)' }}>
-                  <span>{RESOURCE_LABELS[res] ?? res}</span>
-                  <span className="font-mono">{amt.toLocaleString()}</span>
-                </div>
-              ))}
-              <div className="col-span-2 flex justify-between text-xs px-2 py-1 rounded text-slate-500"
-                style={{ background: 'rgba(4,13,26,0.5)' }}>
-                <span className="flex items-center gap-1"><Clock size={10} /> Bauzeit</span>
-                <span className="font-mono">{formatTime(buildSecs)}</span>
-              </div>
-            </motion.div>
-          )}
+        {/* Bauzeit */}
+        <div className="flex items-center gap-1.5 text-sm text-slate-500 font-mono">
+          <Clock size={13} />
+          Bauzeit: {formatTime(buildSecs)}
         </div>
+
+        {/* Kosten — permanent, mit Rest-Anzeige */}
+        {Object.keys(costs).length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-slate-500 uppercase tracking-widest font-mono">Kosten Lvl {targetLevel}</p>
+            <div className="rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+              {/* Header row */}
+              <div className="grid text-xs text-slate-600 font-mono px-2 py-1"
+                style={{ gridTemplateColumns: '1fr 80px 90px', background: 'rgba(0,0,0,0.3)' }}>
+                <span>Ressource</span>
+                <span className="text-right">Kosten</span>
+                <span className="text-right">Nach Bau</span>
+              </div>
+              {Object.entries(costs).map(([res, amt]) => {
+                const have = planet[res] ?? 0
+                const rest = have - amt
+                const canPay = rest >= 0
+                return (
+                  <div key={res}
+                    className="grid text-sm px-2 py-1 font-mono"
+                    style={{
+                      gridTemplateColumns: '1fr 80px 90px',
+                      background: 'rgba(4,13,26,0.5)',
+                      borderTop: '1px solid rgba(255,255,255,0.04)'
+                    }}>
+                    <span className="text-slate-400">{RESOURCE_LABELS[res]}</span>
+                    <span className="text-right text-slate-300">{amt.toLocaleString()}</span>
+                    <span className={`text-right font-bold ${canPay ? 'text-slate-500' : 'text-red-400'}`}>
+                      {canPay ? `${rest.toLocaleString()}` : `−${Math.abs(rest).toLocaleString()}`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Action button */}
         {inQueue ? (
-          <div className="text-xs text-center py-1.5 rounded text-amber-500/70 font-mono"
+          <div className="text-sm text-center py-2 rounded text-amber-500/70 font-mono"
             style={{ background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.15)' }}>
             {isBuilding ? '🔨 In Bau' : '⏳ In Queue'}
           </div>
         ) : (
           <button
             onClick={handleBuild}
-            disabled={loading || queueFull || !affordable}
-            className={`w-full btn-primary py-1.5 text-xs ${!affordable ? 'opacity-40' : ''}`}>
-            {queueFull ? (
-              <span className="flex items-center justify-center gap-1.5"><Lock size={11} /> Queue voll</span>
+            disabled={loading || queueFull || !affordable || blocked}
+            className={`w-full btn-primary py-2 text-sm ${(!affordable || blocked) ? 'opacity-40' : ''}`}>
+            {blocked ? (
+              '🔒 Erst vorheriges Gebäude bauen'
+            ) : queueFull ? (
+              <span className="flex items-center justify-center gap-1.5"><Lock size={13} /> Queue voll</span>
             ) : !affordable ? (
               '✗ Ressourcen fehlen'
             ) : (
               <span className="flex items-center justify-center gap-1.5">
-                <ChevronUp size={12} /> Auf Lvl {targetLevel} ausbauen
+                <ChevronUp size={14} /> Auf Lvl {targetLevel} ausbauen
               </span>
             )}
           </button>
