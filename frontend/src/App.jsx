@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useGameStore } from '@/store/gameStore'
 import Layout from '@/components/ui/Layout'
@@ -36,7 +36,7 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -49,7 +49,7 @@ export default function App() {
             <Route path="/admin" element={<AdminPage />} />
           </Route>
         </Routes>
-      </BrowserRouter>
+      </HashRouter>HashRouter>
     </QueryClientProvider>
   )
 }
