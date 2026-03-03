@@ -39,19 +39,39 @@ export const useGameStore = create((set, get) => ({
     get().loadGameData()
   },
 
-  register: async (username) => {
-  const { data, error } = await supabase
+  register: async (username, profession, raceId) => {
+  // Spieler anlegen
+  const { data: player, error } = await supabase
     .from('players')
-    .insert({ username, profession: 'admiral', race_id: 'human' })
+    .insert({ username, profession, race_id: raceId })
     .select()
     .single()
   if (error) throw new Error(error.message)
-  const token = data.id
+
+  // Startplanet anlegen
+  const { error: planetError } = await supabase
+    .from('planets')
+    .insert({
+      owner_id: player.id,
+      name: `${username}s Heimatwelt`,
+      x: Math.floor(Math.random() * 400) + 50,
+      y: Math.floor(Math.random() * 400) + 50,
+      z: 100,
+      quadrant: Math.floor(Math.random() * 4) + 1,
+      titan: 5000, silizium: 4000, helium: 2000,
+      nahrung: 2000, wasser: 2000, bauxit: 3000,
+      aluminium: 3000, uran: 1000, plutonium: 500,
+      wasserstoff: 1500, credits: 2000,
+      energy_production: 0, energy_consumption: 0
+    })
+  if (planetError) throw new Error(planetError.message)
+
+  const token = player.id
   localStorage.setItem('sb_token', token)
-  localStorage.setItem('sb_player', JSON.stringify(data))
-  set({ player: data, token })
+  localStorage.setItem('sb_player', JSON.stringify(player))
+  set({ player, token })
   get().loadGameData()
-  return data
+  return player
 },
 
 login: async (username) => {
