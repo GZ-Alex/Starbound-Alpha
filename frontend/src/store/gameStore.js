@@ -142,6 +142,10 @@ login: async (username) => {
       .subscribe()
   },
 
+  // Am Ende von loadGameData, nach dem subscribe():
+setInterval(() => get().processBuildQueue(), 10000)
+get().processBuildQueue() // Sofort einmal ausführen
+
   loadPlanetData: async (planetId) => {
     const { data: buildings } = await supabase
       .from('planet_buildings')
