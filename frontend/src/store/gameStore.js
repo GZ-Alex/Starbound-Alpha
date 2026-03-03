@@ -40,22 +40,34 @@ export const useGameStore = create((set, get) => ({
   },
 
   register: async (username) => {
-    const data = await callFunction('auth/register', { username })
-    localStorage.setItem('sb_token', data.token)
-    localStorage.setItem('sb_player', JSON.stringify(data.player))
-    set({ player: data.player, token: data.token, planet: data.planet })
-    get().loadGameData()
-    return data
-  },
+  const { data, error } = await supabase
+    .from('players')
+    .insert({ username, profession: 'admiral', race_id: 'human' })
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  const token = data.id
+  localStorage.setItem('sb_token', token)
+  localStorage.setItem('sb_player', JSON.stringify(data))
+  set({ player: data, token })
+  get().loadGameData()
+  return data
+},
 
-  login: async (username) => {
-    const data = await callFunction('auth/login', { username })
-    localStorage.setItem('sb_token', data.token)
-    localStorage.setItem('sb_player', JSON.stringify(data.player))
-    set({ player: data.player, token: data.token, planet: data.planet })
-    get().loadGameData()
-    return data
-  },
+login: async (username) => {
+  const { data, error } = await supabase
+    .from('players')
+    .select('*')
+    .eq('username', username)
+    .single()
+  if (error) throw new Error('Spieler nicht gefunden')
+  const token = data.id
+  localStorage.setItem('sb_token', token)
+  localStorage.setItem('sb_player', JSON.stringify(data))
+  set({ player: data, token })
+  get().loadGameData()
+  return data
+},
 
   logout: () => {
     localStorage.removeItem('sb_token')
