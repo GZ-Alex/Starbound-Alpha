@@ -4,7 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/starbound-alpha/',
+  base: '/Starbound-Alpha/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
