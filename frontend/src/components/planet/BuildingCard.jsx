@@ -5,6 +5,19 @@ import { useGameStore } from '@/store/gameStore'
 import { formatTime, formatNumber } from '@/lib/utils'
 import { Hammer, ChevronUp, Lock, Clock } from 'lucide-react'
 
+const BUILDING_IMAGES = {
+  hq:           '/Starbound-Alpha/buildings/hq.png',
+  power_plant:  '/Starbound-Alpha/buildings/kraftwerk.png',
+  shipyard:     '/Starbound-Alpha/buildings/schiffswerft.png',
+  ship_dock:    '/Starbound-Alpha/buildings/werft.png',
+  research_lab: '/Starbound-Alpha/buildings/forschung.png',
+  university:   '/Starbound-Alpha/buildings/universitaet.png',
+  bunker:       '/Starbound-Alpha/buildings/bunker.png',
+  defense_base: '/Starbound-Alpha/buildings/verteidigung.png',
+  gov_center:   '/Starbound-Alpha/buildings/regierung.png',
+  comm_network: '/Starbound-Alpha/buildings/kommnetz.png',
+}
+
 const BUILDING_ICONS = {
   hq:           '🏛️',
   power_plant:  '⚡',
@@ -45,7 +58,6 @@ function calcCost(def, targetLevel) {
 
 function calcBuildSecs(def, level) {
   if (!def) return 0
-  // Alpha: 10s for all
   if (import.meta.env.VITE_ALPHA_MODE === 'true') return 10
   return Math.max(10, Math.floor(def.base_build_seconds * Math.pow(def.growth_factor, level - 1)))
 }
@@ -74,6 +86,7 @@ export default function BuildingCard({ def, level, planet, queueFull, inQueue, i
   const affordable = canAfford(planet, costs)
   const buildSecs = calcBuildSecs(def, targetLevel)
   const effect = BUILDING_EFFECTS[def.id]?.(targetLevel)
+  const image = BUILDING_IMAGES[def.id]
 
   const handleBuild = async () => {
     if (loading || queueFull || inQueue) return
@@ -93,23 +106,45 @@ export default function BuildingCard({ def, level, planet, queueFull, inQueue, i
       layout
       className="panel overflow-hidden"
       whileHover={{ borderColor: 'rgba(34,211,238,0.3)' }}>
-      
+
+      {/* Gebäudebild */}
+      {image && (
+        <div className="relative w-full h-36 overflow-hidden">
+          <img
+            src={image}
+            alt={def.name}
+            className="w-full h-full object-cover"
+            style={{ filter: level === 0 ? 'grayscale(60%) brightness(0.6)' : 'brightness(0.85)' }}
+          />
+          {/* Overlay Gradient */}
+          <div className="absolute inset-0"
+            style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(4,13,26,0.95) 100%)' }} />
+          {/* Level Badge */}
+          {level > 0 && (
+            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-xs font-mono font-bold"
+              style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)', color: '#22d3ee' }}>
+              Lvl {level}
+            </div>
+          )}
+          {level === 0 && (
+            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-xs font-mono"
+              style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#64748b' }}>
+              Nicht gebaut
+            </div>
+          )}
+          {isBuilding && (
+            <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono text-amber-400"
+              style={{ background: 'rgba(0,0,0,0.6)' }}>
+              <Hammer size={10} className="animate-pulse" /> In Bau
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="panel-header">
         <span className="text-base">{BUILDING_ICONS[def.id]}</span>
         <span>{def.name}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {level > 0 && (
-            <span className="text-xs font-mono text-slate-400">
-              Lvl <span className="text-cyan-400">{level}</span>
-            </span>
-          )}
-          {isBuilding && (
-            <span className="flex items-center gap-1 text-amber-400">
-              <Hammer size={11} className="animate-pulse" />
-            </span>
-          )}
-        </div>
       </div>
 
       <div className="p-3 space-y-3">
