@@ -238,6 +238,48 @@ login: async (username) => {
   await get().refreshPlanet()
 },
 
+  processBuildQueue: async () => {
+  const { planet } = get()
+  if (!planet) return
+
+  const { data: queue } = await supabase
+    .from('build_queue')
+    .select('*')
+    .eq('planet_id', planet.id)
+    .order('queue_position')
+
+  if (!queue || queue.length === 0) return
+
+  const now = new Date()
+  for (const item of queue) {
+    if (new Date(item.finish_at) <= now) {
+      // Gebäude fertigstellen
+      const { data: existing } = await supabase
+        .from('planet_buildings')
+        .select('*')
+        .eq('planet_id', planet.id)
+        .eq('building_id', item.building_id)
+        .single()
+
+      if (existing) {
+        await supabase.from('planet_buildings')
+          .update({ level: item.target_level })
+          .eq('planet_id', planet.id)
+          .eq('building_id', item.building_id)
+      } else {
+        await supabase.from('planet_buildings')
+          .insert({ planet_id: planet.id, building_id: item.building_id, level: item.target_level })
+      }
+
+      // Aus Queue entfernen
+      await supabase.from('build_queue').delete().eq('id', item.id)
+    }
+  }
+
+  await get().loadPlanetData(planet.id)
+  await get().refreshPlanet()
+},
+
   // -------------------------------------------------------
   // RESEARCH
   // -------------------------------------------------------
