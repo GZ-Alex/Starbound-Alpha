@@ -49,7 +49,7 @@ export default function App() {
             <Route path="/admin" element={<AdminPage />} />
           </Route>
         </Routes>
-      </HashRouter>HashRouter>
+      </HashRouter>
     </QueryClientProvider>
   )
 }
