@@ -18,7 +18,11 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: cd frontend && rm -f package-lock.json && npm install
+        run: |
+          cd frontend
+          rm -f package-lock.json
+          npm install
+          npm install framer-motion@^11.0.0 @tanstack/react-query@^5.17.0 zustand@^4.4.7
 
       - name: Build
         run: cd frontend && npm run build
