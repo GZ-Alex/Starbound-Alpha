@@ -9,6 +9,7 @@ import Dashboard from '@/pages/Dashboard'
 import PlanetPage from '@/pages/PlanetPage'
 import ShipyardPage from '@/pages/ShipyardPage'
 import FleetPage from '@/pages/FleetPage'
+import MinesPage from '@/pages/MinesPage'
 import ResearchPage from '@/pages/ResearchPage'
 import ScanPage from '@/pages/ScanPage'
 import AdminPage from '@/pages/AdminPage'
@@ -48,7 +49,7 @@ export default function App() {
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/planet"    element={<PlanetPage />} />
-            <Route path="/mines"     element={<PlaceholderPage title="Minen" />} />
+            <Route path="/mines"     element={<MinesPage />} />
             <Route path="/shipyard"  element={<ShipyardPage />} />
             <Route path="/research"  element={<ResearchPage />} />
             <Route path="/dock"      element={<PlaceholderPage title="Dock" />} />
