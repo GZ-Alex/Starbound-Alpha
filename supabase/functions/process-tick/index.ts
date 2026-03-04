@@ -28,7 +28,8 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 })
   }
 
-  const secret = req.headers.get('x-tick-secret')
+  const url = new URL(req.url)
+  const secret = req.headers.get("x-tick-secret") ?? url.searchParams.get("secret")
   if (secret !== Deno.env.get('TICK_SECRET')) {
     return new Response('Unauthorized', { status: 401 })
   }
@@ -166,7 +167,7 @@ async function processPlanetTick(
     }
 
     const prodPerTick = mines * PROD_PER_MINE_PER_TICK * energieFaktor
-    const prodPerHour = Math.round(prodPerTick * 120) // 120 Ticks/h
+    const prodPerHour = Math.round(prodPerTick * 60) // 60 Ticks/h (Cron jede Minute)
 
     updates[res] = (planet[res] ?? 0) + prodPerTick
     prodUpdates[`prod_${res}`] = prodPerHour
@@ -294,7 +295,7 @@ async function processFleets(currentTick: number, log: string[]) {
   const { data: arrivedFleets } = await supabase
     .from('fleets')
     .select('*')
-    .eq('status', 'traveling')
+    .eq('is_in_transit', true)
     .lte('arrive_at', new Date().toISOString())
 
   if (!arrivedFleets?.length) return
@@ -304,7 +305,7 @@ async function processFleets(currentTick: number, log: string[]) {
     await supabase
       .from('fleets')
       .update({
-        status: 'docked',
+        is_in_transit: false,
         x: fleet.target_x,
         y: fleet.target_y,
         z: fleet.target_z ?? 100,
