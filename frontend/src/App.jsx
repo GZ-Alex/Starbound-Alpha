@@ -15,12 +15,9 @@ import AdminPage from '@/pages/AdminPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, staleTime: 5000 },
-  },
+  defaultOptions: { queries: { retry: 1, staleTime: 5000 } },
 })
 
-// Platzhalter-Seiten für neue Routen
 function PlaceholderPage({ title }) {
   return (
     <div className="max-w-2xl mx-auto">
@@ -41,10 +38,7 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   const { initFromStorage } = useGameStore()
-
-  useEffect(() => {
-    initFromStorage()
-  }, [])
+  useEffect(() => { initFromStorage() }, [])
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -54,11 +48,13 @@ export default function App() {
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/planet"    element={<PlanetPage />} />
+            <Route path="/mines"     element={<PlaceholderPage title="Minen" />} />
             <Route path="/shipyard"  element={<ShipyardPage />} />
             <Route path="/research"  element={<ResearchPage />} />
             <Route path="/dock"      element={<PlaceholderPage title="Dock" />} />
             <Route path="/bunker"    element={<PlaceholderPage title="Bunker" />} />
             <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
+            <Route path="/comms"     element={<PlaceholderPage title="Kommunikationsnetzwerk" />} />
             <Route path="/fleet"     element={<FleetPage />} />
             <Route path="/scan"      element={<ScanPage />} />
             <Route path="/admin"     element={<AdminPage />} />
