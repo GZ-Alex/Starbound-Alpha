@@ -20,6 +20,18 @@ const queryClient = new QueryClient({
   },
 })
 
+// Platzhalter-Seiten für neue Routen
+function PlaceholderPage({ title }) {
+  return (
+    <div className="max-w-2xl mx-auto">
+      <div className="panel p-8 text-center space-y-3">
+        <h2 className="text-xl font-display text-slate-400">{title}</h2>
+        <p className="text-slate-600 text-sm font-mono">In Entwicklung</p>
+      </div>
+    </div>
+  )
+}
+
 function ProtectedRoute({ children }) {
   const { player, isLoading } = useGameStore()
   if (isLoading) return <LoadingScreen />
@@ -41,12 +53,15 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/planet" element={<PlanetPage />} />
-            <Route path="/shipyard" element={<ShipyardPage />} />
-            <Route path="/fleet" element={<FleetPage />} />
-            <Route path="/research" element={<ResearchPage />} />
-            <Route path="/scan" element={<ScanPage />} />
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/planet"    element={<PlanetPage />} />
+            <Route path="/shipyard"  element={<ShipyardPage />} />
+            <Route path="/research"  element={<ResearchPage />} />
+            <Route path="/dock"      element={<PlaceholderPage title="Dock" />} />
+            <Route path="/bunker"    element={<PlaceholderPage title="Bunker" />} />
+            <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
+            <Route path="/fleet"     element={<FleetPage />} />
+            <Route path="/scan"      element={<ScanPage />} />
+            <Route path="/admin"     element={<AdminPage />} />
           </Route>
         </Routes>
       </HashRouter>
