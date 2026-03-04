@@ -155,6 +155,8 @@ export const useGameStore = create((set, get) => ({
     // Client-seitiger Tick: alle 10 Sekunden Bauqueue prüfen
     get().processBuildQueue()
     setInterval(() => get().processBuildQueue(), 10000)
+    // Planet alle 60s refreshen (Ressourcenproduktion durch Tick-System)
+    setInterval(() => get().refreshPlanet(), 60000)
   },
 
   loadPlanetData: async (planetId) => {
