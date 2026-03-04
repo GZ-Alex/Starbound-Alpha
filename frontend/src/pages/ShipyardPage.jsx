@@ -39,7 +39,7 @@ function fmt(n) {
   return n.toLocaleString()
 }
 
-function ShipDesigner({ chassis, planet, player, partDefs, onClose, onBuilt }) {
+function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onBuilt }) {
   const [selectedParts, setSelectedParts] = useState([])
   const [building, setBuilding] = useState(false)
   const { addNotification } = useGameStore()
@@ -49,6 +49,7 @@ function ShipDesigner({ chassis, planet, player, partDefs, onClose, onBuilt }) {
       if (p.category !== category) return false
       if (p.weapon_class && p.weapon_class !== chassis.class) return false
       if (p.required_profession && p.required_profession !== player?.profession) return false
+      if (p.required_tech && !hasTech(p.required_tech)) return false
       return true
     })
 
@@ -94,10 +95,10 @@ function ShipDesigner({ chassis, planet, player, partDefs, onClose, onBuilt }) {
       for (const [res, amt] of Object.entries(costs)) updates[res] = (planet[res] || 0) - amt
       await supabase.from('planets').update(updates).eq('id', planet.id)
 
-      const { data: fleet } = await supabase.from('fleets').select('id').eq('player_id', player.id).eq('status', 'docked').maybeSingle()
+      const { data: fleet } = await supabase.from('fleets').select('id').eq('player_id', player.id).eq('is_in_transit', false).maybeSingle()
       let fleetId = fleet?.id
       if (!fleetId) {
-        const { data: nf } = await supabase.from('fleets').insert({ player_id: player.id, planet_id: planet.id, status: 'docked', name: 'Flotte 1' }).select().single()
+        const { data: nf } = await supabase.from('fleets').insert({ player_id: player.id, planet_id: planet.id, is_in_transit: false, name: 'Flotte 1' }).select().single()
         fleetId = nf?.id
       }
       if (fleetId) {
@@ -300,6 +301,10 @@ export default function ShipyardPage() {
     enabled: !!player, refetchInterval: 15000
   })
 
+  const shipyardCapacity = shipyardLevel * 500
+  const usedCapacity = (myShips ?? []).reduce((sum, s) => sum + (s.shipyard_space ?? 0), 0)
+  const freeCapacity = shipyardCapacity - usedCapacity
+
   // Only show chassis the player has researched or needs no tech
   const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
   const classes   = ['all', ...new Set(available.map(c => c.class))]
@@ -321,6 +326,24 @@ export default function ShipyardPage() {
         <div>
           <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">Schiffswerft</h2>
           <p className="text-sm text-slate-500 font-mono">Lvl {shipyardLevel} · {myShips?.length ?? 0} Schiffe</p>
+        </div>
+        <div className="panel p-3 min-w-[200px]">
+          <div className="flex justify-between text-xs font-mono text-slate-500 mb-1.5">
+            <span>Werftkapazität</span>
+            <span className={freeCapacity <= 0 ? 'text-red-400' : 'text-cyan-400'}>
+              {usedCapacity} / {shipyardCapacity}
+            </span>
+          </div>
+          <div className="w-full rounded-full h-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="h-2 rounded-full transition-all"
+              style={{
+                width: `${shipyardCapacity > 0 ? Math.min(usedCapacity / shipyardCapacity * 100, 100) : 0}%`,
+                background: freeCapacity <= 0 ? '#ef4444' : '#22d3ee'
+              }} />
+          </div>
+          <p className="text-xs font-mono mt-1" style={{ color: freeCapacity <= 0 ? '#f87171' : '#4ade80' }}>
+            {freeCapacity <= 0 ? 'Keine Kapazität frei' : `${freeCapacity} frei`}
+          </p>
         </div>
       </div>
 
@@ -348,7 +371,7 @@ export default function ShipyardPage() {
 
       <AnimatePresence>
         {designer && (
-          <ShipDesigner chassis={designer} planet={planet} player={player} partDefs={partDefs}
+          <ShipDesigner chassis={designer} planet={planet} player={player} partDefs={partDefs} hasTech={hasTech}
             onClose={() => setDesigner(null)} onBuilt={() => refetchShips()} />
         )}
       </AnimatePresence>
