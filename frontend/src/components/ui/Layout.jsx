@@ -121,8 +121,16 @@ function TopBar({ player, planet }) {
     refetchInterval: 5000,
   })
 
-  // Fleet-Queue deaktiviert bis fleets.status Spalte in DB existiert
-  const fleetQueue = []
+  const { data: fleetQueue = [] } = useQuery({
+    queryKey: ['fq-bar', player?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('fleets').select('*')
+        .eq('player_id', player.id).eq('is_in_transit', true)
+      return data ?? []
+    },
+    enabled: !!player,
+    refetchInterval: 5000,
+  })
 
   const { data: buildingDefs = [] } = useQuery({
     queryKey: ['building-defs'],
@@ -213,18 +221,20 @@ function SidebarResources({ planet: initialPlanet }) {
   const [planet, setPlanet] = useState(initialPlanet)
   const { buildings } = useGameStore()
 
-  // energy_cost Query deaktiviert bis Spalte in DB bestätigt
-  const buildingDefs = []
+  const { data: buildingDefs = [] } = useQuery({
+    queryKey: ['building-defs-energy'],
+    queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,energy_per_level'); return data ?? [] },
+    staleTime: Infinity,
+  })
+
+  const energieVerbrauch = buildings.reduce((sum, pb) => {
+    const def = buildingDefs.find(d => d.id === pb.building_id)
+    return sum + (def?.energy_per_level ?? 0) * pb.level
+  }, 0)
 
   // Energieproduktion: Kraftwerk level × 100
   const kraftwerkLevel = buildings.find(b => b.building_id === 'power_plant')?.level ?? 0
   const energieProduktion = kraftwerkLevel * 100
-
-  // Energieverbrauch: Σ energy_cost × level aller aktiven Gebäude
-  const energieVerbrauch = buildings.reduce((sum, pb) => {
-    const def = buildingDefs.find(d => d.id === pb.building_id)
-    return sum + (def?.energy_cost ?? 0) * pb.level
-  }, 0)
 
   const energieSaldo = energieProduktion - energieVerbrauch
   const energieMangel = energieSaldo < 0
