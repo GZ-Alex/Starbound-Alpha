@@ -91,20 +91,51 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
     if (!canBuild || building) return
     setBuilding(true)
     try {
+      // 1. Ressourcen abziehen
       const updates = {}
       for (const [res, amt] of Object.entries(costs)) updates[res] = (planet[res] || 0) - amt
       await supabase.from('planets').update(updates).eq('id', planet.id)
 
-      const { data: fleet } = await supabase.from('fleets').select('id').eq('player_id', player.id).eq('is_in_transit', false).maybeSingle()
-      let fleetId = fleet?.id
-      if (!fleetId) {
-        const { data: nf } = await supabase.from('fleets').insert({ player_id: player.id, planet_id: planet.id, is_in_transit: false, name: 'Flotte 1' }).select().single()
-        fleetId = nf?.id
-      }
-      if (fleetId) {
-        await supabase.from('ships').insert({ fleet_id: fleetId, chassis_id: chassis.id, name: chassis.name, hp: stats.hp, max_hp: stats.hp, attack: stats.attack, defense: stats.defense, speed: stats.speed, maneuver: stats.maneuver, cargo_capacity: stats.cargo, status: 'active', installed_parts: selectedParts })
-      }
-      addNotification(`✅ ${chassis.name} gebaut!`, 'success')
+      // 2. Ship Design speichern
+      const { data: design, error: designErr } = await supabase.from('ship_designs').insert({
+        player_id: player.id,
+        name: chassis.name,
+        chassis_id: chassis.id,
+        installed_parts: selectedParts,
+        total_hp: stats.hp,
+        total_defense: stats.defense,
+        total_attack: stats.attack,
+        total_speed: stats.speed,
+        total_maneuver: stats.maneuver,
+        total_cargo: stats.cargo,
+        total_cells_used: totalCells,
+        shipyard_space: chassis.shipyard_space ?? 100,
+        build_minutes: Math.max(2, Math.floor((chassis.shipyard_space ?? 100) / 50)),
+        cost_titan: costs.titan ?? 0,
+        cost_silizium: costs.silizium ?? 0,
+        cost_aluminium: costs.aluminium ?? 0,
+        cost_uran: costs.uran ?? 0,
+        cost_plutonium: costs.plutonium ?? 0,
+        is_valid: true,
+      }).select().single()
+
+      if (designErr) throw designErr
+
+      // 3. In Build-Queue eintragen
+      const buildMinutes = design.build_minutes
+      const finishAt = new Date(Date.now() + buildMinutes * 60000).toISOString()
+
+      const { error: queueErr } = await supabase.from('ship_build_queue').insert({
+        planet_id: planet.id,
+        design_id: design.id,
+        quantity: 1,
+        minutes_remaining: buildMinutes,
+        finish_at: finishAt,
+      })
+
+      if (queueErr) throw queueErr
+
+      addNotification(`🚀 ${chassis.name} in Bau (${buildMinutes} Min.)`, 'success')
       onBuilt?.()
       onClose()
     } catch (err) {
@@ -297,12 +328,30 @@ export default function ShipyardPage() {
   })
   const { data: myShips, refetch: refetchShips } = useQuery({
     queryKey: ['my-ships', player?.id],
-    queryFn: async () => { const { data } = await supabase.from('ships').select('*, fleets!inner(player_id)').eq('fleets.player_id', player.id); return data ?? [] },
+    queryFn: async () => {
+      const { data } = await supabase.from('ships')
+        .select('*, ship_designs(shipyard_space), fleets!inner(player_id)')
+        .eq('fleets.player_id', player.id)
+      return data ?? []
+    },
     enabled: !!player, refetchInterval: 15000
   })
 
+  const { data: buildQueue = [], refetch: refetchBuildQueue } = useQuery({
+    queryKey: ['ship-build-queue', planet?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('ship_build_queue')
+        .select('*, ship_designs(name, shipyard_space, chassis_id)')
+        .eq('planet_id', planet.id)
+      return data ?? []
+    },
+    enabled: !!planet, refetchInterval: 10000
+  })
+
   const shipyardCapacity = shipyardLevel * 500
-  const usedCapacity = (myShips ?? []).reduce((sum, s) => sum + (s.shipyard_space ?? 0), 0)
+  const usedByShips = (myShips ?? []).reduce((sum, s) => sum + (s.ship_designs?.shipyard_space ?? s.shipyard_space ?? 0), 0)
+  const usedByQueue = (buildQueue ?? []).reduce((sum, q) => sum + (q.ship_designs?.shipyard_space ?? 0) * (q.quantity ?? 1), 0)
+  const usedCapacity = usedByShips + usedByQueue
   const freeCapacity = shipyardCapacity - usedCapacity
 
   // Only show chassis the player has researched or needs no tech
@@ -347,7 +396,26 @@ export default function ShipyardPage() {
         </div>
       </div>
 
-      <div className="flex gap-1.5 flex-wrap">
+      {/* Build Queue */}
+      {buildQueue.length > 0 && (
+        <div className="panel p-3 space-y-2">
+          <p className="text-xs font-mono uppercase tracking-widest text-slate-500">In Bau</p>
+          {buildQueue.map(q => {
+            const remaining = q.finish_at ? Math.max(0, Math.floor((new Date(q.finish_at) - new Date()) / 1000)) : 0
+            const mins = Math.floor(remaining / 60)
+            const secs = remaining % 60
+            return (
+              <div key={q.id} className="flex items-center gap-3 text-sm font-mono">
+                <Hammer size={13} className="text-amber-400 animate-pulse flex-shrink-0" />
+                <span className="text-slate-300 flex-1">{q.ship_designs?.name ?? 'Schiff'}</span>
+                <span className="text-amber-400">{mins}m {secs}s</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+
         {classes.map(cls => (
           <button key={cls} onClick={() => setClassFilter(cls)}
             className="px-3 py-1.5 rounded text-sm font-mono transition-all"
@@ -372,7 +440,7 @@ export default function ShipyardPage() {
       <AnimatePresence>
         {designer && (
           <ShipDesigner chassis={designer} planet={planet} player={player} partDefs={partDefs} hasTech={hasTech}
-            onClose={() => setDesigner(null)} onBuilt={() => refetchShips()} />
+            onClose={() => setDesigner(null)} onBuilt={() => { refetchShips(); refetchBuildQueue() }} />
         )}
       </AnimatePresence>
     </div>
