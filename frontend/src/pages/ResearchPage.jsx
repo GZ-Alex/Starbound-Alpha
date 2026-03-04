@@ -251,8 +251,14 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
       }
       const finishAt = new Date(Date.now() + (tech.cycle_minutes ?? 2) * cycles * 60000).toISOString()
       await supabase.from('research_queue').insert({
-        player_id: player.id, tech_id: tech.id,
-        target_level: currentLevel + 1, ticks_per_cycle: (tech.cycle_minutes ?? 2) * 2, cycles_done: 0, current_chance: Math.min(95, tech.base_success_chance ?? 80), finish_at: finishAt, branch: tech.branch,
+        player_id: player.id,
+        planet_id: planet.id,
+        tech_id: tech.id,
+        branch: tech.branch ?? 1,
+        ticks_per_cycle: (tech.cycle_minutes ?? 2) * 2,
+        cycles_done: 0,
+        current_chance: Math.min(95, tech.base_success_chance ?? 80),
+        finish_at: finishAt,
       })
       addNotification(`🔬 ${tech.name} Lv${currentLevel + 1} gestartet (${cycles} Zyklen)`, 'success')
       onRefresh()
@@ -691,8 +697,7 @@ export default function ResearchPage() {
         const chance = Math.min(95, (tech?.base_success_chance ?? 80) + researcherBonus)
         if (Math.random() * 100 <= chance) {
           const ex = myTechRows.find(r => r.tech_id === entry.tech_id)
-          const currentLvl = ex?.level ?? 0
-          const newLevel = currentLvl + 1
+          const newLevel = (ex?.level ?? 0) + 1
           if (ex) await supabase.from('player_technologies')
             .update({ level: newLevel }).eq('player_id', player.id).eq('tech_id', entry.tech_id)
           else await supabase.from('player_technologies')
