@@ -133,7 +133,7 @@ function TopBar({ player, planet }) {
   })
 
   const { data: buildingDefs = [] } = useQuery({
-    queryKey: ['building-defs'],
+    queryKey: ['building-defs-names'],
     queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,name'); return data ?? [] },
     staleTime: Infinity,
   })
@@ -274,7 +274,6 @@ function SidebarResources({ planet: initialPlanet }) {
           const prod = planet[`prod_${key}`] ?? 0
           const prodStr = fmtProd(prod)
           const isEnergie = key === 'energie'
-          const energieMangel = isEnergie && energieSaldo < 0
 
           return (
             <div key={key} className="flex items-center gap-1.5 px-1.5 py-1 rounded"
