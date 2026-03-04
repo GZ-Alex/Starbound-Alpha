@@ -1,5 +1,5 @@
 // src/components/ui/Layout.jsx
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
@@ -8,37 +8,24 @@ import { supabase } from '@/lib/supabase'
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotificationStack from '@/components/ui/NotificationStack'
 import {
-  LayoutDashboard, Rocket, FlaskConical, Anchor,
-  Shield, Crosshair, Navigation, Radar,
-  LogOut, Settings, Clock, Hammer, Beaker
+  Building2, Hammer, Rocket, FlaskConical, Anchor,
+  Shield, Crosshair, Radio, Navigation, Radar,
+  LogOut, Settings, Clock
 } from 'lucide-react'
 
-// ─── Navigation ───────────────────────────────────────────────────────────────
+// ─── Nav items ────────────────────────────────────────────────────────────────
 
-const NAV_SECTIONS = [
-  {
-    label: 'Herrscher',
-    items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Übersicht' },
-    ]
-  },
-  {
-    label: 'Industrie',
-    items: [
-      { to: '/shipyard',  icon: Rocket,          label: 'Werft'       },
-      { to: '/research',  icon: FlaskConical,     label: 'Forschen'    },
-    ]
-  },
-  {
-    label: 'Militär',
-    items: [
-      { to: '/dock',      icon: Anchor,           label: 'Dock'        },
-      { to: '/bunker',    icon: Shield,            label: 'Bunker'      },
-      { to: '/defense',   icon: Crosshair,         label: 'Verteidigung'},
-      { to: '/fleet',     icon: Navigation,        label: 'Flotten'     },
-      { to: '/scan',      icon: Radar,             label: 'Scan'        },
-    ]
-  },
+const NAV_ITEMS = [
+  { to: '/planet',    icon: Building2,   label: 'Gebäude'          },
+  { to: '/mines',     icon: Hammer,      label: 'Minen'            },
+  { to: '/shipyard',  icon: Rocket,      label: 'Werft'            },
+  { to: '/research',  icon: FlaskConical, label: 'Forschungszentrum'},
+  { to: '/dock',      icon: Anchor,      label: 'Dock'             },
+  { to: '/bunker',    icon: Shield,      label: 'Bunker'           },
+  { to: '/defense',   icon: Crosshair,   label: 'Verteidigung'     },
+  { to: '/comms',     icon: Radio,       label: 'Komm'             },
+  { to: '/fleet',     icon: Navigation,  label: 'Flotten'          },
+  { to: '/scan',      icon: Radar,       label: 'Scan'             },
 ]
 
 // ─── Resources ────────────────────────────────────────────────────────────────
@@ -58,24 +45,24 @@ const RESOURCES = [
   { key: 'credits',     label: 'Credits',     icon: '¢', color: '#fde68a' },
 ]
 
-// Volle Zahl ohne Abkürzung
+// Volle Zahl, keine Abkürzung, deutsche Formatierung (1.000)
 function fmtFull(n) {
   if (n === undefined || n === null) return '—'
   return Math.floor(n).toLocaleString('de-DE')
 }
 
-// Produktion / h — kann auch Abkürzung haben da klein
+// Produktion /h — kleine Abkürzung OK da platzsparend
 function fmtProd(n) {
   if (!n) return null
   const abs = Math.abs(n)
   let s
   if (abs >= 1000000) s = `${(abs / 1000000).toFixed(1)}M`
   else if (abs >= 1000) s = `${(abs / 1000).toFixed(1)}k`
-  else s = Math.floor(abs).toLocaleString('de-DE')
+  else s = Math.floor(abs).toString()
   return n >= 0 ? `+${s}/h` : `-${s}/h`
 }
 
-// Countdown mm:ss
+// Countdown mm:ss oder h:mm:ss
 function useCountdown(finishAt) {
   const [t, setT] = useState('')
   useEffect(() => {
@@ -96,57 +83,24 @@ function useCountdown(finishAt) {
   return t
 }
 
-// ─── Top Bar Queues ────────────────────────────────────────────────────────────
+// ─── Top Bar ──────────────────────────────────────────────────────────────────
 
-function BuildQueueItem({ item, buildingDefs }) {
-  const countdown = useCountdown(item.finish_at)
-  const def = buildingDefs?.find(d => d.id === item.building_id)
+function QueuePill({ icon: Icon, color, label, name, level, countdown }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded"
-      style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.15)' }}>
-      <Hammer size={11} style={{ color: '#fbbf24', flexShrink: 0 }} />
-      <span className="text-xs font-mono text-slate-300 truncate max-w-[120px]">
-        {def?.name ?? item.building_id} <span className="text-slate-500">Lv{item.target_level}</span>
+    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded"
+      style={{ background: `${color}11`, border: `1px solid ${color}28` }}>
+      <Icon size={10} style={{ color, flexShrink: 0 }} />
+      <span className="text-xs font-mono truncate max-w-[110px]" style={{ color: '#cbd5e1' }}>
+        {name}{level ? <span style={{ color: '#475569' }}> Lv{level}</span> : null}
       </span>
-      <span className="text-xs font-mono text-amber-400 flex-shrink-0">{countdown}</span>
-    </div>
-  )
-}
-
-function ResearchQueueItem({ item, techDefs }) {
-  const countdown = useCountdown(item.finish_at)
-  const def = techDefs?.find(d => d.id === item.tech_id)
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded"
-      style={{ background: 'rgba(34,211,238,0.07)', border: '1px solid rgba(34,211,238,0.15)' }}>
-      <FlaskConical size={11} style={{ color: '#22d3ee', flexShrink: 0 }} />
-      <span className="text-xs font-mono text-slate-300 truncate max-w-[140px]">
-        {def?.name ?? item.tech_id} <span className="text-slate-500">Lv{item.target_level}</span>
-      </span>
-      <span className="text-xs font-mono text-cyan-400 flex-shrink-0">{countdown}</span>
-    </div>
-  )
-}
-
-function FleetQueueItem({ fleet }) {
-  const countdown = useCountdown(fleet.arrive_at)
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded"
-      style={{ background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.15)' }}>
-      <Navigation size={11} style={{ color: '#a855f7', flexShrink: 0 }} />
-      <span className="text-xs font-mono text-slate-300 truncate max-w-[120px]">
-        {fleet.name ?? 'Flotte'} <span className="text-slate-500">→ {fleet.target_x}/{fleet.target_y}</span>
-      </span>
-      <span className="text-xs font-mono text-purple-400 flex-shrink-0">{countdown || '—'}</span>
+      <span className="text-xs font-mono flex-shrink-0" style={{ color }}>{countdown}</span>
     </div>
   )
 }
 
 function TopBar({ player, planet }) {
-  const { buildings } = useGameStore()
-
   const { data: buildQueue = [] } = useQuery({
-    queryKey: ['build-queue-bar', planet?.id],
+    queryKey: ['bq-bar', planet?.id],
     queryFn: async () => {
       const { data } = await supabase.from('build_queue').select('*')
         .eq('planet_id', planet.id).order('queue_position')
@@ -157,7 +111,7 @@ function TopBar({ player, planet }) {
   })
 
   const { data: researchQueue = [] } = useQuery({
-    queryKey: ['research-queue-bar', player?.id],
+    queryKey: ['rq-bar', player?.id],
     queryFn: async () => {
       const { data } = await supabase.from('research_queue').select('*')
         .eq('player_id', player.id).order('started_at')
@@ -168,7 +122,7 @@ function TopBar({ player, planet }) {
   })
 
   const { data: fleetQueue = [] } = useQuery({
-    queryKey: ['fleet-queue-bar', player?.id],
+    queryKey: ['fq-bar', player?.id],
     queryFn: async () => {
       const { data } = await supabase.from('fleets').select('*')
         .eq('player_id', player.id).eq('status', 'traveling')
@@ -180,132 +134,142 @@ function TopBar({ player, planet }) {
 
   const { data: buildingDefs = [] } = useQuery({
     queryKey: ['building-defs'],
-    queryFn: async () => {
-      const { data } = await supabase.from('building_definitions').select('id,name')
-      return data ?? []
-    },
+    queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,name'); return data ?? [] },
     staleTime: Infinity,
   })
 
   const { data: techDefs = [] } = useQuery({
     queryKey: ['tech-defs-bar'],
-    queryFn: async () => {
-      const { data } = await supabase.from('tech_definitions').select('id,name')
-      return data ?? []
-    },
+    queryFn: async () => { const { data } = await supabase.from('tech_definitions').select('id,name'); return data ?? [] },
     staleTime: 60000,
   })
 
   const hasAnything = buildQueue.length > 0 || researchQueue.length > 0 || fleetQueue.length > 0
 
-  if (!hasAnything) return (
-    <div className="flex-shrink-0 h-9 flex items-center px-4 gap-2"
-      style={{ borderBottom: '1px solid rgba(34,211,238,0.06)', background: 'rgba(4,13,26,0.6)' }}>
-      <span className="text-xs font-mono text-slate-700">Keine aktiven Aufträge</span>
-    </div>
-  )
-
   return (
-    <div className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 flex-wrap"
-      style={{ borderBottom: '1px solid rgba(34,211,238,0.08)', background: 'rgba(4,13,26,0.6)', minHeight: 40 }}>
+    <div className="flex-shrink-0 flex items-center gap-3 px-4 flex-wrap"
+      style={{
+        borderBottom: '1px solid rgba(34,211,238,0.08)',
+        background: 'rgba(2,8,20,0.7)',
+        minHeight: 38,
+        paddingTop: 5,
+        paddingBottom: 5,
+      }}>
 
-      {buildQueue.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono text-slate-600 mr-1">BAU</span>
-          {buildQueue.map(item => (
-            <BuildQueueItem key={item.id} item={item} buildingDefs={buildingDefs} />
-          ))}
-        </div>
+      {!hasAnything && (
+        <span className="text-xs font-mono text-slate-700">Keine aktiven Aufträge</span>
       )}
+
+      {buildQueue.map(item => {
+        const def = buildingDefs.find(d => d.id === item.building_id)
+        return (
+          <BuildQueuePill key={item.id} item={item} name={def?.name ?? item.building_id} />
+        )
+      })}
 
       {buildQueue.length > 0 && researchQueue.length > 0 && (
-        <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
       )}
 
-      {researchQueue.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono text-slate-600 mr-1">FORSCHUNG</span>
-          {researchQueue.map(item => (
-            <ResearchQueueItem key={item.id} item={item} techDefs={techDefs} />
-          ))}
-        </div>
-      )}
+      {researchQueue.map(item => {
+        const def = techDefs.find(d => d.id === item.tech_id)
+        return (
+          <ResearchQueuePill key={item.id} item={item} name={def?.name ?? item.tech_id} />
+        )
+      })}
 
       {researchQueue.length > 0 && fleetQueue.length > 0 && (
-        <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
       )}
 
-      {fleetQueue.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-mono text-slate-600 mr-1">FLOTTEN</span>
-          {fleetQueue.map(fleet => (
-            <FleetQueueItem key={fleet.id} fleet={fleet} />
-          ))}
-        </div>
-      )}
+      {fleetQueue.map(fleet => (
+        <FleetQueuePill key={fleet.id} fleet={fleet} />
+      ))}
     </div>
+  )
+}
+
+function BuildQueuePill({ item, name }) {
+  const countdown = useCountdown(item.finish_at)
+  return (
+    <QueuePill icon={Building2} color="#fbbf24"
+      name={name} level={item.target_level} countdown={countdown} />
+  )
+}
+
+function ResearchQueuePill({ item, name }) {
+  const countdown = useCountdown(item.finish_at)
+  return (
+    <QueuePill icon={FlaskConical} color="#22d3ee"
+      name={name} level={item.target_level} countdown={countdown} />
+  )
+}
+
+function FleetQueuePill({ fleet }) {
+  const countdown = useCountdown(fleet.arrive_at)
+  return (
+    <QueuePill icon={Navigation} color="#a855f7"
+      name={fleet.name ?? 'Flotte'}
+      level={null}
+      countdown={countdown || '→'} />
   )
 }
 
 // ─── Sidebar Resources ────────────────────────────────────────────────────────
 
-function SidebarResources({ planet }) {
-  const [lastPlanet, setLastPlanet] = useState(planet)
+function SidebarResources({ planet: initialPlanet }) {
+  const [planet, setPlanet] = useState(initialPlanet)
 
-  // 30s refresh zur vollen und halben Minute
+  // Immer aktuell halten wenn gameStore-Planet sich ändert
   useEffect(() => {
-    if (!planet) return
+    if (initialPlanet) setPlanet(initialPlanet)
+  }, [initialPlanet])
 
+  // Refresh zur vollen und halben Minute
+  useEffect(() => {
+    if (!initialPlanet?.id) return
+    let timer
     const scheduleNext = () => {
       const now = new Date()
-      const seconds = now.getSeconds()
-      // Nächste volle oder halbe Minute
-      let secsUntilNext
-      if (seconds < 30) secsUntilNext = 30 - seconds
-      else secsUntilNext = 60 - seconds
-
-      return setTimeout(async () => {
+      const secs = now.getSeconds()
+      const wait = secs < 30 ? (30 - secs) : (60 - secs)
+      timer = setTimeout(async () => {
         const { data } = await supabase.from('planets')
-          .select('*').eq('id', planet.id).single()
-        if (data) setLastPlanet(data)
+          .select('*').eq('id', initialPlanet.id).single()
+        if (data) setPlanet(data)
         scheduleNext()
-      }, secsUntilNext * 1000)
+      }, wait * 1000)
     }
-
-    const timer = scheduleNext()
+    scheduleNext()
     return () => clearTimeout(timer)
-  }, [planet?.id])
+  }, [initialPlanet?.id])
 
-  // Sofort updaten wenn planet sich ändert (durch gameStore)
-  useEffect(() => {
-    if (planet) setLastPlanet(planet)
-  }, [planet])
-
-  const p = lastPlanet
-  if (!p) return null
+  if (!planet) return null
 
   return (
-    <div className="px-2 py-3 border-t border-cyan-500/10 space-y-0.5">
+    <div className="px-2 py-3 border-t border-cyan-500/10">
       <p className="text-xs text-slate-600 uppercase tracking-widest font-mono px-1 mb-2">Ressourcen</p>
-      {RESOURCES.map(({ key, label, icon, color }) => {
-        const val  = p[key] ?? 0
-        const prod = p[`prod_${key}`] ?? 0
-        const prodStr = fmtProd(prod)
-        return (
-          <div key={key} className="flex items-center gap-1.5 px-1 py-0.5 rounded"
-            style={{ background: 'rgba(7,20,40,0.4)' }}>
-            <span style={{ color, fontSize: 12, width: 15, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
-            <span className="text-slate-500 text-xs flex-1 truncate">{label}</span>
-            <span className="font-mono text-slate-200 text-xs">{fmtFull(val)}</span>
-            {prodStr && (
-              <span className="font-mono text-xs flex-shrink-0"
-                style={{ color: prod >= 0 ? '#4ade80' : '#f87171' }}>
-                {prodStr}
-              </span>
-            )}
-          </div>
-        )
-      })}
+      <div className="space-y-0.5">
+        {RESOURCES.map(({ key, label, icon, color }) => {
+          const val  = planet[key] ?? 0
+          const prod = planet[`prod_${key}`] ?? 0
+          const prodStr = fmtProd(prod)
+          return (
+            <div key={key} className="flex items-center gap-1.5 px-1 py-0.5 rounded"
+              style={{ background: 'rgba(7,20,40,0.4)' }}>
+              <span style={{ color, fontSize: 11, width: 14, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              <span className="text-slate-500 text-xs flex-1 truncate">{label}</span>
+              <span className="font-mono text-slate-200 text-xs tabular-nums">{fmtFull(val)}</span>
+              {prodStr && (
+                <span className="font-mono text-xs tabular-nums flex-shrink-0"
+                  style={{ color: prod >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
+                  {prodStr}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -313,87 +277,99 @@ function SidebarResources({ planet }) {
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 export default function Layout() {
-  const { player, planet, buildings, logout } = useGameStore()
+  const { player, planet, logout } = useGameStore()
   const navigate = useNavigate()
+
+  // Rassen-Bild: /races/{race_id}.png, Fallback auf Platzhalter
+  const raceImg = player?.race_id
+    ? `/Starbound-Alpha/races/${player.race_id}.png`
+    : `/Starbound-Alpha/races/placeholder.png`
 
   return (
     <div className="scanlines flex h-screen overflow-hidden star-bg">
-      {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 flex flex-col border-r border-cyan-500/15 overflow-y-auto"
+
+      {/* ── Sidebar ── */}
+      <aside className="w-52 flex-shrink-0 flex flex-col border-r border-cyan-500/15 overflow-y-auto"
         style={{ background: 'linear-gradient(180deg, rgba(4,13,26,0.98) 0%, rgba(2,4,9,0.99) 100%)' }}>
 
-        {/* Logo */}
-        <div className="p-4 border-b border-cyan-500/15 flex-shrink-0">
-          <h1 className="font-display font-bold text-xl tracking-[0.15em] text-cyan-400"
-            style={{ textShadow: '0 0 20px rgba(34,211,238,0.5)' }}>
-            ✦ STARBOUND
-          </h1>
-          <p className="text-xs text-slate-500 font-mono mt-0.5">ALPHA v0.1</p>
-        </div>
-
-        {/* Player info */}
-        <div className="px-3 py-3 border-b border-cyan-500/10 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #0f2d54, #071428)', border: '1px solid rgba(34,211,238,0.3)' }}>
-              {player?.username?.[0]?.toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-200 font-display truncate">{player?.username}</div>
-              <div className="text-xs text-slate-500 flex gap-1">
-                {player?.race_id && <span className="text-cyan-600">{player.race_id}</span>}
-                {player?.profession && <span className="text-slate-600">· {player.profession}</span>}
+        {/* Rassen-Bild + Spielername — klickbar → Dashboard */}
+        <button onClick={() => navigate('/dashboard')}
+          className="flex-shrink-0 group w-full text-left"
+          style={{ borderBottom: '1px solid rgba(34,211,238,0.1)' }}>
+          <div className="relative w-full overflow-hidden"
+            style={{ height: 120 }}>
+            <img
+              src={raceImg}
+              alt="Rasse"
+              className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-80"
+              style={{ filter: 'brightness(0.85)' }}
+              onError={e => { e.target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' }}
+            />
+            {/* Gradient overlay unten */}
+            <div className="absolute inset-0"
+              style={{ background: 'linear-gradient(to bottom, transparent 40%, rgba(4,13,26,0.95) 100%)' }} />
+            {/* Spielername */}
+            <div className="absolute bottom-0 left-0 right-0 px-3 pb-2">
+              <p className="font-display font-bold text-sm text-slate-200 truncate"
+                style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                {player?.username}
+              </p>
+              <div className="flex gap-1.5 text-xs font-mono">
+                {player?.race_id && (
+                  <span style={{ color: '#22d3ee', opacity: 0.8 }}>{player.race_id}</span>
+                )}
+                {player?.profession && (
+                  <span style={{ color: '#94a3b8', opacity: 0.6 }}>· {player.profession}</span>
+                )}
               </div>
+            </div>
+            {/* Hover-Indikator */}
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="text-xs font-mono text-cyan-400/60">Dossier →</span>
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Navigation */}
-        <nav className="px-2 py-2 flex-shrink-0 space-y-3">
-          {NAV_SECTIONS.map(({ label, items }) => (
-            <div key={label}>
-              <p className="text-xs font-mono text-slate-700 uppercase tracking-widest px-2 mb-1">{label}</p>
-              <div className="space-y-0.5">
-                {items.map(({ to, icon: Icon, label: itemLabel }) => (
-                  <NavLink key={to} to={to}
-                    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                    <Icon size={14} />
-                    <span className="text-sm">{itemLabel}</span>
-                  </NavLink>
-                ))}
-              </div>
-            </div>
+        <nav className="px-2 py-2 flex-shrink-0 space-y-0.5">
+          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+            <NavLink key={to} to={to}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Icon size={14} />
+              <span className="text-sm">{label}</span>
+            </NavLink>
           ))}
 
           {player?.is_admin && (
-            <div>
-              <p className="text-xs font-mono text-slate-700 uppercase tracking-widest px-2 mb-1">System</p>
+            <>
+              <div className="my-1 mx-2 border-t border-cyan-500/10" />
               <NavLink to="/admin"
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Settings size={14} />
                 <span className="text-sm">Admin</span>
               </NavLink>
-            </div>
+            </>
           )}
         </nav>
 
-        {/* Resources */}
+        {/* Ressourcen */}
         <div className="flex-1">
           <SidebarResources planet={planet} />
         </div>
 
         {/* Logout */}
-        <div className="p-3 border-t border-cyan-500/10 flex-shrink-0">
+        <div className="p-2 border-t border-cyan-500/10 flex-shrink-0">
           <button onClick={logout}
             className="w-full nav-item text-slate-500 hover:text-red-400">
-            <LogOut size={14} />
+            <LogOut size={13} />
             <span className="text-sm">Abmelden</span>
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* ── Main ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
         {/* Top queue bar */}
         <TopBar player={player} planet={planet} />
 
@@ -412,7 +388,6 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Right panel: Chat */}
       <ChatPanel />
       <NotificationStack />
     </div>
