@@ -225,15 +225,15 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
   const branchBusy  = branchQueue.length >= 1 && !myQueue
   const countdown   = useCountdown(myQueue?.finish_at)
 
-  // Only show children that have been discovered or researched
+  // Children are only visible if they have been researched OR explicitly discovered
+  // Nothing is visible by default — discovery/research is required for all children
   const children = allTechs.filter(t =>
     t.parent_tech === tech.id &&
-    (!t.hidden || myDiscoveries[t.id] || (myTechMap[t.id]?.level ?? 0) > 0)
+    (myDiscoveries[t.id] || (myTechMap[t.id]?.level ?? 0) > 0)
   )
-  // Hidden children eligible for search (parent researched to sufficient level)
+  // Children that can be found via "Suchen" — parent must be researched to discover_at_level
   const searchableHidden = allTechs.filter(t =>
     t.parent_tech === tech.id &&
-    t.hidden &&
     !myDiscoveries[t.id] &&
     !(myTechMap[t.id]?.level ?? 0) &&
     currentLevel >= (t.discover_at_level ?? 4)
