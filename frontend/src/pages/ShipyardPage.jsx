@@ -401,7 +401,9 @@ export default function ShipyardPage() {
         <div className="panel p-3 space-y-2">
           <p className="text-xs font-mono uppercase tracking-widest text-slate-500">In Bau</p>
           {buildQueue.map(q => {
-            const remaining = q.finish_at ? Math.max(0, Math.floor((new Date(q.finish_at) - new Date()) / 1000)) : 0
+            const finishMs = q.finish_at ? new Date(q.finish_at).getTime() : 0
+            const nowMs = Date.now()
+            const remaining = Math.max(0, Math.floor((finishMs - nowMs) / 1000))
             const mins = Math.floor(remaining / 60)
             const secs = remaining % 60
             return (
@@ -415,7 +417,7 @@ export default function ShipyardPage() {
         </div>
       )}
 
-
+      <div className="flex gap-1.5 flex-wrap">
         {classes.map(cls => (
           <button key={cls} onClick={() => setClassFilter(cls)}
             className="px-3 py-1.5 rounded text-sm font-mono transition-all"
@@ -440,7 +442,7 @@ export default function ShipyardPage() {
       <AnimatePresence>
         {designer && (
           <ShipDesigner chassis={designer} planet={planet} player={player} partDefs={partDefs} hasTech={hasTech}
-            onClose={() => setDesigner(null)} onBuilt={() => { refetchShips(); refetchBuildQueue() }} />
+            onClose={() => setDesigner(null)} onBuilt={() => { refetchShips(); refetchBuildQueue(); }} />
         )}
       </AnimatePresence>
     </div>
