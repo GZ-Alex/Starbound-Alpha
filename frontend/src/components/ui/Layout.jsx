@@ -121,16 +121,8 @@ function TopBar({ player, planet }) {
     refetchInterval: 5000,
   })
 
-  const { data: fleetQueue = [] } = useQuery({
-    queryKey: ['fq-bar', player?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('fleets').select('*')
-        .eq('player_id', player.id).eq('status', 'traveling')
-      return data ?? []
-    },
-    enabled: !!player,
-    refetchInterval: 5000,
-  })
+  // Fleet-Queue deaktiviert bis fleets.status Spalte in DB existiert
+  const fleetQueue = []
 
   const { data: buildingDefs = [] } = useQuery({
     queryKey: ['building-defs'],
@@ -221,11 +213,8 @@ function SidebarResources({ planet: initialPlanet }) {
   const [planet, setPlanet] = useState(initialPlanet)
   const { buildings } = useGameStore()
 
-  const { data: buildingDefs = [] } = useQuery({
-    queryKey: ['building-defs'],
-    queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,energy_cost'); return data ?? [] },
-    staleTime: Infinity,
-  })
+  // energy_cost Query deaktiviert bis Spalte in DB bestätigt
+  const buildingDefs = []
 
   // Energieproduktion: Kraftwerk level × 100
   const kraftwerkLevel = buildings.find(b => b.building_id === 'power_plant')?.level ?? 0
@@ -274,37 +263,26 @@ function SidebarResources({ planet: initialPlanet }) {
           const val  = planet[key] ?? 0
           const prod = planet[`prod_${key}`] ?? 0
           const prodStr = fmtProd(prod)
-
-          // Energie: zeige "vorhanden / produziert" Format
           const isEnergie = key === 'energie'
-          const energieMangel = isEnergie && val < energieProduktion * 0.5
+          const energieMangel = isEnergie && energieSaldo < 0
 
           return (
-            <div key={key} className="px-1.5 py-1 rounded"
+            <div key={key} className="flex items-center gap-1.5 px-1.5 py-1 rounded"
               style={{ background: 'rgba(7,20,40,0.4)' }}>
-              <div className="flex items-center gap-1.5">
-                <span style={{ color, fontSize: 13, width: 16, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
-                <span className="font-mono text-slate-300 text-sm flex-1 truncate">{label}</span>
-                <span className="font-mono text-slate-100 text-sm tabular-nums font-semibold">{fmtFull(val)}</span>
-              </div>
-              {/* Produktion + Energie-Detail */}
-              <div className="flex items-center justify-between pl-6 mt-0.5">
-                {isEnergie ? (
-                  <span className="font-mono text-xs tabular-nums"
-                    style={{ color: energieMangel ? '#f87171' : '#4ade80' }}>
-                    {energieMangel
-                      ? `⚠ ${fmtFull(energieProduktion)} / ${fmtFull(energieVerbrauch)} benötigt`
-                      : `+${fmtFull(energieProduktion)} / ${fmtFull(energieVerbrauch)} benötigt`}
-                  </span>
-                ) : (
-                  prodStr ? (
-                    <span className="font-mono text-xs tabular-nums"
-                      style={{ color: prod >= 0 ? '#4ade80' : '#f87171' }}>
-                      {prodStr}
-                    </span>
-                  ) : <span />
-                )}
-              </div>
+              <span style={{ color, fontSize: 12, width: 15, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              <span className="font-mono text-slate-300 text-sm flex-1 truncate">{label}</span>
+              <span className="font-mono text-slate-100 text-sm tabular-nums font-semibold">{fmtFull(val)}</span>
+              {isEnergie ? (
+                <span className="font-mono tabular-nums flex-shrink-0"
+                  style={{ color: energieMangel ? '#f87171' : '#4ade80', fontSize: 11 }}>
+                  {energieMangel ? '⚠' : `/${fmtFull(energieVerbrauch)}`}
+                </span>
+              ) : prodStr ? (
+                <span className="font-mono tabular-nums flex-shrink-0"
+                  style={{ color: prod >= 0 ? '#4ade80' : '#f87171', fontSize: 11 }}>
+                  {prodStr}
+                </span>
+              ) : null}
             </div>
           )
         })}
@@ -328,7 +306,7 @@ export default function Layout() {
     <div className="scanlines flex h-screen overflow-hidden star-bg">
 
       {/* ── Sidebar ── */}
-      <aside className="w-52 flex-shrink-0 flex flex-col border-r border-cyan-500/15 overflow-y-auto"
+      <aside className="w-64 flex-shrink-0 flex flex-col border-r border-cyan-500/15 overflow-y-auto"
         style={{ background: 'linear-gradient(180deg, rgba(4,13,26,0.98) 0%, rgba(2,4,9,0.99) 100%)' }}>
 
         {/* Rassen-Bild + Spielername — klickbar → Dashboard */}
