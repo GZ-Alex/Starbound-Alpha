@@ -1,5 +1,6 @@
 // src/components/ui/Layout.jsx
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
@@ -219,6 +220,26 @@ function FleetQueuePill({ fleet }) {
 
 function SidebarResources({ planet: initialPlanet }) {
   const [planet, setPlanet] = useState(initialPlanet)
+  const { buildings } = useGameStore()
+
+  const { data: buildingDefs = [] } = useQuery({
+    queryKey: ['building-defs'],
+    queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,energy_cost'); return data ?? [] },
+    staleTime: Infinity,
+  })
+
+  // Energieproduktion: Kraftwerk level × 100
+  const kraftwerkLevel = buildings.find(b => b.building_id === 'power_plant')?.level ?? 0
+  const energieProduktion = kraftwerkLevel * 100
+
+  // Energieverbrauch: Σ energy_cost × level aller aktiven Gebäude
+  const energieVerbrauch = buildings.reduce((sum, pb) => {
+    const def = buildingDefs.find(d => d.id === pb.building_id)
+    return sum + (def?.energy_cost ?? 0) * pb.level
+  }, 0)
+
+  const energieSaldo = energieProduktion - energieVerbrauch
+  const energieMangel = energieSaldo < 0
 
   // Immer aktuell halten wenn gameStore-Planet sich ändert
   useEffect(() => {
@@ -254,18 +275,37 @@ function SidebarResources({ planet: initialPlanet }) {
           const val  = planet[key] ?? 0
           const prod = planet[`prod_${key}`] ?? 0
           const prodStr = fmtProd(prod)
+
+          // Energie: zeige "vorhanden / produziert" Format
+          const isEnergie = key === 'energie'
+          const energieMangel = isEnergie && val < energieProduktion * 0.5
+
           return (
-            <div key={key} className="flex items-center gap-1.5 px-1 py-0.5 rounded"
+            <div key={key} className="px-1.5 py-1 rounded"
               style={{ background: 'rgba(7,20,40,0.4)' }}>
-              <span style={{ color, fontSize: 11, width: 14, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
-              <span className="text-slate-500 text-xs flex-1 truncate">{label}</span>
-              <span className="font-mono text-slate-200 text-xs tabular-nums">{fmtFull(val)}</span>
-              {prodStr && (
-                <span className="font-mono text-xs tabular-nums flex-shrink-0"
-                  style={{ color: prod >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
-                  {prodStr}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5">
+                <span style={{ color, fontSize: 13, width: 16, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+                <span className="font-mono text-slate-300 text-sm flex-1 truncate">{label}</span>
+                <span className="font-mono text-slate-100 text-sm tabular-nums font-semibold">{fmtFull(val)}</span>
+              </div>
+              {/* Produktion + Energie-Detail */}
+              <div className="flex items-center justify-between pl-6 mt-0.5">
+                {isEnergie ? (
+                  <span className="font-mono text-xs tabular-nums"
+                    style={{ color: energieMangel ? '#f87171' : '#4ade80' }}>
+                    {energieMangel
+                      ? `⚠ ${fmtFull(energieProduktion)} / ${fmtFull(energieVerbrauch)} benötigt`
+                      : `+${fmtFull(energieProduktion)} / ${fmtFull(energieVerbrauch)} benötigt`}
+                  </span>
+                ) : (
+                  prodStr ? (
+                    <span className="font-mono text-xs tabular-nums"
+                      style={{ color: prod >= 0 ? '#4ade80' : '#f87171' }}>
+                      {prodStr}
+                    </span>
+                  ) : <span />
+                )}
+              </div>
             </div>
           )
         })}
