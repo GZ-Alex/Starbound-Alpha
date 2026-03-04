@@ -221,14 +221,14 @@ function SidebarResources({ planet: initialPlanet }) {
   const [planet, setPlanet] = useState(initialPlanet)
   const { buildings } = useGameStore()
 
-  const { data: buildingDefs = [] } = useQuery({
-    queryKey: ['building-defs-energy'],
+  const { data: buildingDefsEnergy = [] } = useQuery({
+    queryKey: ['building-defs-energy-only'],
     queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,energy_per_level'); return data ?? [] },
     staleTime: Infinity,
   })
 
   const energieVerbrauch = buildings.reduce((sum, pb) => {
-    const def = buildingDefs.find(d => d.id === pb.building_id)
+    const def = buildingDefsEnergy.find(d => d.id === pb.building_id)
     return sum + (def?.energy_per_level ?? 0) * pb.level
   }, 0)
 
