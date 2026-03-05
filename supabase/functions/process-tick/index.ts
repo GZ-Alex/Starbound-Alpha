@@ -11,7 +11,7 @@ const supabase = createClient(
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
-const PROD_PER_MINE_PER_TICK = 2  // bei 60 Ticks/h → 120/h pro Mine
+const PROD_PER_MINE_PER_TICK = 50 / 60  // 50/h bei 60 Ticks/h
 
 const MINEABLE = [
   'titan','silizium','helium','nahrung','wasser',
@@ -144,7 +144,7 @@ async function processPlanetTick(
   for (const res of MINEABLE) {
     const mines = dist[res] ?? 0
     const prodPerTick = mines * PROD_PER_MINE_PER_TICK * energieFaktor
-    const prodPerHour = Math.round(prodPerTick * 60)
+    const prodPerHour = Math.round(mines * 50 * energieFaktor)  // 50/h pro Mine
     if (mines > 0) updates[res] = (planet[res] ?? 0) + prodPerTick
     prodUpdates[`prod_${res}`] = prodPerHour
   }
@@ -347,4 +347,3 @@ async function processFleets(log: string[]) {
 
   if (arrived > 0) log.push(`fleets_arrived=${arrived}`)
 }
- 
