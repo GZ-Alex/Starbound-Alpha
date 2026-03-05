@@ -357,6 +357,7 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
     !(myTechMap[t.id]?.level ?? 0) &&
     currentLevel >= (t.discover_at_level ?? 4)
   )
+  const hasSearchable = searchableHidden.length > 0
 
   const handleConfirm = async (cycles) => {
     setShowPopup(false); setLoading(true)
@@ -389,7 +390,6 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
     setShowSearch(false)
     setSearching(true)
     try {
-      // Kosten abziehen
       const upd = {}
       for (const [r, a] of Object.entries(SEARCH_COST)) {
         const total = a * cycles
@@ -397,16 +397,10 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
       }
       await supabase.from('planets').update(upd).eq('id', planet.id)
 
-      // Chance: 1→20%, 2→40%, 3→60%, 4→80%, 5→100%
       const chance = cycles * 20
       const roll   = Math.random() * 100
 
-      // Warte Suchzeit (simuliert — in Realität würde ein Tick das machen,
-      // aber wir machen es clientseitig mit setTimeout)
-      await new Promise(r => setTimeout(r, SEARCH_CYCLE_MINUTES * cycles * 60000 * 0.001)) // kurz simuliert
-      // Eigentlich sofortiger Würfelwurf (wie Forschung clientseitig)
-
-      if (roll <= chance && searchableHidden.length > 0) {
+      if (roll <= chance && hasSearchable) {
         const pick = searchableHidden[Math.floor(Math.random() * searchableHidden.length)]
         await supabase.from('player_discoveries').upsert({ player_id: player.id, tech_id: pick.id })
         addNotification(`🔭 Neue Technologie entdeckt: ${pick.name}!`, 'success')
@@ -423,6 +417,11 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
     ? (prof ? prof.bg : isRace ? RACE_COLOR.bg : 'rgba(148,163,184,0.05)')
     : 'rgba(4,13,26,0.55)'
 
+  // Summary shown when collapsed (erforschte Boni/Bauteile)
+  const collapseSummary = !open && currentLevel > 0 && (
+    revealed && (tech.unlocks_part || tech.unlocks_chassis || (tech.effects && Object.keys(tech.effects).length > 0))
+  )
+
   return (
     <div style={{ display: 'table' }}>
       <div className="rounded-lg overflow-hidden"
@@ -438,21 +437,21 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
         {/* Header row */}
         <div className="flex items-start gap-2 px-3 pt-2.5 pb-2">
           <button onClick={() => setOpen(o => !o)}
-            className="flex-shrink-0 mt-0.5 w-[18px] h-[18px] rounded flex items-center justify-center hover:bg-white/10 transition-colors"
+            className="flex-shrink-0 mt-1 w-[18px] h-[18px] rounded flex items-center justify-center hover:bg-white/10 transition-colors"
             style={{ border: `1px solid ${open ? 'rgba(148,163,184,0.25)' : 'rgba(148,163,184,0.45)'}`, color: '#64748b' }}>
             {open ? <Minus size={9} /> : <Plus size={9} />}
           </button>
 
-          <div>
+          <div className="flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="font-display font-semibold text-sm"
+              {/* LARGER title */}
+              <span className="font-display font-bold text-base leading-tight"
                 style={{ color: currentLevel > 0 ? accent : '#64748b' }}>
                 {tech.name}
               </span>
 
-              {/* GEÄNDERT: "Level X" statt "Stufe X / 99" */}
               {currentLevel > 0 && (
-                <span className="text-xs font-mono text-slate-500">
+                <span className="text-xs font-mono" style={{ color: accent, opacity: 0.7 }}>
                   Level {currentLevel}
                 </span>
               )}
@@ -483,10 +482,34 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
               )}
             </div>
 
+            {/* Discover info — readable */}
             {parentTech && tech.discover_at_level && (
-              <p className="text-xs text-slate-700 font-mono mt-0.5">
-                Entdeckt in <span className="text-slate-600">{parentTech.name}</span> Level {tech.discover_at_level}
+              <p className="text-xs text-slate-500 font-mono mt-0.5">
+                Entdeckt ab <span className="text-slate-400">{parentTech.name}</span> Level {tech.discover_at_level}
               </p>
+            )}
+
+            {/* Collapsed summary — show unlocked content even when closed */}
+            {collapseSummary && (
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                {tech.unlocks_part && (
+                  <span className="text-xs font-mono" style={{ color: '#fbbf24' }}>🔧 {tech.unlocks_part}</span>
+                )}
+                {tech.unlocks_chassis && (
+                  <span className="text-xs font-mono" style={{ color: '#fbbf24' }}>🚀 {tech.unlocks_chassis}</span>
+                )}
+                {tech.effects && Object.entries(tech.effects).map(([k, v]) => {
+                  const per = typeof v === 'number' ? v : 0
+                  const tot = per * currentLevel
+                  const isPct = per < 1
+                  const fv = n => isPct ? `${(n * 100).toFixed(1)}%` : n.toFixed(1)
+                  return (
+                    <span key={k} className="text-xs font-mono" style={{ color: '#34d399' }}>
+                      +{fv(tot)} {k}
+                    </span>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -503,16 +526,17 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
 
                 <p className="text-sm text-slate-400 leading-relaxed pt-2">{tech.description}</p>
 
+                {/* Modules */}
                 {revealed && (tech.unlocks_part || tech.unlocks_chassis) && (
                   <div className="space-y-0.5">
-                    <p className="text-xs text-slate-600 font-mono uppercase tracking-widest">
+                    <p className="text-xs text-slate-500 font-mono uppercase tracking-widest">
                       Freigeschaltete Module
                     </p>
                     {tech.unlocks_part && (
                       <p className="text-sm font-medium" style={{ color: '#fbbf24' }}>
                         🔧 {tech.unlocks_part}
                         <span className="text-xs font-normal font-mono ml-2" style={{ color: '#92400e' }}>
-                          {tech.name} Level {tech.reveal_level ?? 5}
+                          ab Level {tech.reveal_level ?? 5}
                         </span>
                       </p>
                     )}
@@ -520,48 +544,56 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                       <p className="text-sm font-medium" style={{ color: '#fbbf24' }}>
                         🚀 {tech.unlocks_chassis}
                         <span className="text-xs font-normal font-mono ml-2" style={{ color: '#92400e' }}>
-                          {tech.name} Level {tech.reveal_level ?? 5}
+                          ab Level {tech.reveal_level ?? 5}
                         </span>
                       </p>
                     )}
                   </div>
                 )}
                 {!revealed && currentLevel > 0 && (
-                  <p className="text-xs text-slate-700 font-mono">
+                  <p className="text-xs text-slate-600 font-mono">
                     🔒 Module / Effekte sichtbar ab Level {tech.reveal_level ?? 5}
                   </p>
                 )}
 
+                {/* Boni — readable size */}
                 {revealed && tech.effects && Object.keys(tech.effects).length > 0 && currentLevel > 0 && (
                   <div className="space-y-0.5">
-                    <p className="text-xs text-slate-600 font-mono uppercase tracking-widest">Boni</p>
+                    <p className="text-xs text-slate-500 font-mono uppercase tracking-widest">Boni</p>
                     {Object.entries(tech.effects).map(([k, v]) => {
-                      const per  = typeof v === 'number' ? v : 0
-                      const tot  = per * currentLevel
+                      const per   = typeof v === 'number' ? v : 0
+                      const tot   = per * currentLevel
                       const isPct = per < 1
-                      const fv   = n => isPct ? `${(n * 100).toFixed(2)}%` : n.toFixed(1)
+                      const fv    = n => isPct ? `${(n * 100).toFixed(2)}%` : n.toFixed(1)
                       return (
                         <p key={k} className="text-sm font-mono" style={{ color: '#34d399' }}>
-                          +{fv(per)} {k} / Level{' '}
-                          <span style={{ color: '#34d399', opacity: 0.65 }}>
-                            (gesamt: +{fv(tot)})
-                          </span>
+                          <span className="text-slate-400">+{fv(per)} {k} / Level</span>
+                          {'  '}
+                          <span style={{ color: '#34d399' }}>gesamt +{fv(tot)}</span>
                         </p>
                       )
                     })}
                   </div>
                 )}
 
-                {/* Buttons */}
+                {/* Buttons — always visible */}
                 <div className="flex items-center gap-2 pt-0.5 flex-wrap">
-                  {isMaxed ? (
-                    <span className="text-xs font-mono text-slate-700">
-                      ✓ Maximallevel {tech.max_level} erreicht
-                    </span>
-                  ) : myQueue ? (
+                  {/* Erforschen / Max-Level / Queue */}
+                  {myQueue ? (
                     <span className="text-xs font-mono text-amber-400 flex items-center gap-1">
                       <Clock size={10} />{countdown}
                     </span>
+                  ) : isMaxed ? (
+                    <button disabled
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono"
+                      style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        color: '#334155',
+                        cursor: 'not-allowed',
+                      }}>
+                      <CheckCircle size={11} /> Max-Level
+                    </button>
                   ) : (
                     <button
                       onClick={() => !branchBusy && !loading && setShowPopup(true)}
@@ -582,18 +614,21 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                     </button>
                   )}
 
-                  {/* Suchen-Button — immer wenn researched und searchableHidden vorhanden */}
-                  {currentLevel > 0 && searchableHidden.length > 0 && (
-                    <button onClick={() => setShowSearch(true)} disabled={searching}
+                  {/* Suchen — immer sichtbar wenn erforscht */}
+                  {currentLevel > 0 && (
+                    <button
+                      onClick={() => hasSearchable && !searching && setShowSearch(true)}
+                      disabled={searching}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                       style={{
-                        background: 'rgba(56,189,248,0.06)',
-                        border: '1px solid rgba(56,189,248,0.2)',
-                        color: '#38bdf8',
+                        background: hasSearchable ? 'rgba(56,189,248,0.06)' : 'rgba(255,255,255,0.02)',
+                        border: hasSearchable ? '1px solid rgba(56,189,248,0.2)' : '1px solid rgba(255,255,255,0.06)',
+                        color: hasSearchable ? '#38bdf8' : '#334155',
+                        cursor: hasSearchable && !searching ? 'pointer' : 'not-allowed',
                       }}>
                       {searching
                         ? <><Loader2 size={11} className="animate-spin" />Suche…</>
-                        : <><Search size={11} />Neue Techs suchen</>}
+                        : <><Search size={11} />{hasSearchable ? 'Neue Techs suchen' : 'Suchen'}</>}
                     </button>
                   )}
                 </div>
