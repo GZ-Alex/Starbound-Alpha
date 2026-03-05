@@ -16,7 +16,7 @@ const CHEAT_RESOURCES = [
 // Erhöhbare Rassen-Felder (mit zugehörigem skill_key und Bonus je Punkt)
 const RACE_BONUS_FIELDS = [
   { key: 'mine_production_bonus',     label: 'Minenproduktion',            unit: '%',  skill: 'mine_production',    bonusPerPt: 10,  flatUnit: '%'    },
-  { key: 'extra_mines_per_hq_level',  label: 'Zusatzminen / HQ-Level',     unit: '',   skill: 'extra_mines_per_hq', bonusPerPt: 5,   flatUnit: ' Minen' },
+  { key: 'extra_mines_per_hq_level',  label: 'Zusatzminen / HQ-Level',     unit: '',   skill: 'extra_mines_per_hq', bonusPerPt: 5,   flatUnit: ' Minen/Lvl' },
   { key: 'research_chance_bonus',     label: 'Forschungschance',           unit: '%',  skill: 'research_chance',    bonusPerPt: 5,   flatUnit: '%'    },
   { key: 'research_cost_bonus',       label: 'Forschungskosten',           unit: '%',  skill: 'research_cost',      bonusPerPt: -5,  flatUnit: '%'    },
   { key: 'researcher_cost_bonus',     label: 'Forscherausbildung',         unit: '%',  skill: 'researcher_cost',    bonusPerPt: -3,  flatUnit: '%'    },
@@ -80,11 +80,13 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
   const canRemove = spent > 0 && !saving
 
   // Bonus/Punkt — immer anzeigen, unabhängig von spent
-  const bonusLabel = `${field.bonusPerPt > 0 ? '+' : ''}${field.bonusPerPt}${field.flatUnit} / EP`
+  const bonusLabel = field.flatUnit.includes('/') 
+    ? `${field.bonusPerPt > 0 ? '+' : ''}${field.bonusPerPt}${field.flatUnit}`
+    : `${field.bonusPerPt > 0 ? '+' : ''}${field.bonusPerPt}${field.flatUnit} / EP`
 
   return (
     <div className="grid items-center py-2.5 px-3 rounded transition-colors hover:bg-white/[0.03]"
-      style={{ gridTemplateColumns: '1fr 56px 88px 88px 68px', gap: '0 10px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      style={{ gridTemplateColumns: '200px 70px 100px 110px 80px', gap: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
 
       {/* Attribut */}
       <span className="text-sm text-slate-200 leading-tight">{field.label}</span>
@@ -280,15 +282,15 @@ export default function Dashboard() {
           )}
 
           {/* HQ-Info */}
-          <p className="text-xs font-mono text-slate-700 px-1">
-            HQ Level {hqLevel}
-            {totalPoints < 15 && ` · nächster EP bei Level ${nextPointAt}`}
-            {totalPoints >= 15 && ' · Maximale EP erreicht'}
+          <p className="text-sm font-mono px-1" style={{ color: '#64748b' }}>
+            HQ Level <span style={{ color: '#94a3b8' }}>{hqLevel}</span>
+            {totalPoints < 15 && <span> · nächster EP bei Level <span style={{ color: '#22d3ee' }}>{nextPointAt}</span></span>}
+            {totalPoints >= 15 && <span style={{ color: '#f59e0b' }}> · Maximale EP erreicht</span>}
           </p>
 
           {/* Spalten-Header */}
           <div className="grid px-3 pb-2 text-xs font-mono uppercase tracking-wider"
-            style={{ gridTemplateColumns: '1fr 56px 88px 88px 68px', gap: '0 10px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            style={{ gridTemplateColumns: '200px 70px 100px 110px 80px', gap: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <span style={{ color: '#94a3b8' }}>Attribut</span>
             <span className="text-right" style={{ color: '#94a3b8' }}>Rasse</span>
             <span className="text-center" style={{ color: '#94a3b8' }}>EP</span>
