@@ -248,10 +248,8 @@ export default function Dashboard() {
         Willkommen, Commander {player?.username}
       </h2>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-
-        {/* ── Linke Spalte: Rasse + Skills ── */}
-        <div className="panel p-4 space-y-3">
+      {/* ── Rasse + Skills — volle Breite ── */}
+      <div className="panel p-4 space-y-3">
 
           {/* Panel-Header */}
           <div className="panel-header -mx-4 -mt-4 px-4 flex items-center justify-between">
@@ -328,31 +326,31 @@ export default function Dashboard() {
               )
             })}
           </div>
-        </div>
+      </div>
 
-        {/* ── Rechte Spalte ── */}
-        <div className="space-y-4">
+      {/* ── Status + Tech-Boni ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
 
-          {/* Status */}
-          <div className="panel p-4">
-            <div className="panel-header -mx-4 -mt-4 mb-3 px-4">Status</div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Planet</span>
-                <span className="font-mono text-cyan-400">{planet?.name ?? '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Koordinaten</span>
-                <span className="font-mono text-xs text-slate-400">
-                  {planet ? `${planet.x} / ${planet.y} / ${planet.z}` : '—'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Techs erforscht</span>
-                <span className="font-mono text-slate-400">{myTechRows.length}</span>
-              </div>
+        {/* Status */}
+        <div className="panel p-4">
+          <div className="panel-header -mx-4 -mt-4 mb-3 px-4">Status</div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Planet</span>
+              <span className="font-mono text-cyan-400">{planet?.name ?? '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Koordinaten</span>
+              <span className="font-mono text-xs text-slate-400">
+                {planet ? `${planet.x} / ${planet.y} / ${planet.z}` : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Techs erforscht</span>
+              <span className="font-mono text-slate-400">{myTechRows.length}</span>
             </div>
           </div>
+        </div>
 
           {/* Technologie-Boni */}
           <div className="panel p-4">
@@ -419,7 +417,6 @@ export default function Dashboard() {
             )}
           </div>
 
-        </div>
       </div>
 
       {/* Dev-Tools */}
