@@ -31,18 +31,18 @@ const NAV_ITEMS = [
 // ─── Resources ────────────────────────────────────────────────────────────────
 
 const RESOURCES = [
-  { key: 'titan',       label: 'Titan',       icon: '⬡', color: '#94a3b8' },
-  { key: 'silizium',    label: 'Silizium',    icon: '◇', color: '#a78bfa' },
-  { key: 'helium',      label: 'Helium',      icon: '◎', color: '#34d399' },
-  { key: 'nahrung',     label: 'Nahrung',     icon: '◈', color: '#86efac' },
-  { key: 'wasser',      label: 'Wasser',      icon: '〇', color: '#67e8f9' },
-  { key: 'bauxit',      label: 'Bauxit',      icon: '◆', color: '#fb923c' },
-  { key: 'aluminium',   label: 'Aluminium',   icon: '▽', color: '#c0c0c0' },
-  { key: 'uran',        label: 'Uran',        icon: '☢', color: '#4ade80' },
-  { key: 'plutonium',   label: 'Plutonium',   icon: '⚛', color: '#f472b6' },
-  { key: 'wasserstoff', label: 'Wasserstoff', icon: '↑', color: '#38bdf8' },
-  { key: 'energie',     label: 'Energie',     icon: '⚡', color: '#fbbf24' },
-  { key: 'credits',     label: 'Credits',     icon: '¢', color: '#fde68a' },
+  { key: 'titan',       label: 'Titan',       icon: '/Starbound-Alpha/resources/titan.png',       color: '#94a3b8', isImg: true },
+  { key: 'silizium',    label: 'Silizium',    icon: '/Starbound-Alpha/resources/silizium.png',    color: '#a78bfa', isImg: true },
+  { key: 'helium',      label: 'Helium',      icon: '/Starbound-Alpha/resources/helium.png',      color: '#34d399', isImg: true },
+  { key: 'nahrung',     label: 'Nahrung',     icon: '/Starbound-Alpha/resources/nahrung.png',     color: '#86efac', isImg: true },
+  { key: 'wasser',      label: 'Wasser',      icon: '/Starbound-Alpha/resources/wasser.png',      color: '#67e8f9', isImg: true },
+  { key: 'bauxit',      label: 'Bauxit',      icon: '/Starbound-Alpha/resources/bauxit.png',      color: '#fb923c', isImg: true },
+  { key: 'aluminium',   label: 'Aluminium',   icon: '/Starbound-Alpha/resources/aluminium.png',   color: '#c0c0c0', isImg: true },
+  { key: 'uran',        label: 'Uran',        icon: '/Starbound-Alpha/resources/uran.png',        color: '#4ade80', isImg: true },
+  { key: 'plutonium',   label: 'Plutonium',   icon: '/Starbound-Alpha/resources/plutonium.png',   color: '#f472b6', isImg: true },
+  { key: 'wasserstoff', label: 'Wasserstoff', icon: '/Starbound-Alpha/resources/wasserstoff.png', color: '#38bdf8', isImg: true },
+  { key: 'energie',     label: 'Energie Verfügbar', icon: '⚡', color: '#fbbf24', isImg: false },
+  { key: 'credits',     label: 'Credits',     icon: '¢',  color: '#fde68a', isImg: false },
 ]
 
 // Volle Zahl, keine Abkürzung, deutsche Formatierung (1.000)
@@ -269,29 +269,43 @@ function SidebarResources({ planet: initialPlanet }) {
     <div className="px-2 py-3 border-t border-cyan-500/10">
       <p className="text-xs text-slate-600 uppercase tracking-widest font-mono px-1 mb-2">Ressourcen</p>
       <div className="space-y-0.5">
-        {RESOURCES.map(({ key, label, icon, color }) => {
+        {RESOURCES.map(({ key, label, icon, color, isImg }) => {
           const val  = planet[key] ?? 0
           const prod = planet[`prod_${key}`] ?? 0
           const prodStr = fmtProd(prod)
           const isEnergie = key === 'energie'
+          const isCredits = key === 'credits'
+
+          // Energie: saldo = produktion - verbrauch
+          const energieFrei = energieProduktion - energieVerbrauch
+          const energieMangel = energieFrei <= 0
 
           return (
             <div key={key} className="flex items-center gap-1.5 px-1.5 py-1 rounded"
               style={{ background: 'rgba(7,20,40,0.4)' }}>
-              <span style={{ color, fontSize: 12, width: 15, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              {/* Icon */}
+              {isImg
+                ? <img src={icon} alt={label} style={{ width: 15, height: 15, objectFit: 'contain', flexShrink: 0 }} />
+                : <span style={{ color, fontSize: 12, width: 15, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              }
               <span className="font-mono text-slate-300 text-sm flex-1 truncate">{label}</span>
-              <span className="font-mono text-slate-100 text-sm tabular-nums font-semibold">{fmtFull(val)}</span>
               {isEnergie ? (
-                <span className="font-mono tabular-nums flex-shrink-0"
-                  style={{ color: energieMangel ? '#f87171' : '#4ade80', fontSize: 11 }}>
-                  {energieMangel ? '⚠' : `/${fmtFull(energieVerbrauch)}`}
+                // Energie: "frei / total" — rot wenn mangel
+                <span className="font-mono tabular-nums text-sm font-semibold flex-shrink-0"
+                  style={{ color: energieMangel ? '#f87171' : '#4ade80' }}>
+                  {energieFrei} / {energieProduktion}
                 </span>
-              ) : prodStr ? (
-                <span className="font-mono tabular-nums flex-shrink-0"
-                  style={{ color: prod >= 0 ? '#4ade80' : '#f87171', fontSize: 11 }}>
-                  {prodStr}
-                </span>
-              ) : null}
+              ) : (
+                <>
+                  <span className="font-mono text-slate-100 text-sm tabular-nums font-semibold">{fmtFull(val)}</span>
+                  {(prodStr || isCredits) && (
+                    <span className="font-mono tabular-nums flex-shrink-0"
+                      style={{ color: prod >= 0 ? '#4ade80' : '#f87171', fontSize: 11 }}>
+                      {prodStr || '—'}
+                    </span>
+                  )}
+                </>
+              )}
             </div>
           )
         })}
