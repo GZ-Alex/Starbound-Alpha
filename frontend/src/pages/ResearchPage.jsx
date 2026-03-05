@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { FlaskConical, Search, CheckCircle, Clock, Loader2, X, Plus, Minus, Telescope } from 'lucide-react'
+import { FlaskConical, Search, CheckCircle, Clock, Loader2, X, Plus, Minus, ScanSearch } from 'lucide-react'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -231,7 +231,7 @@ function SearchPopup({ tech, planet, onConfirm, onClose }) {
           style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div>
             <p className="font-semibold text-slate-200 text-sm flex items-center gap-2">
-              <Telescope size={14} className="text-sky-400" />
+              <ScanSearch size={14} className="text-sky-400" />
               Neue Technologien suchen
             </p>
             <p className="text-xs text-slate-600 font-mono">in: {tech.name}</p>
