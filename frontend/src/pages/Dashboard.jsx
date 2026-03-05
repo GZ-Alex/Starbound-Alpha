@@ -67,11 +67,11 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
   const total    = raceVal + bonusVal
 
   const isNegGood  = field.bonusPerPt < 0
-  const totalColor = total === 0 ? '#64748b'
+  const totalColor = total === 0 ? '#94a3b8'
     : isNegGood
       ? (total < 0 ? '#34d399' : '#f87171')
       : (total > 0 ? '#34d399' : '#f87171')
-  const raceColor  = raceVal === 0 ? '#475569'
+  const raceColor  = raceVal === 0 ? '#94a3b8'
     : isNegGood
       ? (raceVal < 0 ? '#34d399' : '#f87171')
       : (raceVal > 0 ? '#34d399' : '#f87171')
@@ -108,7 +108,7 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
           <Minus size={9} />
         </button>
         <span className="w-5 text-center text-sm font-mono font-bold"
-          style={{ color: spent > 0 ? '#f1f5f9' : '#475569' }}>
+          style={{ color: spent > 0 ? '#f1f5f9' : '#94a3b8' }}>
           {spent}
         </span>
         <button onClick={() => canAdd && onAdd(field.skill)} disabled={!canAdd}
@@ -123,7 +123,7 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
       </div>
 
       {/* Bonus / EP — immer sichtbar */}
-      <span className="text-sm font-mono text-right" style={{ color: '#64748b' }}>
+      <span className="text-sm font-mono text-right" style={{ color: '#94a3b8' }}>
         {bonusLabel}
       </span>
 
@@ -256,19 +256,19 @@ export default function Dashboard() {
             <span>
               <span className="text-slate-200">{race?.name ?? player?.race_id ?? '—'}</span>
               {player?.profession && (
-                <span className="ml-2 text-xs font-mono text-slate-500">
+                <span className="ml-2 text-xs font-mono text-slate-300">
                   · {profLabel[player.profession] ?? player.profession}
                 </span>
               )}
             </span>
             {/* EP-Badge */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-mono text-slate-600">EP</span>
+              <span className="text-xs font-mono text-slate-400">EP</span>
               <span className="text-sm font-mono font-bold px-2 py-0.5 rounded"
                 style={{
                   background: freePoints > 0 ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.04)',
                   border: `1px solid ${freePoints > 0 ? 'rgba(34,211,238,0.28)' : 'rgba(255,255,255,0.08)'}`,
-                  color: freePoints > 0 ? '#22d3ee' : '#475569',
+                  color: freePoints > 0 ? '#22d3ee' : '#94a3b8',
                 }}>
                 {freePoints} / {totalPoints}
               </span>
@@ -276,11 +276,11 @@ export default function Dashboard() {
           </div>
 
           {race?.description && (
-            <p className="text-xs text-slate-500 italic px-1">{race.description}</p>
+            <p className="text-xs text-slate-300 italic px-1">{race.description}</p>
           )}
 
           {/* HQ-Info */}
-          <p className="text-sm font-mono px-1" style={{ color: '#64748b' }}>
+          <p className="text-sm font-mono px-1" style={{ color: '#94a3b8' }}>
             HQ Level <span style={{ color: '#94a3b8' }}>{hqLevel}</span>
             {totalPoints < 15 && <span> · nächster EP bei Level <span style={{ color: '#22d3ee' }}>{nextPointAt}</span></span>}
             {totalPoints >= 15 && <span style={{ color: '#f59e0b' }}> · Maximale EP erreicht</span>}
@@ -311,15 +311,15 @@ export default function Dashboard() {
 
           {/* Fixwerte */}
           <div className="pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            <p className="text-xs font-mono text-slate-700 uppercase tracking-widest px-2 mb-1">
+            <p className="text-xs font-mono text-slate-400 uppercase tracking-widest px-2 mb-1">
               Fixwerte
             </p>
             {RACE_FIXED_FIELDS.map(f => {
               const val = Number(race?.[f.key] ?? 0)
               return (
                 <div key={f.key} className="flex justify-between px-2 py-1">
-                  <span className="text-sm text-slate-500">{f.label}</span>
-                  <span className="text-sm font-mono" style={{ color: val === 0 ? '#334155' : '#94a3b8' }}>
+                  <span className="text-sm text-slate-300">{f.label}</span>
+                  <span className="text-sm font-mono" style={{ color: val === 0 ? '#64748b' : '#cbd5e1' }}>
                     {fmtVal(val, f.unit)}
                   </span>
                 </div>
@@ -336,17 +336,17 @@ export default function Dashboard() {
           <div className="panel-header -mx-4 -mt-4 mb-3 px-4">Status</div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">Planet</span>
+              <span className="text-slate-300">Planet</span>
               <span className="font-mono text-cyan-400">{planet?.name ?? '—'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Koordinaten</span>
+              <span className="text-slate-300">Koordinaten</span>
               <span className="font-mono text-xs text-slate-400">
                 {planet ? `${planet.x} / ${planet.y} / ${planet.z}` : '—'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Techs erforscht</span>
+              <span className="text-slate-300">Techs erforscht</span>
               <span className="font-mono text-slate-400">{myTechRows.length}</span>
             </div>
           </div>
@@ -359,15 +359,15 @@ export default function Dashboard() {
               className="w-full text-left panel-header -mx-4 -mt-4 px-4 flex items-center justify-between"
               style={{ cursor: 'pointer' }}>
               <span className="flex items-center gap-2">
-                <FlaskConical size={12} className="text-slate-500" />
+                <FlaskConical size={12} className="text-slate-300" />
                 Technologie-Boni
-                <span className="text-xs font-mono text-slate-600">
+                <span className="text-xs font-mono text-slate-400">
                   ({Object.keys(techBonuses).length})
                 </span>
               </span>
               {showTechs
-                ? <ChevronUp size={13} className="text-slate-600" />
-                : <ChevronDown size={13} className="text-slate-600" />}
+                ? <ChevronUp size={13} className="text-slate-400" />
+                : <ChevronDown size={13} className="text-slate-400" />}
             </button>
 
             <AnimatePresence initial={false}>
@@ -380,7 +380,7 @@ export default function Dashboard() {
                   className="overflow-hidden">
                   <div className="pt-3 space-y-0.5">
                     {Object.keys(techBonuses).length === 0 ? (
-                      <p className="text-sm text-slate-600 px-1">
+                      <p className="text-sm text-slate-400 px-1">
                         Noch keine sichtbaren Technologieboni erforscht.
                       </p>
                     ) : (
@@ -409,7 +409,7 @@ export default function Dashboard() {
             </AnimatePresence>
 
             {!showTechs && (
-              <p className="text-xs text-slate-700 font-mono pt-3 px-1">
+              <p className="text-xs text-slate-400 font-mono pt-3 px-1">
                 {Object.keys(techBonuses).length === 0
                   ? 'Noch keine sichtbaren Technologieboni.'
                   : `${Object.keys(techBonuses).length} aktive Boni — zum Anzeigen klicken`}
@@ -433,7 +433,7 @@ export default function Dashboard() {
           <Zap size={14} />
           {cheatDone ? '✓ +10.000 erhalten!' : cheating ? 'Lädt...' : '+10.000 alle Ressourcen'}
         </button>
-        <p className="text-xs text-slate-600 mt-2 font-mono">Gibt 10.000 von jeder Ressource (außer Energie)</p>
+        <p className="text-xs text-slate-400 mt-2 font-mono">Gibt 10.000 von jeder Ressource (außer Energie)</p>
       </div>
 
     </div>
