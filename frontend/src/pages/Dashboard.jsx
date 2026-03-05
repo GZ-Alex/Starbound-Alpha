@@ -86,7 +86,7 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
 
   return (
     <div className="grid items-center py-2.5 px-3 rounded transition-colors hover:bg-white/[0.03]"
-      style={{ gridTemplateColumns: '200px 70px 100px 110px 80px', gap: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      style={{ gridTemplateColumns: '1fr 64px 96px 96px 72px', gap: '0 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
 
       {/* Attribut */}
       <span className="text-sm text-slate-200 leading-tight">{field.label}</span>
@@ -290,7 +290,7 @@ export default function Dashboard() {
 
           {/* Spalten-Header */}
           <div className="grid px-3 pb-2 text-xs font-mono uppercase tracking-wider"
-            style={{ gridTemplateColumns: '200px 70px 100px 110px 80px', gap: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            style={{ gridTemplateColumns: '1fr 64px 96px 96px 72px', gap: '0 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <span style={{ color: '#94a3b8' }}>Attribut</span>
             <span className="text-right" style={{ color: '#94a3b8' }}>Rasse</span>
             <span className="text-center" style={{ color: '#94a3b8' }}>EP</span>
