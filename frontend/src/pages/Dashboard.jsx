@@ -66,62 +66,67 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
   const bonusVal = field.bonusPerPt * spent
   const total    = raceVal + bonusVal
 
-  const isNegGood = field.bonusPerPt < 0  // Kosten-Reduktion ist positiv
-  const totalColor = total === 0 ? '#334155'
+  const isNegGood  = field.bonusPerPt < 0
+  const totalColor = total === 0 ? '#64748b'
     : isNegGood
       ? (total < 0 ? '#34d399' : '#f87171')
       : (total > 0 ? '#34d399' : '#f87171')
+  const raceColor  = raceVal === 0 ? '#475569'
+    : isNegGood
+      ? (raceVal < 0 ? '#34d399' : '#f87171')
+      : (raceVal > 0 ? '#34d399' : '#f87171')
 
   const canAdd    = freePoints > 0 && !saving
   const canRemove = spent > 0 && !saving
 
+  // Bonus/Punkt — immer anzeigen, unabhängig von spent
+  const bonusLabel = `${field.bonusPerPt > 0 ? '+' : ''}${field.bonusPerPt}${field.flatUnit} / EP`
+
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2 rounded-sm transition-colors hover:bg-white/[0.02]"
-      style={{ borderBottom: '1px solid rgba(255,255,255,0.025)' }}>
+    <div className="grid items-center py-2.5 px-3 rounded transition-colors hover:bg-white/[0.03]"
+      style={{ gridTemplateColumns: '1fr 56px 88px 88px 68px', gap: '0 10px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
 
-      <span className="text-sm text-slate-400 flex-1 min-w-0 truncate">{field.label}</span>
+      {/* Attribut */}
+      <span className="text-sm text-slate-200 leading-tight">{field.label}</span>
 
-      {/* Rassenbonus */}
-      <span className="text-xs font-mono w-12 text-right" style={{
-        color: raceVal === 0 ? '#1e293b' : (isNegGood ? (raceVal < 0 ? '#34d399' : '#f87171') : (raceVal > 0 ? '#34d399' : '#f87171'))
-      }}>
+      {/* Rasse */}
+      <span className="text-sm font-mono text-right" style={{ color: raceColor }}>
         {fmtVal(raceVal, field.unit)}
       </span>
 
-      {/* +/– Steuerung */}
-      <div className="flex items-center gap-1">
+      {/* EP-Steuerung */}
+      <div className="flex items-center justify-center gap-1.5">
         <button onClick={() => canRemove && onRemove(field.skill)} disabled={!canRemove}
-          className="w-5 h-5 rounded flex items-center justify-center transition-all"
+          className="w-6 h-6 rounded flex items-center justify-center transition-all"
           style={{
-            background: canRemove ? 'rgba(255,255,255,0.07)' : 'transparent',
-            border: `1px solid ${canRemove ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.03)'}`,
-            color: canRemove ? '#94a3b8' : '#1e293b',
+            background: canRemove ? 'rgba(255,255,255,0.08)' : 'transparent',
+            border: `1px solid ${canRemove ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.05)'}`,
+            color: canRemove ? '#94a3b8' : '#2d3f52',
           }}>
-          <Minus size={8} />
+          <Minus size={9} />
         </button>
-        <span className="w-4 text-center text-xs font-mono"
-          style={{ color: spent > 0 ? '#cbd5e1' : '#334155' }}>
+        <span className="w-5 text-center text-sm font-mono font-bold"
+          style={{ color: spent > 0 ? '#f1f5f9' : '#475569' }}>
           {spent}
         </span>
         <button onClick={() => canAdd && onAdd(field.skill)} disabled={!canAdd}
-          className="w-5 h-5 rounded flex items-center justify-center transition-all"
+          className="w-6 h-6 rounded flex items-center justify-center transition-all"
           style={{
-            background: canAdd ? 'rgba(34,211,238,0.09)' : 'transparent',
-            border: `1px solid ${canAdd ? 'rgba(34,211,238,0.22)' : 'rgba(255,255,255,0.03)'}`,
-            color: canAdd ? '#22d3ee' : '#1e293b',
+            background: canAdd ? 'rgba(34,211,238,0.1)' : 'transparent',
+            border: `1px solid ${canAdd ? 'rgba(34,211,238,0.28)' : 'rgba(255,255,255,0.05)'}`,
+            color: canAdd ? '#22d3ee' : '#2d3f52',
           }}>
-          <Plus size={8} />
+          <Plus size={9} />
         </button>
       </div>
 
-      {/* Skill-Bonus */}
-      <span className="text-xs font-mono w-14 text-right"
-        style={{ color: spent > 0 ? '#38bdf8' : '#1e293b' }}>
-        {spent > 0 ? fmtBonus(field.bonusPerPt, spent, field.flatUnit) : '—'}
+      {/* Bonus / EP — immer sichtbar */}
+      <span className="text-sm font-mono text-right" style={{ color: '#64748b' }}>
+        {bonusLabel}
       </span>
 
       {/* Gesamt */}
-      <span className="text-sm font-mono font-semibold w-14 text-right" style={{ color: totalColor }}>
+      <span className="text-base font-mono font-bold text-right" style={{ color: totalColor }}>
         {fmtVal(total, field.unit)}
       </span>
     </div>
@@ -282,13 +287,13 @@ export default function Dashboard() {
           </p>
 
           {/* Spalten-Header */}
-          <div className="flex items-center gap-2 px-2 pb-1 text-xs font-mono text-slate-600"
-            style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <span className="flex-1">Attribut</span>
-            <span className="w-12 text-right">Rasse</span>
-            <span className="w-16 text-center">EP</span>
-            <span className="w-14 text-right">Bonus</span>
-            <span className="w-14 text-right">Gesamt</span>
+          <div className="grid px-3 pb-2 text-xs font-mono uppercase tracking-wider"
+            style={{ gridTemplateColumns: '1fr 56px 88px 88px 68px', gap: '0 10px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <span style={{ color: '#94a3b8' }}>Attribut</span>
+            <span className="text-right" style={{ color: '#94a3b8' }}>Rasse</span>
+            <span className="text-center" style={{ color: '#94a3b8' }}>EP</span>
+            <span className="text-right" style={{ color: '#94a3b8' }}>Bonus / EP</span>
+            <span className="text-right" style={{ color: '#94a3b8' }}>Gesamt</span>
           </div>
 
           {RACE_BONUS_FIELDS.map(field => (
