@@ -6,19 +6,19 @@ import { supabase } from '@/lib/supabase'
 import { Plus } from 'lucide-react'
 
 const MINEABLE = [
-  { key: 'titan',       label: 'Titan',       color: '#94a3b8', icon: '⬡' },
-  { key: 'silizium',    label: 'Silizium',    color: '#a78bfa', icon: '◇' },
-  { key: 'helium',      label: 'Helium',      color: '#34d399', icon: '◎' },
-  { key: 'nahrung',     label: 'Nahrung',     color: '#86efac', icon: '◈' },
-  { key: 'wasser',      label: 'Wasser',      color: '#67e8f9', icon: '〇' },
-  { key: 'bauxit',      label: 'Bauxit',      color: '#fb923c', icon: '◆' },
-  { key: 'aluminium',   label: 'Aluminium',   color: '#c0c0c0', icon: '▽' },
-  { key: 'uran',        label: 'Uran',        color: '#4ade80', icon: '☢' },
-  { key: 'plutonium',   label: 'Plutonium',   color: '#f472b6', icon: '⚛' },
-  { key: 'wasserstoff', label: 'Wasserstoff', color: '#38bdf8', icon: '↑' },
+  { key: 'titan',       label: 'Titan',       color: '#94a3b8', icon: '/Starbound-Alpha/resources/titan.png' },
+  { key: 'silizium',    label: 'Silizium',    color: '#a78bfa', icon: '/Starbound-Alpha/resources/silizium.png' },
+  { key: 'helium',      label: 'Helium',      color: '#34d399', icon: '/Starbound-Alpha/resources/helium.png' },
+  { key: 'nahrung',     label: 'Nahrung',     color: '#86efac', icon: '/Starbound-Alpha/resources/nahrung.png' },
+  { key: 'wasser',      label: 'Wasser',      color: '#67e8f9', icon: '/Starbound-Alpha/resources/wasser.png' },
+  { key: 'bauxit',      label: 'Bauxit',      color: '#fb923c', icon: '/Starbound-Alpha/resources/bauxit.png' },
+  { key: 'aluminium',   label: 'Aluminium',   color: '#c0c0c0', icon: '/Starbound-Alpha/resources/aluminium.png' },
+  { key: 'uran',        label: 'Uran',        color: '#4ade80', icon: '/Starbound-Alpha/resources/uran.png' },
+  { key: 'plutonium',   label: 'Plutonium',   color: '#f472b6', icon: '/Starbound-Alpha/resources/plutonium.png' },
+  { key: 'wasserstoff', label: 'Wasserstoff', color: '#38bdf8', icon: '/Starbound-Alpha/resources/wasserstoff.png' },
 ]
 
-const PROD_PER_MINE_PER_HOUR = 120
+const PROD_PER_MINE_PER_HOUR = 50
 
 const MINE_COSTS = { titan: 200, silizium: 150, aluminium: 100, credits: 500 }
 
@@ -27,14 +27,117 @@ function fmt(n) {
 }
 
 function MineCard({ res, mines, freeSlots, onBuild, planet, saving }) {
-  const [amount, setAmount] = useState(1)
+  const [amount, setAmount] = useState('')
+  const parsedAmount = parseInt(amount) || 0
   const prod = mines * PROD_PER_MINE_PER_HOUR
-  const canBuild = freeSlots >= amount && amount > 0
+  const canBuild = freeSlots >= parsedAmount && parsedAmount > 0
 
-  // Menge auf verfügbare Slots begrenzen wenn sich freeSlots ändert
-  useEffect(() => {
-    if (amount > freeSlots) setAmount(Math.max(1, freeSlots))
-  }, [freeSlots])
+  return (
+    <motion.div layout className="rounded-xl overflow-hidden"
+      style={{
+        border: `1px solid ${mines > 0 ? res.color + '30' : 'rgba(148,163,184,0.1)'}`,
+        background: mines > 0 ? `${res.color}0a` : 'rgba(4,13,26,0.6)',
+      }}>
+
+      <div className="flex gap-4 p-4">
+        {/* Icon */}
+        <div className="flex-shrink-0 flex items-center justify-center rounded-lg overflow-hidden"
+          style={{ width: 54, height: 54, background: `${res.color}18`, border: `1px solid ${res.color}28` }}>
+          <img src={res.icon} alt={res.label} className="w-full h-full object-contain" />
+        </div>
+
+        {/* Mitte: Name + Stats */}
+        <div className="flex-1 min-w-0">
+          <p className="font-display font-bold text-base mb-2" style={{ color: res.color }}>
+            {res.label}
+          </p>
+          <div className="space-y-0.5">
+            <p className="text-sm font-mono text-slate-300">
+              <span className="text-slate-500">Minen</span>
+              {'  '}
+              <span className="font-bold">{mines}</span>
+            </p>
+            <p className="text-sm font-mono">
+              <span className="text-slate-500">Produktion</span>
+              {'  '}
+              <span style={{ color: prod > 0 ? '#4ade80' : '#475569' }}>
+                {prod > 0 ? `+${fmt(prod)}/h` : '—'}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* Rechts: Kosten + Bauen */}
+        <div className="flex-shrink-0 flex flex-col items-end justify-between gap-2">
+          {/* Kosten — Name links, Zahl rechts, untereinander */}
+          <div>
+            <p className="text-xs text-slate-600 font-mono uppercase tracking-wide mb-1">Kosten/Mine</p>
+            <table className="text-xs font-mono">
+              <tbody>
+                {Object.entries(MINE_COSTS).map(([k, v]) => (
+                  <tr key={k}>
+                    <td className="text-slate-400 pr-3 capitalize">{k}</td>
+                    <td className="text-slate-200 text-right tabular-nums">{fmt(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Anzahl + Bauen */}
+          {freeSlots > 0 ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={freeSlots}
+                value={amount}
+                placeholder="Anz."
+                onChange={e => {
+                  const v = e.target.value
+                  if (v === '') { setAmount(''); return }
+                  setAmount(String(Math.max(1, Math.min(freeSlots, parseInt(v) || 1))))
+                }}
+                className="w-16 text-center rounded px-2 py-1 text-sm font-mono font-bold"
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${res.color}40`,
+                  color: '#e2e8f0',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={() => { onBuild(parsedAmount); setAmount('') }}
+                disabled={!canBuild || saving}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-mono font-semibold transition-all"
+                style={{
+                  background: canBuild && !saving ? `${res.color}20` : 'rgba(255,255,255,0.03)',
+                  border: canBuild && !saving ? `1px solid ${res.color}50` : '1px solid rgba(255,255,255,0.07)',
+                  color: canBuild && !saving ? res.color : '#334155',
+                  cursor: !canBuild || saving ? 'not-allowed' : 'pointer',
+                }}>
+                <Plus size={13} />
+                {saving ? 'Baut...' : 'Bauen'}
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs font-mono text-slate-700">Keine Slots frei</span>
+          )}
+        </div>
+      </div>
+
+      {/* Balken unten */}
+      {mines > 0 && (
+        <div className="px-4 pb-3">
+          <div className="w-full rounded-full h-1" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <div className="h-1 rounded-full"
+              style={{ width: `${Math.min((mines / 50) * 100, 100)}%`, background: res.color, opacity: 0.5 }} />
+          </div>
+        </div>
+      )}
+    </motion.div>
+  )
+}
 
   return (
     <motion.div layout className="rounded-xl overflow-hidden"
