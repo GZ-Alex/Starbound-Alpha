@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { FlaskConical, Search, CheckCircle, Clock, Loader2, X, Plus, Minus } from 'lucide-react'
+import { FlaskConical, Search, CheckCircle, Clock, Loader2, X, Plus, Minus, Telescope } from 'lucide-react'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,20 @@ function accentColor(tech) {
 }
 
 const RES_LABELS = { silizium: 'Silizium', helium: 'Helium', titan: 'Titan', credits: 'Credits' }
+
+// Flavor-Texte für Suche — je Anzahl Zyklen (1–5)
+const SEARCH_FLAVOR = {
+  1: 'Deine Forscher werfen einen kurzen Blick. Ob da wirklich etwas wartet? Eher unwahrscheinlich.',
+  2: 'Ein paar Köpfe werden zusammengesteckt. Vielleicht findet sich ja was — vielleicht auch nicht.',
+  3: 'In den Laboren herrscht verhaltene Neugier. Irgendjemand hat eine Idee — ob sie trägt, wird sich zeigen.',
+  4: 'Die Whiteboards füllen sich. Deine Forscher tippen auf etwas Handfestes — die Chancen stehen nicht schlecht.',
+  5: 'Ungewöhnliche Betriebsamkeit in den Laboren. Kaffeekonsum gestiegen. Die Forscher riechen den Durchbruch.',
+}
+
+// Suchkosten: fix, unabhängig von Tech-Level
+const SEARCH_COST = { silizium: 300, helium: 200, credits: 500 }
+// Suchzeit: 5 min pro Zyklus
+const SEARCH_CYCLE_MINUTES = 5
 
 function fmt(n) {
   if (!n) return '0'
@@ -62,7 +76,7 @@ function useCountdown(finishAt) {
   useEffect(() => {
     if (!finishAt) { setT(''); return }
     const tick = () => {
-      const d = new Date(finishAt) - new Date()
+      const d = new Date(finishAt).getTime() - Date.now()
       if (d <= 0) { setT('Fertig!'); return }
       setT(`${Math.floor(d / 60000)}:${String(Math.floor((d % 60000) / 1000)).padStart(2, '0')}`)
     }
@@ -73,7 +87,7 @@ function useCountdown(finishAt) {
   return t
 }
 
-// ─── Cycle Popup ──────────────────────────────────────────────────────────────
+// ─── Forschungs-Popup ─────────────────────────────────────────────────────────
 
 function CyclePopup({ tech, currentLevel, planet, researcherBonus, onConfirm, onClose }) {
   const [cycles, setCycles] = useState(1)
@@ -97,7 +111,7 @@ function CyclePopup({ tech, currentLevel, planet, researcherBonus, onConfirm, on
           style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div>
             <p className="font-semibold text-slate-200 text-sm">{tech.name}</p>
-            <p className="text-xs text-slate-600 font-mono">→ Stufe {currentLevel + 1} erforschen</p>
+            <p className="text-xs text-slate-600 font-mono">→ Level {currentLevel + 1} erforschen</p>
           </div>
           <button onClick={onClose} className="text-slate-700 hover:text-slate-400 transition-colors">
             <X size={15} />
@@ -192,6 +206,113 @@ function CyclePopup({ tech, currentLevel, planet, researcherBonus, onConfirm, on
   )
 }
 
+// ─── Suchen-Popup ─────────────────────────────────────────────────────────────
+
+function SearchPopup({ tech, planet, onConfirm, onClose }) {
+  const [cycles, setCycles] = useState(1)
+
+  // Chance: 1→20%, 2→40%, 3→60%, 4→80%, 5→100%
+  // Chance wird dem Spieler NICHT angezeigt
+  const totalCost = Object.fromEntries(
+    Object.entries(SEARCH_COST).map(([k, v]) => [k, v * cycles])
+  )
+  const canAfford = Object.entries(totalCost).every(([r, a]) => (planet?.[r] ?? 0) >= a)
+  const flavorText = SEARCH_FLAVOR[Math.min(5, cycles)] ?? SEARCH_FLAVOR[5]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.82)' }}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.15 }}
+        className="w-full max-w-sm rounded-xl overflow-hidden"
+        style={{ background: '#040d1a', border: '1px solid rgba(56,189,248,0.2)' }}>
+
+        <div className="flex items-center justify-between px-4 py-3"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div>
+            <p className="font-semibold text-slate-200 text-sm flex items-center gap-2">
+              <Telescope size={14} className="text-sky-400" />
+              Neue Technologien suchen
+            </p>
+            <p className="text-xs text-slate-600 font-mono">in: {tech.name}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-700 hover:text-slate-400 transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Zyklen */}
+          <div>
+            <p className="text-xs text-slate-600 font-mono uppercase tracking-widest mb-2">Suchtiefe</p>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4, 5].map(n => (
+                <button key={n} onClick={() => setCycles(n)}
+                  className="flex-1 py-2 rounded text-sm font-mono font-bold transition-all"
+                  style={{
+                    background: cycles === n ? 'rgba(56,189,248,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: cycles === n ? '1px solid rgba(56,189,248,0.4)' : '1px solid rgba(255,255,255,0.07)',
+                    color: cycles === n ? '#38bdf8' : '#475569',
+                  }}>{n}</button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-700 font-mono mt-1.5 text-center">
+              {fmtTime(SEARCH_CYCLE_MINUTES * cycles)}
+            </p>
+          </div>
+
+          {/* Flavor Text */}
+          <div className="px-3 py-2.5 rounded-lg text-sm text-slate-400 italic leading-relaxed"
+            style={{ background: 'rgba(56,189,248,0.04)', border: '1px solid rgba(56,189,248,0.1)' }}>
+            "{flavorText}"
+          </div>
+
+          {/* Kosten */}
+          <div>
+            <p className="text-xs text-slate-600 font-mono uppercase tracking-widest mb-1">
+              Kosten ({cycles} Zyklus{cycles > 1 ? 'en' : ''})
+            </p>
+            <div className="space-y-0.5">
+              {Object.entries(totalCost).map(([r, a]) => {
+                const have = planet?.[r] ?? 0
+                const rest = have - a
+                const ok   = rest >= 0
+                return (
+                  <div key={r} className="flex items-center gap-3 text-xs font-mono px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(4,13,26,0.8)' }}>
+                    <span className="text-slate-500 w-16">{RES_LABELS[r] ?? r}</span>
+                    <span className="text-slate-300">{fmt(a)}</span>
+                    <span className={`font-bold ${ok ? 'text-slate-700' : 'text-red-400'}`}>
+                      {ok ? `→ ${fmt(rest)}` : `✗ ${fmt(Math.abs(rest))} fehlen`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={onClose}
+              className="flex-1 py-2 rounded text-sm font-mono text-slate-600"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              Abbrechen
+            </button>
+            <button onClick={() => onConfirm(cycles)} disabled={!canAfford}
+              className={`flex-1 py-2 rounded text-sm font-mono font-semibold transition-all ${!canAfford ? 'opacity-40' : ''}`}
+              style={{
+                background: canAfford ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.03)',
+                border: canAfford ? '1px solid rgba(56,189,248,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                color: canAfford ? '#38bdf8' : '#334155',
+              }}>
+              {canAfford ? 'Suche starten' : '✗ Ressourcen fehlen'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 // ─── Tech Card ────────────────────────────────────────────────────────────────
 
 function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
@@ -199,10 +320,11 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
   parentTech, collapseSignal }) {
 
   const { player, addNotification } = useGameStore()
-  const [open,      setOpen]      = useState(true)
-  const [showPopup, setShowPopup] = useState(false)
-  const [searching, setSearching] = useState(false)
-  const [loading,   setLoading]   = useState(false)
+  const [open,          setOpen]          = useState(true)
+  const [showPopup,     setShowPopup]     = useState(false)
+  const [showSearch,    setShowSearch]    = useState(false)
+  const [searching,     setSearching]     = useState(false)
+  const [loading,       setLoading]       = useState(false)
   const prevSignal = useRef(collapseSignal)
 
   useEffect(() => {
@@ -225,13 +347,10 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
   const branchBusy  = branchQueue.length >= 1 && !myQueue
   const countdown   = useCountdown(myQueue?.finish_at)
 
-  // Children are only visible if they have been researched OR explicitly discovered
-  // Nothing is visible by default — discovery/research is required for all children
   const children = allTechs.filter(t =>
     t.parent_tech === tech.id &&
     (myDiscoveries[t.id] || (myTechMap[t.id]?.level ?? 0) > 0)
   )
-  // Children that can be found via "Suchen" — parent must be researched to discover_at_level
   const searchableHidden = allTechs.filter(t =>
     t.parent_tech === tech.id &&
     !myDiscoveries[t.id] &&
@@ -260,17 +379,34 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
         current_chance: Math.min(95, tech.base_success_chance ?? 80),
         finish_at: finishAt,
       })
-      addNotification(`🔬 ${tech.name} Lv${currentLevel + 1} gestartet (${cycles} Zyklen)`, 'success')
+      addNotification(`🔬 ${tech.name} Level ${currentLevel + 1} gestartet (${cycles} Zyklen)`, 'success')
       onRefresh()
     } catch (e) { addNotification('Fehler: ' + e.message, 'error') }
     finally { setLoading(false) }
   }
 
-  const handleSearch = async () => {
-    if (searching) return
+  const handleSearchConfirm = async (cycles) => {
+    setShowSearch(false)
     setSearching(true)
     try {
-      if (searchableHidden.length > 0 && Math.random() * 100 <= Math.min(60, 30 + researcherBonus)) {
+      // Kosten abziehen
+      const upd = {}
+      for (const [r, a] of Object.entries(SEARCH_COST)) {
+        const total = a * cycles
+        if (total > 0) upd[r] = (planet[r] || 0) - total
+      }
+      await supabase.from('planets').update(upd).eq('id', planet.id)
+
+      // Chance: 1→20%, 2→40%, 3→60%, 4→80%, 5→100%
+      const chance = cycles * 20
+      const roll   = Math.random() * 100
+
+      // Warte Suchzeit (simuliert — in Realität würde ein Tick das machen,
+      // aber wir machen es clientseitig mit setTimeout)
+      await new Promise(r => setTimeout(r, SEARCH_CYCLE_MINUTES * cycles * 60000 * 0.001)) // kurz simuliert
+      // Eigentlich sofortiger Würfelwurf (wie Forschung clientseitig)
+
+      if (roll <= chance && searchableHidden.length > 0) {
         const pick = searchableHidden[Math.floor(Math.random() * searchableHidden.length)]
         await supabase.from('player_discoveries').upsert({ player_id: player.id, tech_id: pick.id })
         addNotification(`🔭 Neue Technologie entdeckt: ${pick.name}!`, 'success')
@@ -288,8 +424,7 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
     : 'rgba(4,13,26,0.55)'
 
   return (
-    <div style={{ display: 'table' /* shrink to content width */ }}>
-      {/* Card — min-width so it's readable, but not stretched */}
+    <div style={{ display: 'table' }}>
       <div className="rounded-lg overflow-hidden"
         style={{
           border: `1px solid ${borderColor}`,
@@ -315,9 +450,10 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                 {tech.name}
               </span>
 
+              {/* GEÄNDERT: "Level X" statt "Stufe X / 99" */}
               {currentLevel > 0 && (
                 <span className="text-xs font-mono text-slate-500">
-                  Stufe {currentLevel}{tech.max_level ? `/${tech.max_level}` : ''}
+                  Level {currentLevel}
                 </span>
               )}
               {!currentLevel && (
@@ -349,7 +485,7 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
 
             {parentTech && tech.discover_at_level && (
               <p className="text-xs text-slate-700 font-mono mt-0.5">
-                Entdeckt in <span className="text-slate-600">{parentTech.name}</span> Stufe {tech.discover_at_level}
+                Entdeckt in <span className="text-slate-600">{parentTech.name}</span> Level {tech.discover_at_level}
               </p>
             )}
           </div>
@@ -365,10 +501,8 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
               <div className="px-3 pb-3 space-y-2.5"
                 style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
 
-                {/* Flavor */}
                 <p className="text-sm text-slate-400 leading-relaxed pt-2">{tech.description}</p>
 
-                {/* Unlocked modules — amber to stand out */}
                 {revealed && (tech.unlocks_part || tech.unlocks_chassis) && (
                   <div className="space-y-0.5">
                     <p className="text-xs text-slate-600 font-mono uppercase tracking-widest">
@@ -378,7 +512,7 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                       <p className="text-sm font-medium" style={{ color: '#fbbf24' }}>
                         🔧 {tech.unlocks_part}
                         <span className="text-xs font-normal font-mono ml-2" style={{ color: '#92400e' }}>
-                          {tech.name} Stufe {tech.reveal_level ?? 5}
+                          {tech.name} Level {tech.reveal_level ?? 5}
                         </span>
                       </p>
                     )}
@@ -386,7 +520,7 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                       <p className="text-sm font-medium" style={{ color: '#fbbf24' }}>
                         🚀 {tech.unlocks_chassis}
                         <span className="text-xs font-normal font-mono ml-2" style={{ color: '#92400e' }}>
-                          {tech.name} Stufe {tech.reveal_level ?? 5}
+                          {tech.name} Level {tech.reveal_level ?? 5}
                         </span>
                       </p>
                     )}
@@ -394,11 +528,10 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                 )}
                 {!revealed && currentLevel > 0 && (
                   <p className="text-xs text-slate-700 font-mono">
-                    🔒 Module / Effekte sichtbar ab Stufe {tech.reveal_level ?? 5}
+                    🔒 Module / Effekte sichtbar ab Level {tech.reveal_level ?? 5}
                   </p>
                 )}
 
-                {/* Effects — same color for per-level and total, larger text */}
                 {revealed && tech.effects && Object.keys(tech.effects).length > 0 && currentLevel > 0 && (
                   <div className="space-y-0.5">
                     <p className="text-xs text-slate-600 font-mono uppercase tracking-widest">Boni</p>
@@ -409,7 +542,7 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                       const fv   = n => isPct ? `${(n * 100).toFixed(2)}%` : n.toFixed(1)
                       return (
                         <p key={k} className="text-sm font-mono" style={{ color: '#34d399' }}>
-                          +{fv(per)} {k} / Stufe&nbsp;
+                          +{fv(per)} {k} / Level{' '}
                           <span style={{ color: '#34d399', opacity: 0.65 }}>
                             (gesamt: +{fv(tot)})
                           </span>
@@ -419,11 +552,11 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                   </div>
                 )}
 
-                {/* Action buttons */}
+                {/* Buttons */}
                 <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                   {isMaxed ? (
                     <span className="text-xs font-mono text-slate-700">
-                      ✓ Maximalstufe {tech.max_level} erreicht
+                      ✓ Maximallevel {tech.max_level} erreicht
                     </span>
                   ) : myQueue ? (
                     <span className="text-xs font-mono text-amber-400 flex items-center gap-1">
@@ -444,22 +577,23 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
                         ? <><Loader2 size={11} className="animate-spin" />Starte…</>
                         : branchBusy ? '⏳ Zweig belegt'
                         : <><FlaskConical size={11} />
-                          {currentLevel === 0 ? 'Erforschen' : `Stufe ${currentLevel + 1} erforschen`}
+                          {currentLevel === 0 ? 'Erforschen' : `Level ${currentLevel + 1} erforschen`}
                         </>}
                     </button>
                   )}
 
-                  {/* Suchen — always visible once researched */}
-                  {currentLevel > 0 && (
-                    <button onClick={handleSearch} disabled={searching}
+                  {/* Suchen-Button — immer wenn researched und searchableHidden vorhanden */}
+                  {currentLevel > 0 && searchableHidden.length > 0 && (
+                    <button onClick={() => setShowSearch(true)} disabled={searching}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                       style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        color: '#475569',
+                        background: 'rgba(56,189,248,0.06)',
+                        border: '1px solid rgba(56,189,248,0.2)',
+                        color: '#38bdf8',
                       }}>
-                      {searching ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
-                      Suchen
+                      {searching
+                        ? <><Loader2 size={11} className="animate-spin" />Suche…</>
+                        : <><Search size={11} />Neue Techs suchen</>}
                     </button>
                   )}
                 </div>
@@ -469,21 +603,18 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
         </AnimatePresence>
       </div>
 
-      {/* Children — indented with connector lines */}
+      {/* Children */}
       {children.length > 0 && (
         <div style={{ display: 'flex', marginTop: 4 }}>
-          {/* Vertical line column */}
           <div style={{ width: 20, flexShrink: 0, position: 'relative' }}>
             <div style={{
               position: 'absolute', left: 9, top: 0, bottom: 12,
               width: 1, background: 'rgba(148,163,184,0.12)',
             }} />
           </div>
-          {/* Children stack */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {children.map((child, idx) => (
+            {children.map(child => (
               <div key={child.id} style={{ display: 'flex', alignItems: 'flex-start' }}>
-                {/* Horizontal connector */}
                 <div style={{
                   width: 14, flexShrink: 0, height: 20, marginTop: 12,
                   borderLeft: '1px solid rgba(148,163,184,0.12)',
@@ -507,13 +638,21 @@ function TechCard({ tech, depth, myTechMap, myDiscoveries, planet,
         </div>
       )}
 
-      {/* Popup */}
+      {/* Popups */}
       <AnimatePresence>
         {showPopup && (
           <CyclePopup
             tech={tech} currentLevel={currentLevel} planet={planet}
             researcherBonus={researcherBonus}
             onConfirm={handleConfirm} onClose={() => setShowPopup(false)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showSearch && (
+          <SearchPopup
+            tech={tech} planet={planet}
+            onConfirm={handleSearchConfirm} onClose={() => setShowSearch(false)}
           />
         )}
       </AnimatePresence>
@@ -559,13 +698,11 @@ function BranchPanel({ branch, allTechs, myTechMap, myDiscoveries, planet,
         </div>
 
         <button onClick={() => setCollapseSignal(s => s === 'collapse' ? null : 'collapse')}
-          title="Alle einklappen"
           className="px-2 py-1 rounded text-xs font-mono transition-all hover:bg-white/5"
           style={{ border: '1px solid rgba(255,255,255,0.07)', color: '#475569' }}>
           ▲ Alle
         </button>
         <button onClick={() => setCollapseSignal(s => s === 'expand' ? null : 'expand')}
-          title="Alle aufklappen"
           className="px-2 py-1 rounded text-xs font-mono transition-all hover:bg-white/5"
           style={{ border: '1px solid rgba(255,255,255,0.07)', color: '#475569' }}>
           ▼ Alle
@@ -685,7 +822,6 @@ export default function ResearchPage() {
     refetchTechs(); refetchDisc(); refetchQueue()
   }, [refetchTechs, refetchDisc, refetchQueue])
 
-  // Process finished queue entries
   useEffect(() => {
     if (!queueRows.length || !allTechs.length) return
     queueRows.forEach(async entry => {
@@ -719,10 +855,7 @@ export default function ResearchPage() {
     return acc
   }, {})
 
-  const branches  = [...new Set(allTechs.map(t => t.branch))].sort()
-
-  // Root techs: only non-hidden ones (hidden=false) — always visible as branch roots
-  // Children become visible only after discovery/research
+  const branches = [...new Set(allTechs.map(t => t.branch))].sort()
 
   if (labLevel < 1) return (
     <div className="max-w-2xl mx-auto">
@@ -736,7 +869,6 @@ export default function ResearchPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-xl font-display font-bold text-slate-300">Forschung</h2>
@@ -749,7 +881,6 @@ export default function ResearchPage() {
         <CheatButton allTechs={allTechs} player={player} onRefresh={handleRefresh} />
       </div>
 
-      {/* Branch tabs — one at a time */}
       <div className="flex gap-1.5 flex-wrap">
         {branches.map(b => {
           const cfg    = BRANCHES[b] ?? { label: `Zweig ${b}`, icon: '🔷' }
@@ -772,7 +903,6 @@ export default function ResearchPage() {
         })}
       </div>
 
-      {/* Active branch panel */}
       <BranchPanel
         key={activeBranch}
         branch={activeBranch}
