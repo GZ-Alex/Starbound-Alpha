@@ -1,82 +1,424 @@
 // src/pages/Dashboard.jsx
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useGameStore } from '@/store/gameStore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { motion } from 'framer-motion'
-import { Zap } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Zap, Plus, Minus, ChevronDown, ChevronUp, FlaskConical } from 'lucide-react'
+
+// ─── Konstanten ───────────────────────────────────────────────────────────────
 
 const CHEAT_RESOURCES = [
   'titan','silizium','helium','nahrung','wasser',
   'bauxit','aluminium','uran','plutonium','wasserstoff','credits'
 ]
 
+// Erhöhbare Rassen-Felder (mit zugehörigem skill_key und Bonus je Punkt)
+const RACE_BONUS_FIELDS = [
+  { key: 'mine_production_bonus',     label: 'Minenproduktion',            unit: '%',  skill: 'mine_production',    bonusPerPt: 10,  flatUnit: '%'    },
+  { key: 'extra_mines_per_hq_level',  label: 'Zusatzminen / HQ-Level',     unit: '',   skill: 'extra_mines_per_hq', bonusPerPt: 5,   flatUnit: ' Minen' },
+  { key: 'research_chance_bonus',     label: 'Forschungschance',           unit: '%',  skill: 'research_chance',    bonusPerPt: 5,   flatUnit: '%'    },
+  { key: 'research_cost_bonus',       label: 'Forschungskosten',           unit: '%',  skill: 'research_cost',      bonusPerPt: -5,  flatUnit: '%'    },
+  { key: 'researcher_cost_bonus',     label: 'Forscherausbildung',         unit: '%',  skill: 'researcher_cost',    bonusPerPt: -3,  flatUnit: '%'    },
+  { key: 'ship_attack_bonus',         label: 'Schiffsangriff',             unit: '%',  skill: 'ship_attack',        bonusPerPt: 3,   flatUnit: '%'    },
+  { key: 'ship_defense_bonus',        label: 'Schiffsverteidigung',        unit: '%',  skill: 'ship_defense',       bonusPerPt: 5,   flatUnit: '%'    },
+  { key: 'ship_hp_bonus',             label: 'Hüllenpunkte',               unit: '%',  skill: 'ship_hp',            bonusPerPt: 2,   flatUnit: '%'    },
+  { key: 'ship_cargo_bonus',          label: 'Schiffsladeraum',            unit: '%',  skill: 'ship_cargo',         bonusPerPt: 3,   flatUnit: '%'    },
+  { key: 'military_speed_bonus',      label: 'Militärgeschwindigkeit',     unit: '%',  skill: 'military_speed',     bonusPerPt: 4,   flatUnit: '%'    },
+  { key: 'civilian_speed_bonus',      label: 'Zivilgeschwindigkeit',       unit: '%',  skill: 'civilian_speed',     bonusPerPt: 4,   flatUnit: '%'    },
+  { key: 'def_defense_bonus',         label: 'Verteidigung (Türme)',       unit: '%',  skill: 'def_defense',        bonusPerPt: 5,   flatUnit: '%'    },
+  { key: 'def_attack_bonus',          label: 'Angriff (Türme)',            unit: '%',  skill: 'def_attack',         bonusPerPt: 5,   flatUnit: '%'    },
+  { key: 'shipyard_capacity_bonus',   label: 'Werftkapazität',             unit: '',   skill: 'shipyard_capacity',  bonusPerPt: 150, flatUnit: ''     },
+]
+
+// Fixwerte (nicht erhöhbar per Skillpunkt)
+const RACE_FIXED_FIELDS = [
+  { key: 'accuracy_fixed',   label: 'Zielgenauigkeit', unit: '' },
+  { key: 'maneuver_fixed',   label: 'Manöver',         unit: '' },
+  { key: 'scan_range_fixed', label: 'Scanreichweite',  unit: ' Parsec' },
+  { key: 'tax_income_fixed', label: 'Steuereinnahmen', unit: '%' },
+]
+
+function fmtVal(val, unit) {
+  const sign = val > 0 ? '+' : ''
+  if (unit === '%')       return `${sign}${val}%`
+  if (unit === ' Parsec') return `${sign}${val} Parsec`
+  return `${sign}${val}`
+}
+
+function fmtBonus(bonusPerPt, pts, flatUnit) {
+  const v = bonusPerPt * pts
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v}${flatUnit}`
+}
+
+// EP-Berechnung: Lvl 2 → 1 Punkt, dann alle 2 Level +1, max 15
+function calcAvailablePoints(hqLevel) {
+  if (!hqLevel || hqLevel < 2) return 0
+  return Math.min(15, Math.floor((hqLevel - 2) / 2) + 1)
+}
+
+// ─── SkillRow ─────────────────────────────────────────────────────────────────
+
+function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, saving }) {
+  const raceVal  = Number(race?.[field.key] ?? 0)
+  const spent    = skillPoints[field.skill] ?? 0
+  const bonusVal = field.bonusPerPt * spent
+  const total    = raceVal + bonusVal
+
+  const isNegGood = field.bonusPerPt < 0  // Kosten-Reduktion ist positiv
+  const totalColor = total === 0 ? '#334155'
+    : isNegGood
+      ? (total < 0 ? '#34d399' : '#f87171')
+      : (total > 0 ? '#34d399' : '#f87171')
+
+  const canAdd    = freePoints > 0 && !saving
+  const canRemove = spent > 0 && !saving
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded-sm transition-colors hover:bg-white/[0.02]"
+      style={{ borderBottom: '1px solid rgba(255,255,255,0.025)' }}>
+
+      <span className="text-sm text-slate-400 flex-1 min-w-0 truncate">{field.label}</span>
+
+      {/* Rassenbonus */}
+      <span className="text-xs font-mono w-12 text-right" style={{
+        color: raceVal === 0 ? '#1e293b' : (isNegGood ? (raceVal < 0 ? '#34d399' : '#f87171') : (raceVal > 0 ? '#34d399' : '#f87171'))
+      }}>
+        {fmtVal(raceVal, field.unit)}
+      </span>
+
+      {/* +/– Steuerung */}
+      <div className="flex items-center gap-1">
+        <button onClick={() => canRemove && onRemove(field.skill)} disabled={!canRemove}
+          className="w-5 h-5 rounded flex items-center justify-center transition-all"
+          style={{
+            background: canRemove ? 'rgba(255,255,255,0.07)' : 'transparent',
+            border: `1px solid ${canRemove ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.03)'}`,
+            color: canRemove ? '#94a3b8' : '#1e293b',
+          }}>
+          <Minus size={8} />
+        </button>
+        <span className="w-4 text-center text-xs font-mono"
+          style={{ color: spent > 0 ? '#cbd5e1' : '#334155' }}>
+          {spent}
+        </span>
+        <button onClick={() => canAdd && onAdd(field.skill)} disabled={!canAdd}
+          className="w-5 h-5 rounded flex items-center justify-center transition-all"
+          style={{
+            background: canAdd ? 'rgba(34,211,238,0.09)' : 'transparent',
+            border: `1px solid ${canAdd ? 'rgba(34,211,238,0.22)' : 'rgba(255,255,255,0.03)'}`,
+            color: canAdd ? '#22d3ee' : '#1e293b',
+          }}>
+          <Plus size={8} />
+        </button>
+      </div>
+
+      {/* Skill-Bonus */}
+      <span className="text-xs font-mono w-14 text-right"
+        style={{ color: spent > 0 ? '#38bdf8' : '#1e293b' }}>
+        {spent > 0 ? fmtBonus(field.bonusPerPt, spent, field.flatUnit) : '—'}
+      </span>
+
+      {/* Gesamt */}
+      <span className="text-sm font-mono font-semibold w-14 text-right" style={{ color: totalColor }}>
+        {fmtVal(total, field.unit)}
+      </span>
+    </div>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
-  const { player, planet, refreshPlanet } = useGameStore()
-  const [cheating, setCheating] = useState(false)
+  const { player, planet, buildings, refreshPlanet } = useGameStore()
+  const queryClient = useQueryClient()
+  const [cheating,  setCheating]  = useState(false)
   const [cheatDone, setCheatDone] = useState(false)
+  const [showTechs, setShowTechs] = useState(false)
+  const [saving,    setSaving]    = useState(false)
+
+  const hqLevel     = buildings?.find(b => b.building_id === 'hq')?.level ?? 0
+  const totalPoints = calcAvailablePoints(hqLevel)
+  const nextPointAt = hqLevel < 2 ? 2 : hqLevel % 2 === 0 ? hqLevel + 2 : hqLevel + 1
+
+  // Rasse
+  const { data: race } = useQuery({
+    queryKey: ['race', player?.race_id],
+    queryFn: async () => {
+      const { data } = await supabase.from('races').select('*').eq('id', player.race_id).single()
+      return data
+    },
+    enabled: !!player?.race_id,
+    staleTime: Infinity,
+  })
+
+  // Skillpunkte
+  const { data: skillRows = [] } = useQuery({
+    queryKey: ['player-skills', player?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('player_skills').select('*').eq('player_id', player.id)
+      return data ?? []
+    },
+    enabled: !!player,
+  })
+
+  // Tech-Defs + eigene Techs
+  const { data: allTechs = [] } = useQuery({
+    queryKey: ['tech-defs'],
+    queryFn: async () => {
+      const { data } = await supabase.from('tech_definitions').select('*')
+      return data ?? []
+    },
+    staleTime: 60000,
+  })
+
+  const { data: myTechRows = [] } = useQuery({
+    queryKey: ['my-techs', player?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('player_technologies').select('*').eq('player_id', player.id)
+      return data ?? []
+    },
+    enabled: !!player,
+  })
+
+  const skillPoints = useMemo(() =>
+    Object.fromEntries(skillRows.map(r => [r.skill_key, r.points_spent ?? 0])),
+    [skillRows]
+  )
+  const spentTotal = Object.values(skillPoints).reduce((a, b) => a + b, 0)
+  const freePoints = totalPoints - spentTotal
+
+  // Tech-Boni: summiere alle effects × level, nur wenn revealed
+  const techBonuses = useMemo(() => {
+    const totals = {}
+    for (const row of myTechRows) {
+      const tech = allTechs.find(t => t.id === row.tech_id)
+      if (!tech?.effects || (row.level ?? 0) <= 0) continue
+      if ((row.level ?? 0) < (tech.reveal_level ?? 5)) continue
+      for (const [k, v] of Object.entries(tech.effects)) {
+        const per = typeof v === 'number' ? v : 0
+        totals[k] = (totals[k] ?? 0) + per * row.level
+      }
+    }
+    return totals
+  }, [myTechRows, allTechs])
+
+  const updateSkill = async (skillKey, delta) => {
+    if (saving || !player) return
+    const current = skillPoints[skillKey] ?? 0
+    const next    = current + delta
+    if (next < 0 || (delta > 0 && freePoints <= 0)) return
+    setSaving(true)
+    try {
+      await supabase.from('player_skills').upsert(
+        { player_id: player.id, skill_key: skillKey, points_spent: next },
+        { onConflict: 'player_id,skill_key' }
+      )
+      queryClient.invalidateQueries(['player-skills', player.id])
+    } finally { setSaving(false) }
+  }
 
   const handleCheat = async () => {
     if (!planet || cheating) return
     setCheating(true)
     try {
-      const updates = {}
-      for (const res of CHEAT_RESOURCES) {
-        updates[res] = (planet[res] ?? 0) + 10000
-      }
-      await supabase.from('planets').update(updates).eq('id', planet.id)
+      const upd = {}
+      for (const r of CHEAT_RESOURCES) upd[r] = (planet[r] ?? 0) + 10000
+      await supabase.from('planets').update(upd).eq('id', planet.id)
       await refreshPlanet()
       setCheatDone(true)
       setTimeout(() => setCheatDone(false), 3000)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setCheating(false)
-    }
+    } catch (e) { console.error(e) } finally { setCheating(false) }
   }
+
+  const profLabel = { trader: 'Händler', admiral: 'Admiral', privateer: 'Freibeuter' }
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
+
       <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">
         Willkommen, Commander {player?.username}
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="panel p-4">
-          <div className="panel-header -mx-4 -mt-4 mb-3 px-4">Status</div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Planet</span>
-              <span className="font-mono text-cyan-400">{planet?.name ?? '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Koordinaten</span>
-              <span className="font-mono text-xs">{planet ? `${planet.x}/${planet.y}/${planet.z}` : '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Rasse</span>
-              <span className={player?.race_id ? 'text-cyan-400' : 'text-amber-500/70'}>
-                {player?.race_id ?? 'Nicht gewählt'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Beruf</span>
-              <span className={player?.profession ? 'text-cyan-400' : 'text-amber-500/70'}>
-                {player?.profession ?? 'Nicht gewählt'}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+
+        {/* ── Linke Spalte: Rasse + Skills ── */}
+        <div className="panel p-4 space-y-3">
+
+          {/* Panel-Header */}
+          <div className="panel-header -mx-4 -mt-4 px-4 flex items-center justify-between">
+            <span>
+              <span className="text-slate-200">{race?.name ?? player?.race_id ?? '—'}</span>
+              {player?.profession && (
+                <span className="ml-2 text-xs font-mono text-slate-500">
+                  · {profLabel[player.profession] ?? player.profession}
+                </span>
+              )}
+            </span>
+            {/* EP-Badge */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-mono text-slate-600">EP</span>
+              <span className="text-sm font-mono font-bold px-2 py-0.5 rounded"
+                style={{
+                  background: freePoints > 0 ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${freePoints > 0 ? 'rgba(34,211,238,0.28)' : 'rgba(255,255,255,0.08)'}`,
+                  color: freePoints > 0 ? '#22d3ee' : '#475569',
+                }}>
+                {freePoints} / {totalPoints}
               </span>
             </div>
           </div>
+
+          {race?.description && (
+            <p className="text-xs text-slate-500 italic px-1">{race.description}</p>
+          )}
+
+          {/* HQ-Info */}
+          <p className="text-xs font-mono text-slate-700 px-1">
+            HQ Level {hqLevel}
+            {totalPoints < 15 && ` · nächster EP bei Level ${nextPointAt}`}
+            {totalPoints >= 15 && ' · Maximale EP erreicht'}
+          </p>
+
+          {/* Spalten-Header */}
+          <div className="flex items-center gap-2 px-2 pb-1 text-xs font-mono text-slate-600"
+            style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span className="flex-1">Attribut</span>
+            <span className="w-12 text-right">Rasse</span>
+            <span className="w-16 text-center">EP</span>
+            <span className="w-14 text-right">Bonus</span>
+            <span className="w-14 text-right">Gesamt</span>
+          </div>
+
+          {RACE_BONUS_FIELDS.map(field => (
+            <SkillRow
+              key={field.skill}
+              field={field}
+              race={race}
+              skillPoints={skillPoints}
+              freePoints={freePoints}
+              onAdd={k => updateSkill(k, 1)}
+              onRemove={k => updateSkill(k, -1)}
+              saving={saving}
+            />
+          ))}
+
+          {/* Fixwerte */}
+          <div className="pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <p className="text-xs font-mono text-slate-700 uppercase tracking-widest px-2 mb-1">
+              Fixwerte
+            </p>
+            {RACE_FIXED_FIELDS.map(f => {
+              const val = Number(race?.[f.key] ?? 0)
+              return (
+                <div key={f.key} className="flex justify-between px-2 py-1">
+                  <span className="text-sm text-slate-500">{f.label}</span>
+                  <span className="text-sm font-mono" style={{ color: val === 0 ? '#334155' : '#94a3b8' }}>
+                    {fmtVal(val, f.unit)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
-        <div className="panel p-4 md:col-span-2">
-          <div className="panel-header -mx-4 -mt-4 mb-3 px-4">Neuigkeiten</div>
-          <p className="text-slate-500 text-sm">Noch keine Ereignisse.</p>
+
+        {/* ── Rechte Spalte ── */}
+        <div className="space-y-4">
+
+          {/* Status */}
+          <div className="panel p-4">
+            <div className="panel-header -mx-4 -mt-4 mb-3 px-4">Status</div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Planet</span>
+                <span className="font-mono text-cyan-400">{planet?.name ?? '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Koordinaten</span>
+                <span className="font-mono text-xs text-slate-400">
+                  {planet ? `${planet.x} / ${planet.y} / ${planet.z}` : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Techs erforscht</span>
+                <span className="font-mono text-slate-400">{myTechRows.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Technologie-Boni */}
+          <div className="panel p-4">
+            <button
+              onClick={() => setShowTechs(v => !v)}
+              className="w-full text-left panel-header -mx-4 -mt-4 px-4 flex items-center justify-between"
+              style={{ cursor: 'pointer' }}>
+              <span className="flex items-center gap-2">
+                <FlaskConical size={12} className="text-slate-500" />
+                Technologie-Boni
+                <span className="text-xs font-mono text-slate-600">
+                  ({Object.keys(techBonuses).length})
+                </span>
+              </span>
+              {showTechs
+                ? <ChevronUp size={13} className="text-slate-600" />
+                : <ChevronDown size={13} className="text-slate-600" />}
+            </button>
+
+            <AnimatePresence initial={false}>
+              {showTechs && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="overflow-hidden">
+                  <div className="pt-3 space-y-0.5">
+                    {Object.keys(techBonuses).length === 0 ? (
+                      <p className="text-sm text-slate-600 px-1">
+                        Noch keine sichtbaren Technologieboni erforscht.
+                      </p>
+                    ) : (
+                      Object.entries(techBonuses)
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([key, val]) => {
+                          const isSmall = Math.abs(val) < 1
+                          const display = isSmall
+                            ? `${val > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`
+                            : `${val > 0 ? '+' : ''}${val % 1 === 0 ? val : val.toFixed(2)}`
+                          return (
+                            <div key={key}
+                              className="flex justify-between items-center px-2 py-1 rounded"
+                              style={{ background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.06)' }}>
+                              <span className="text-sm text-slate-400 font-mono">{key}</span>
+                              <span className="text-sm font-mono font-semibold" style={{ color: '#34d399' }}>
+                                {display}
+                              </span>
+                            </div>
+                          )
+                        })
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {!showTechs && (
+              <p className="text-xs text-slate-700 font-mono pt-3 px-1">
+                {Object.keys(techBonuses).length === 0
+                  ? 'Noch keine sichtbaren Technologieboni.'
+                  : `${Object.keys(techBonuses).length} aktive Boni — zum Anzeigen klicken`}
+              </p>
+            )}
+          </div>
+
         </div>
       </div>
 
-      {/* Cheat Button */}
-      <div className="panel p-4 border-amber-500/20">
+      {/* Dev-Tools */}
+      <div className="panel p-4" style={{ borderColor: 'rgba(251,191,36,0.18)' }}>
         <div className="panel-header -mx-4 -mt-4 mb-3 px-4 text-amber-400">⚠ Dev-Tools</div>
-        <button
-          onClick={handleCheat}
-          disabled={cheating || !planet}
+        <button onClick={handleCheat} disabled={cheating || !planet}
           className="flex items-center gap-2 px-4 py-2 rounded font-mono text-sm font-bold transition-all"
           style={{
             background: cheatDone ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.1)',
@@ -89,6 +431,7 @@ export default function Dashboard() {
         </button>
         <p className="text-xs text-slate-600 mt-2 font-mono">Gibt 10.000 von jeder Ressource (außer Energie)</p>
       </div>
+
     </div>
   )
 }
