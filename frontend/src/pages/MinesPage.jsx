@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
+
+const PROD_PER_MINE_PER_HOUR = 50
 import { supabase } from '@/lib/supabase'
 import { Plus } from 'lucide-react'
 
@@ -29,7 +31,7 @@ function fmt(n) {
 function MineCard({ res, mines, prodPerHour, freeSlots, onBuild, saving }) {
   const [amount, setAmount] = useState('')
   const parsedAmount = parseInt(amount) || 0
-  const prod = prodPerHour ?? (mines * PROD_PER_MINE_PER_HOUR)
+  const prod = prodPerHour
   const canBuild = freeSlots >= parsedAmount && parsedAmount > 0
 
   return (
@@ -140,7 +142,7 @@ function MineCard({ res, mines, prodPerHour, freeSlots, onBuild, saving }) {
 }
 
 export default function MinesPage() {
-  const { planet, buildings, addNotification, refreshPlanet } = useGameStore()
+  const { planet, buildings, addNotification, refreshPlanet, mineProductionBonus } = useGameStore()
   const [dist, setDist] = useState({})
   const [saving, setSaving] = useState(false)
 
@@ -219,7 +221,7 @@ export default function MinesPage() {
           {MINEABLE.slice(0, 5).map(res => (
             <MineCard key={res.key} res={res}
               mines={dist[res.key] ?? 0}
-              prodPerHour={planet[`prod_${res.key}`] ?? 0}
+              prodPerHour={Math.round((dist[res.key] ?? 0) * PROD_PER_MINE_PER_HOUR * mineProductionBonus)}
               freeSlots={freeSlots}
               onBuild={(n) => handleBuild(res.key, n)}
               saving={saving}
@@ -230,7 +232,7 @@ export default function MinesPage() {
           {MINEABLE.slice(5, 10).map(res => (
             <MineCard key={res.key} res={res}
               mines={dist[res.key] ?? 0}
-              prodPerHour={planet[`prod_${res.key}`] ?? 0}
+              prodPerHour={Math.round((dist[res.key] ?? 0) * PROD_PER_MINE_PER_HOUR * mineProductionBonus)}
               freeSlots={freeSlots}
               onBuild={(n) => handleBuild(res.key, n)}
               saving={saving}
@@ -240,7 +242,7 @@ export default function MinesPage() {
       </div>
 
       <div className="panel p-4 text-sm text-slate-500 font-mono">
-        ⚙ Produktion wird durch das Tick-System alle 60 Sekunden gutgeschrieben.
+        ⚙ Produktion wird alle 60 Sekunden gutgeschrieben. Angezeigter Wert berücksichtigt Rassen-, Skill- und Tech-Boni.
         Einmal gebaute Minen können nicht abgerissen werden.
       </div>
     </div>
