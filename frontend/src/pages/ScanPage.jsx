@@ -164,14 +164,14 @@ export default function ScanPage() {
             if (entry.obj_type === 'planet') return (
               <ScanEntry key={entry.obj_id} icon={Globe} iconColor="#38bdf8"
                 title={d.name ?? 'Unbenannter Planet'}
-                subtitle={`${d.username ?? '—'} · ${d.race_id ?? '—'} · ${coords(entry.x, entry.y, entry.z)}`}
+                subtitle={`${d.username ?? '—'} · ${d.race_id ?? '—'} · ${coords(entry.obj_x, entry.obj_y, entry.obj_z)}`}
                 distance={entry.distance}
                 badge={<span className="text-xs font-mono" style={{ color: '#38bdf8' }}>Spielerplanet</span>} />
             )
             if (entry.obj_type === 'station') return (
               <ScanEntry key={entry.obj_id} icon={Store} iconColor="#34d399"
                 title={d.name ?? 'Handelsstation'}
-                subtitle={`Quadrant ${d.quadrant} · ${coords(entry.x, entry.y, entry.z)}`}
+                subtitle={`Quadrant ${d.quadrant} · ${coords(entry.obj_x, entry.obj_y, entry.obj_z)}`}
                 distance={entry.distance} wip
                 badge={<span className="text-xs font-mono" style={{ color: '#34d399' }}>Handelsstation</span>} />
             )
@@ -182,7 +182,7 @@ export default function ScanPage() {
               return (
                 <ScanEntry key={entry.obj_id} icon={Gem} iconColor={meta.color}
                   title={meta.label}
-                  subtitle={`${coords(entry.x, entry.y, entry.z)} · ${Object.entries(res).map(([k, v]) => `${k}: ${fmt(v)}`).join(' · ')}`}
+                  subtitle={`${coords(entry.obj_x, entry.obj_y, entry.obj_z)} · ${Object.entries(res).map(([k, v]) => `${k}: ${fmt(v)}`).join(' · ')}`}
                   distance={entry.distance} wip
                   badge={<span className="text-xs font-mono" style={{ color: meta.color }}>~{fmt(total)}</span>} />
               )
@@ -192,7 +192,7 @@ export default function ScanPage() {
               return (
                 <ScanEntry key={entry.obj_id} icon={AlertTriangle} iconColor={meta.color}
                   title={meta.label}
-                  subtitle={`${d.ship_count ?? '?'} Schiffe · ${coords(entry.x, entry.y, entry.z)}`}
+                  subtitle={`${d.ship_count ?? '?'} Schiffe · ${coords(entry.obj_x, entry.obj_y, entry.obj_z)}`}
                   distance={entry.distance}
                   badge={<span className="text-xs font-mono px-1.5 py-0.5 rounded"
                     style={{ background: `${meta.color}15`, border: `1px solid ${meta.color}30`, color: meta.color }}>{meta.threat}</span>} />
@@ -201,7 +201,7 @@ export default function ScanPage() {
             if (entry.obj_type === 'fleet') return (
               <ScanEntry key={entry.obj_id} icon={Navigation} iconColor="#a78bfa"
                 title={d.name ?? 'Unbenannte Flotte'}
-                subtitle={`${d.username ?? '—'} · ${coords(entry.x, entry.y, entry.z)}`}
+                subtitle={`${d.username ?? '—'} · ${coords(entry.obj_x, entry.obj_y, entry.obj_z)}`}
                 distance={entry.distance}
                 badge={<span className="text-xs font-mono" style={{ color: '#a78bfa' }}>Spielerflotte</span>} />
             )
