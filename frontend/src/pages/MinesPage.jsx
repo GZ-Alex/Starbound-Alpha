@@ -157,6 +157,7 @@ export default function MinesPage() {
     if (freeSlots < amount || saving) return
     setSaving(true)
     const newDist = { ...dist, [resKey]: (dist[resKey] ?? 0) + amount }
+    console.log('[MinesPage] planet.id:', planet?.id, 'newDist:', newDist)
     const { error } = await supabase.from('planets')
       .update({ mine_distribution: newDist })
       .eq('id', planet.id)
