@@ -19,6 +19,10 @@ export const useGameStore = create((set, get) => ({
   scanResults: [],
   currentTick: 0,
   notifications: [],
+  race: null,           // Rassen-Daten inkl. mine_production_bonus
+  playerSkills: {},     // { skill_key: points_spent }
+  techEffects: {},      // { tech_id: { mine_production: 0.05, ... } }
+  mineProductionBonus: 1.0, // berechneter Multiplikator (1.0 = kein Bonus)
 
   // UI state
   tutorialStep: 0,
@@ -119,12 +123,52 @@ export const useGameStore = create((set, get) => ({
       get().loadPlanetData(planet.id)
     }
 
-    // Load techs
+    // Load techs + tech effects für mine_production
     const { data: techs } = await supabase
       .from('player_technologies')
-      .select('tech_id')
+      .select('tech_id, level')
       .eq('player_id', player.id)
     set({ technologies: techs?.map(t => t.tech_id) ?? [] })
+
+    // Tech-Effekte laden (nur mine_production relevant hier)
+    const techIds = (techs ?? []).filter(t => t.level > 0).map(t => t.tech_id)
+    let techEffectsMap = {}
+    if (techIds.length) {
+      const { data: defs } = await supabase
+        .from('tech_definitions')
+        .select('id, effects')
+        .in('id', techIds)
+      for (const def of defs ?? []) {
+        if (def.effects) techEffectsMap[def.id] = def.effects
+      }
+    }
+    const techLevelMap = {}
+    for (const t of techs ?? []) techLevelMap[t.tech_id] = t.level
+    set({ techEffects: techEffectsMap })
+
+    // Rasse laden
+    let race = null
+    if (player.race_id) {
+      const { data: raceData } = await supabase
+        .from('races')
+        .select('id, mine_production_bonus')
+        .eq('id', player.race_id)
+        .single()
+      race = raceData
+      set({ race })
+    }
+
+    // Skills laden
+    const { data: skills } = await supabase
+      .from('player_skills')
+      .select('skill_key, points_spent')
+      .eq('player_id', player.id)
+    const skillMap = {}
+    for (const s of skills ?? []) skillMap[s.skill_key] = s.points_spent
+    set({ playerSkills: skillMap })
+
+    // mineProductionBonus berechnen
+    get().recalcMineBonus(race, skillMap, techEffectsMap, techLevelMap)
 
     // Load researchers
     const { data: researchers } = await supabase
@@ -317,6 +361,37 @@ export const useGameStore = create((set, get) => ({
     const { planet } = get()
     await get().loadPlanetData(planet.id)
     return result
+  },
+
+  // Minen-Bonus live berechnen
+  recalcMineBonus: (race, skills, techEffects, techLevels) => {
+    const r = race ?? get().race
+    const sk = skills ?? get().playerSkills
+    const te = techEffects ?? get().techEffects
+    const tl = techLevels ?? (() => {
+      // techLevels aus technologies nicht verfügbar ohne level — Fallback 1
+      const map = {}
+      for (const id of get().technologies) map[id] = 1
+      return map
+    })()
+
+    let bonus = 0
+
+    // Rassenbonus (flat %)
+    if (r?.mine_production_bonus) bonus += r.mine_production_bonus / 100
+
+    // Skillpunkte: mine_production skill × 0.10 pro Punkt
+    if (sk?.mine_production) bonus += sk.mine_production * 0.10
+
+    // Tech-Boni: effects.mine_production × level
+    for (const [techId, effects] of Object.entries(te)) {
+      if (effects?.mine_production) {
+        const lvl = tl[techId] ?? 1
+        bonus += effects.mine_production * lvl
+      }
+    }
+
+    set({ mineProductionBonus: 1.0 + bonus })
   },
 
   hasTech: (techId) => {
