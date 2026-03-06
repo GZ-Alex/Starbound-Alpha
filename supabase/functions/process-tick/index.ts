@@ -102,6 +102,9 @@ Deno.serve(async (req) => {
       // ── 8. Flotten-Bewegungen ─────────────────────────────────────────────
       await processFleets(log)
 
+      // ── 9. Asteroiden Despawn / Respawn ───────────────────────────────────
+      await processAsteroidTick(log)
+
     } finally {
       await supabase.rpc('release_tick_lock')
     }
@@ -155,7 +158,7 @@ async function processPlanetTick(
     const mines = dist[res] ?? 0
     const prodPerTick = mines * PROD_PER_MINE_PER_TICK * energieFaktor * mineBonus
     const prodPerHour = Math.round(mines * 50 * energieFaktor * mineBonus)
-    if (mines > 0) updates[res] = (planet[res] ?? 0) + prodPerTick
+    if (mines > 0) updates[res] = Math.floor((planet[res] ?? 0) + prodPerTick)
     prodUpdates[`prod_${res}`] = prodPerHour
   }
 
@@ -356,4 +359,11 @@ async function processFleets(log: string[]) {
   }
 
   if (arrived > 0) log.push(`fleets_arrived=${arrived}`)
+}
+
+async function processAsteroidTick(log: string[]) {
+  const { data, error } = await supabase.rpc('asteroid_tick')
+  if (error) { log.push(`asteroid_tick_err: ${error.message}`); return }
+  if (data?.despawned > 0) log.push(`asteroids_despawned=${data.despawned}`)
+  if (data?.respawned  > 0) log.push(`asteroids_respawned=${data.respawned}`)
 }
