@@ -148,7 +148,21 @@ export const useGameStore = create((set, get) => ({
         table: 'planets',
         filter: `owner_id=eq.${player.id}`
       }, (payload) => {
-        if (payload.new) set({ planet: payload.new })
+        if (payload.new) {
+          const current = get().planet
+          // Realtime vom Tick darf mine_distribution nicht überschreiben
+          // wenn der lokale Wert neuer ist (höhere Summe = mehr Minen gebaut)
+          const incomingDist = payload.new.mine_distribution ?? {}
+          const currentDist  = current?.mine_distribution ?? {}
+          const incomingSum  = Object.values(incomingDist).reduce((a, b) => a + b, 0)
+          const currentSum   = Object.values(currentDist).reduce((a, b) => a + b, 0)
+          if (incomingSum >= currentSum) {
+            set({ planet: payload.new })
+          } else {
+            // Nur prod_* und Ressourcenwerte übernehmen, mine_distribution behalten
+            set({ planet: { ...payload.new, mine_distribution: currentDist } })
+          }
+        }
       })
       .subscribe()
 
