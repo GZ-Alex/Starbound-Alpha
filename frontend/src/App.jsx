@@ -8,6 +8,7 @@ import Landing from '@/pages/Landing'
 import Dashboard from '@/pages/Dashboard'
 import PlanetPage from '@/pages/PlanetPage'
 import ShipyardPage from '@/pages/ShipyardPage'
+import ShipsPage from './pages/ShipsPage'
 import FleetPage from '@/pages/FleetPage'
 import MinesPage from '@/pages/MinesPage'
 import ResearchPage from '@/pages/ResearchPage'
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/bunker"    element={<PlaceholderPage title="Bunker" />} />
             <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
             <Route path="/comms"     element={<PlaceholderPage title="Kommunikationsnetzwerk" />} />
+            <Route path="ships" element={<ShipsPage />} />
             <Route path="/fleet"     element={<FleetPage />} />
             <Route path="/scan"      element={<ScanPage />} />
             <Route path="/admin"     element={<AdminPage />} />
