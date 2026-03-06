@@ -159,7 +159,10 @@ function ChatWindow({ channel, dmTarget, dmName, playerId, username }) {
     load()
   }, [channel, dmTarget, playerId])
 
-  // Realtime subscription
+  // Realtime subscription — players NICHT in deps, sonst ständige Reconnects
+  const playersRef = useRef({})
+  useEffect(() => { playersRef.current = players }, [players])
+
   useEffect(() => {
     if (!playerId) return
     const ch = supabase.channel(`chat-${channel}-${dmTarget ?? 'global'}`)
@@ -178,7 +181,7 @@ function ChatWindow({ channel, dmTarget, dmName, playerId, username }) {
         }
 
         // Spielername nachladen falls unbekannt
-        if (!players[m.sender_id]) {
+        if (!playersRef.current[m.sender_id]) {
           const { data } = await supabase.from('players').select('id, username').eq('id', m.sender_id).single()
           if (data) setPlayers(prev => ({ ...prev, [data.id]: data.username }))
         }
@@ -188,7 +191,7 @@ function ChatWindow({ channel, dmTarget, dmName, playerId, username }) {
       .subscribe()
 
     return () => supabase.removeChannel(ch)
-  }, [channel, dmTarget, playerId, players])
+  }, [channel, dmTarget, playerId])
 
   // Auto-scroll
   useEffect(() => {
