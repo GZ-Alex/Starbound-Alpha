@@ -8,8 +8,6 @@ import {
   Navigation, ChevronLeft, Package, Shield, Zap,
   Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store, Globe
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n) {
