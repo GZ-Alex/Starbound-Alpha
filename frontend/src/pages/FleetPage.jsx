@@ -6,8 +6,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import {
   Navigation, ChevronLeft, Package, Shield, Zap,
-  Clock, Crosshair, AlertTriangle, Plus, X
+  Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store, Globe
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +141,142 @@ function CreateFleetModal({ onClose, onCreate }) {
         </div>
       </motion.div>
     </motion.div>
+  )
+}
+
+
+// ─── Fleet Scan Area ──────────────────────────────────────────────────────────
+
+const ASTEROID_TYPE_LABELS = {
+  metall:      { label: 'Metallasteroid',  color: '#94a3b8' },
+  silikat:     { label: 'Silikatasteroid', color: '#a78bfa' },
+  eis:         { label: 'Eisasteroid',     color: '#67e8f9' },
+  gas:         { label: 'Gasblase',        color: '#34d399' },
+  erz:         { label: 'Erzasteroid',     color: '#f472b6' },
+  reichhaltig: { label: 'Reichhaltiger Asteroid', color: '#fbbf24' },
+}
+
+const NPC_TYPE_LABELS = {
+  pirat_leicht:    { label: 'Piraten-Patrouille', color: '#f87171', threat: 'Leicht' },
+  pirat_mittel:    { label: 'Piratengruppe',       color: '#fb923c', threat: 'Mittel' },
+  piraten_verbund: { label: 'Piraten-Verbund',     color: '#ef4444', threat: 'Schwer' },
+  haendler_konvoi: { label: 'Händler-Konvoi',      color: '#34d399', threat: 'Passiv' },
+  npc_streitmacht: { label: 'NPC-Streitmacht',     color: '#8b5cf6', threat: 'Extrem' },
+}
+
+function dist3d(ax, ay, az, bx, by, bz) {
+  return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2)
+}
+
+function FleetScanArea({ fleet, ships }) {
+  // Scanreichweite = bestes Schiff in der Flotte
+  const scanRange = useMemo(() => {
+    if (!ships.length) return 0
+    return Math.max(...ships.map(s => s.ship_designs?.total_scan_range ?? 0))
+  }, [ships])
+
+  const fx = fleet.x ?? 0
+  const fy = fleet.y ?? 0
+  const fz = fleet.z ?? 0
+
+  const inRange = (x, y, z) => dist3d(fx, fy, fz, x, y, z) <= scanRange
+
+  const { data: asteroids = [] } = useQuery({
+    queryKey: ['fleet-scan-asteroids', fleet.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('asteroids').select('*').eq('is_depleted', false)
+      return data ?? []
+    },
+    enabled: scanRange > 0,
+    refetchInterval: 60000,
+  })
+
+  const { data: npcFleets = [] } = useQuery({
+    queryKey: ['fleet-scan-npc', fleet.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('npc_fleets').select('*, npc_ships(id)')
+      return data ?? []
+    },
+    enabled: scanRange > 0,
+    refetchInterval: 30000,
+  })
+
+  const { data: stations = [] } = useQuery({
+    queryKey: ['trade-stations'],
+    queryFn: async () => {
+      const { data } = await supabase.from('trade_stations').select('*')
+      return data ?? []
+    },
+    staleTime: Infinity,
+  })
+
+  const nearAsteroids = asteroids.filter(a => inRange(a.x, a.y, a.z))
+  const nearNPC       = npcFleets.filter(f => inRange(f.x, f.y, f.z))
+  const nearStations  = stations.filter(s => inRange(s.x, s.y, s.z))
+  const total = nearAsteroids.length + nearNPC.length + nearStations.length
+
+  if (scanRange === 0) return (
+    <div className="panel p-4">
+      <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2">Scanbereich</p>
+      <p className="text-sm font-mono text-slate-700">Kein Scanner in dieser Flotte.</p>
+    </div>
+  )
+
+  return (
+    <div className="panel p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-mono text-slate-600 uppercase tracking-widest">
+          Scanbereich · {scanRange} pc
+        </p>
+        <span className="text-xs font-mono text-slate-600">{total} Objekte</span>
+      </div>
+
+      {total === 0 ? (
+        <p className="text-sm font-mono text-slate-700">Keine Objekte in Scanreichweite.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {nearNPC.map(f => {
+            const meta = NPC_TYPE_LABELS[f.npc_type] ?? { label: f.npc_type, color: '#f87171', threat: '?' }
+            return (
+              <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
+                <span className="text-xs font-mono text-slate-300 flex-1 truncate">{f.name}</span>
+                <span className="text-xs font-mono" style={{ color: meta.color }}>{meta.threat}</span>
+                <span className="text-xs font-mono text-slate-600">
+                  {dist3d(fx, fy, fz, f.x, f.y, f.z).toFixed(1)} pc
+                </span>
+              </div>
+            )
+          })}
+          {nearStations.map(s => (
+            <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <Store size={11} style={{ color: '#34d399', flexShrink: 0 }} />
+              <span className="text-xs font-mono text-slate-300 flex-1 truncate">{s.name}</span>
+              <span className="text-xs font-mono text-slate-600">WIP</span>
+              <span className="text-xs font-mono text-slate-600">
+                {dist3d(fx, fy, fz, s.x, s.y, s.z).toFixed(1)} pc
+              </span>
+            </div>
+          ))}
+          {nearAsteroids.map(a => {
+            const meta = ASTEROID_TYPE_LABELS[a.asteroid_type] ?? { label: a.asteroid_type, color: '#94a3b8' }
+            return (
+              <div key={a.id} className="flex items-center gap-2 px-3 py-2 rounded"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <Gem size={11} style={{ color: meta.color, flexShrink: 0 }} />
+                <span className="text-xs font-mono text-slate-300 flex-1 truncate">{meta.label}</span>
+                <span className="text-xs font-mono text-slate-600">WIP</span>
+                <span className="text-xs font-mono text-slate-600">
+                  {dist3d(fx, fy, fz, a.x, a.y, a.z).toFixed(1)} pc
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -310,6 +447,9 @@ function FleetDetail({ fleet, ships, chassisDefs, onBack }) {
           ⚙ Ladung aufnehmen / abwerfen — WIP
         </p>
       </div>
+
+      {/* Scan-Bereich */}
+      <FleetScanArea fleet={fleet} ships={ships} />
     </div>
   )
 }
