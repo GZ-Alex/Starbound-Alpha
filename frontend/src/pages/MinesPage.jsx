@@ -2,10 +2,10 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
-
-const PROD_PER_MINE_PER_HOUR = 50
 import { supabase } from '@/lib/supabase'
 import { Plus } from 'lucide-react'
+
+const PROD_PER_MINE_PER_HOUR = 50
 
 const MINEABLE = [
   { key: 'titan',       label: 'Titan',       color: '#94a3b8', icon: '/Starbound-Alpha/resources/titan.png' },
@@ -19,8 +19,6 @@ const MINEABLE = [
   { key: 'plutonium',   label: 'Plutonium',   color: '#f472b6', icon: '/Starbound-Alpha/resources/plutonium.png' },
   { key: 'wasserstoff', label: 'Wasserstoff', color: '#38bdf8', icon: '/Starbound-Alpha/resources/wasserstoff.png' },
 ]
-
-const PROD_PER_MINE_PER_HOUR = 50
 
 const MINE_COSTS = { titan: 200, silizium: 150, aluminium: 100, credits: 500 }
 
