@@ -26,10 +26,10 @@ function fmt(n) {
   return Math.floor(n).toLocaleString('de-DE')
 }
 
-function MineCard({ res, mines, freeSlots, onBuild, saving }) {
+function MineCard({ res, mines, prodPerHour, freeSlots, onBuild, saving }) {
   const [amount, setAmount] = useState('')
   const parsedAmount = parseInt(amount) || 0
-  const prod = mines * PROD_PER_MINE_PER_HOUR
+  const prod = prodPerHour ?? (mines * PROD_PER_MINE_PER_HOUR)
   const canBuild = freeSlots >= parsedAmount && parsedAmount > 0
 
   return (
@@ -151,7 +151,7 @@ export default function MinesPage() {
 
   useEffect(() => {
     if (planet?.mine_distribution) setDist(planet.mine_distribution)
-  }, [planet?.id])
+  }, [planet?.mine_distribution])
 
   const handleBuild = async (resKey, amount) => {
     if (freeSlots < amount || saving) return
@@ -219,9 +219,10 @@ export default function MinesPage() {
           {MINEABLE.slice(0, 5).map(res => (
             <MineCard key={res.key} res={res}
               mines={dist[res.key] ?? 0}
+              prodPerHour={planet[`prod_${res.key}`] ?? 0}
               freeSlots={freeSlots}
               onBuild={(n) => handleBuild(res.key, n)}
-              planet={planet} saving={saving}
+              saving={saving}
             />
           ))}
         </div>
@@ -229,9 +230,10 @@ export default function MinesPage() {
           {MINEABLE.slice(5, 10).map(res => (
             <MineCard key={res.key} res={res}
               mines={dist[res.key] ?? 0}
+              prodPerHour={planet[`prod_${res.key}`] ?? 0}
               freeSlots={freeSlots}
               onBuild={(n) => handleBuild(res.key, n)}
-              planet={planet} saving={saving}
+              saving={saving}
             />
           ))}
         </div>
