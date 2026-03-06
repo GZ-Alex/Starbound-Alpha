@@ -59,7 +59,7 @@ export default function ScanPage() {
   const komm = (buildings ?? []).find(b => b.building_id === 'communications_network')?.level ?? 0
   const px = planet?.x ?? 0, py = planet?.y ?? 0, pz = planet?.z ?? 0
 
-  const { data: objects = [], isLoading } = useQuery({
+  const { data: objects = [], isLoading, error: scanError } = useQuery({
     queryKey: ['scan-objects', planet?.id, ranges.npc, ranges.asteroid],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_scan_objects', {
@@ -141,6 +141,13 @@ export default function ScanPage() {
       </div>
 
       {isLoading && <div className="text-center py-8 text-slate-600 font-mono text-sm">Scanne...</div>}
+
+      {scanError && (
+        <div className="panel p-4 border border-red-500/20 bg-red-500/5">
+          <p className="text-xs font-mono text-red-400 mb-1">RPC Fehler:</p>
+          <p className="text-xs font-mono text-red-300">{scanError.message}</p>
+        </div>
+      )}
 
       {!isLoading && allEntries.length === 0 && (
         <div className="panel p-12 text-center space-y-3">
