@@ -23,6 +23,7 @@ export const useGameStore = create((set, get) => ({
   playerSkills: {},     // { skill_key: points_spent }
   techEffects: {},      // { tech_id: { mine_production: 0.05, ... } }
   mineProductionBonus: 1.0, // berechneter Multiplikator (1.0 = kein Bonus)
+  scanRanges: { fleet: 10, npc: 20, asteroid: 40 }, // Scanreichweiten in pc
 
   // UI state
   tutorialStep: 0,
@@ -170,6 +171,9 @@ export const useGameStore = create((set, get) => ({
     // mineProductionBonus berechnen
     get().recalcMineBonus(race, skillMap, techEffectsMap, techLevelMap)
 
+    // scanRanges berechnen
+    get().recalcScanRanges()
+
     // Load researchers
     const { data: researchers } = await supabase
       .from('researchers')
@@ -223,6 +227,7 @@ export const useGameStore = create((set, get) => ({
       .select('*')
       .eq('planet_id', planetId)
     set({ buildings: buildings ?? [] })
+    get().recalcScanRanges()
 
     const { data: queue } = await supabase
       .from('build_queue')
@@ -392,6 +397,46 @@ export const useGameStore = create((set, get) => ({
     }
 
     set({ mineProductionBonus: 1.0 + bonus })
+  },
+
+  // Scan-Reichweiten live berechnen
+  // Basis bei Lvl 1 Kommunikationsnetzwerk:
+  //   fleet:    10 pc  (Spielerflotten)
+  //   npc:      20 pc  (NPC / Kopfgeld, 2× fleet)
+  //   asteroid: 40 pc  (Asteroiden, 4× fleet)
+  // Bonus pro 2 Gebäude-Level: +1 / +2 / +4 pc
+  // Techs: scan_range Effekt addiert auf fleet-Basis
+  // Rasse: scan_range_bonus (%) auf fleet-Basis
+  recalcScanRanges: () => {
+    const { buildings, race, techEffects } = get()
+    const technologies = get().technologies
+
+    // Gebäude-Bonus: Kommunikationsnetzwerk
+    const kommLevel = (buildings ?? []).find(b => b.building_id === 'communications_network')?.level ?? 0
+    const kommBonus = Math.floor(kommLevel / 2)
+
+    // Basis fleet-Reichweite
+    let fleetBase = 10 + kommBonus
+
+    // Tech-Boni: scan_range Effekt
+    for (const [techId, effects] of Object.entries(techEffects ?? {})) {
+      if (effects?.scan_range && technologies.includes(techId)) {
+        fleetBase += effects.scan_range
+      }
+    }
+
+    // Rassenbonus (%)
+    if (race?.scan_range_bonus) {
+      fleetBase = Math.round(fleetBase * (1 + race.scan_range_bonus / 100))
+    }
+
+    set({
+      scanRanges: {
+        fleet:    fleetBase,
+        npc:      fleetBase * 2,
+        asteroid: fleetBase * 4,
+      }
+    })
   },
 
   hasTech: (techId) => {
