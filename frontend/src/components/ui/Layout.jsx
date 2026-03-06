@@ -219,7 +219,7 @@ function FleetQueuePill({ fleet }) {
 
 function SidebarResources({ planet: initialPlanet }) {
   const [planet, setPlanet] = useState(initialPlanet)
-  const { buildings } = useGameStore()
+  const { buildings, mineProductionBonus } = useGameStore()
 
   const { data: buildingDefsEnergy = [] } = useQuery({
     queryKey: ['building-defs-energy-only'],
@@ -271,7 +271,12 @@ function SidebarResources({ planet: initialPlanet }) {
       <div className="space-y-0.5">
         {RESOURCES.map(({ key, label, icon, color, isImg }) => {
           const val  = planet[key] ?? 0
-          const prod = planet[`prod_${key}`] ?? 0
+          // Produktion live berechnen: minen * 50 * bonus
+          const mines = planet?.mine_distribution?.[key] ?? 0
+          const isMineable = !['energie','credits'].includes(key)
+          const prod = isMineable
+            ? Math.round(mines * 50 * (mineProductionBonus ?? 1.0))
+            : (planet[`prod_${key}`] ?? 0)
           const prodStr = fmtProd(prod)
           const isEnergie = key === 'energie'
           const isCredits = key === 'credits'
