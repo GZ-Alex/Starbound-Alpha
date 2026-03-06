@@ -67,6 +67,51 @@ Deno.serve(async (req) => {
         .eq('is_active', true)
 
       // ── 4. Ressourcenproduktion ───────────────────────────────────────────
+      // Spieler-Daten laden: Rassen-Boni + Skillpunkte
+      const { data: allPlayers } = await supabase
+        .from('players')
+        .select('id, race_id')
+
+      const { data: allRaces } = await supabase
+        .from('races')
+        .select('id, mine_production_bonus')
+
+      const { data: allSkills } = await supabase
+        .from('player_skills')
+        .select('player_id, skill_key, points_spent')
+        .eq('skill_key', 'mine_production')
+
+      // Tech-Boni: mine_production aus player_technologies × tech effects
+      // Wir laden alle player_technologies mit mine_production effect
+      const { data: allTechBoni } = await supabase
+        .from('player_technologies')
+        .select('player_id, tech_id, level')
+
+      const { data: techDefs } = await supabase
+        .from('tech_definitions')
+        .select('id, effects')
+        .not('effects', 'is', null)
+
+      // Hilfsfunktion: Gesamtbonus mine_production für einen Spieler
+      const getMineBonus = (playerId: string): number => {
+        const player = allPlayers?.find(p => p.id === playerId)
+        const race   = allRaces?.find(r => r.id === player?.race_id)
+        // Rassenbonus (z.B. 15 = +15%)
+        const raceBonus = Number(race?.mine_production_bonus ?? 0) / 100
+        // Skillpunkte-Bonus (+10% pro Punkt)
+        const skillPts  = allSkills?.find(s => s.player_id === playerId)?.points_spent ?? 0
+        const skillBonus = skillPts * 0.10
+        // Tech-Boni: summiere effects.mining_rate über alle Techs des Spielers
+        const techBonus = (allTechBoni ?? [])
+          .filter(pt => pt.player_id === playerId && (pt.level ?? 0) > 0)
+          .reduce((sum, pt) => {
+            const def = techDefs?.find(t => t.id === pt.tech_id)
+            const rate = def?.effects?.mining_rate ?? 0
+            return sum + (rate * pt.level)
+          }, 0)
+        return 1.0 + raceBonus + skillBonus + techBonus
+      }
+
       const { data: planets, error: planetsError } = await supabase
         .from('planets')
         .select('id, owner_id, mine_distribution, energie, credits, energy_consumed, ' +
@@ -76,7 +121,8 @@ Deno.serve(async (req) => {
 
       if (planets?.length) {
         for (const planet of planets) {
-          await processPlanetTick(planet, allPlanetBuildings ?? [], buildingDefs ?? [], log)
+          const mineBonus = getMineBonus(planet.owner_id)
+          await processPlanetTick(planet, allPlanetBuildings ?? [], buildingDefs ?? [], log, mineBonus)
         }
         log.push(`planets=${planets.length}`)
       }
@@ -119,7 +165,8 @@ async function processPlanetTick(
   planet: any,
   allBuildings: any[],
   buildingDefs: any[],
-  log: string[]
+  log: string[],
+  mineBonus: number = 1.0
 ) {
   const dist = planet.mine_distribution ?? {}
   const planetBuildings = allBuildings.filter(b => b.planet_id === planet.id)
@@ -143,8 +190,8 @@ async function processPlanetTick(
 
   for (const res of MINEABLE) {
     const mines = dist[res] ?? 0
-    const prodPerTick = mines * PROD_PER_MINE_PER_TICK * energieFaktor
-    const prodPerHour = Math.round(mines * 50 * energieFaktor)  // 50/h pro Mine
+    const prodPerTick = mines * PROD_PER_MINE_PER_TICK * energieFaktor * mineBonus
+    const prodPerHour = Math.round(mines * 50 * energieFaktor * mineBonus)
     if (mines > 0) updates[res] = (planet[res] ?? 0) + prodPerTick
     prodUpdates[`prod_${res}`] = prodPerHour
   }
