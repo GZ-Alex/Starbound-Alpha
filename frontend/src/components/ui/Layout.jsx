@@ -10,7 +10,7 @@ import NotificationStack from '@/components/ui/NotificationStack'
 import {
   Building2, Hammer, Rocket, FlaskConical, Anchor,
   Shield, Crosshair, Radio, Navigation, Radar,
-  LogOut, Settings, Clock
+  LogOut, Settings, Clock, Ship
 } from 'lucide-react'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { to: '/bunker',    icon: Shield,      label: 'Bunker'           },
   { to: '/defense',   icon: Crosshair,   label: 'Verteidigung'     },
   { to: '/comms',     icon: Radio,       label: 'Komm'             },
+  { to: '/ships',     icon: Ship,        label: 'Schiffe'          },
   { to: '/fleet',     icon: Navigation,  label: 'Flotten'          },
   { to: '/scan',      icon: Radar,       label: 'Scan'             },
 ]
