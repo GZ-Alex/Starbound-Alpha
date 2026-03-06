@@ -66,7 +66,7 @@ export default function ScanPage() {
         cx: px, cy: py, cz: pz,
         asteroid_range: ranges.asteroid,
         fleet_range: ranges.npc,
-        player_id: player?.id ?? null,
+        p_player_id: player?.id ?? null,
       })
       if (error) throw error
       return data ?? []
