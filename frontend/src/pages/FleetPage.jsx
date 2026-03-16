@@ -25,12 +25,16 @@ function coords(x, y, z) {
   return `${x} / ${y} / ${z}`
 }
 
-function etaString(ticks) {
-  if (!ticks || ticks <= 0) return null
-  const seconds = ticks * 60
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `~${h}h ${m}m`
+function etaString(arriveAt) {
+  if (!arriveAt) return null
+  const ms = new Date(arriveAt).getTime() - Date.now()
+  if (ms <= 0) return 'Ankunft...'
+  const totalMin = Math.round(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h > 0 && m > 0) return `~${h}h ${m}m`
+  if (h > 0) return `~${h}h`
+  if (totalMin < 1) return '< 1 Min'
   return `~${m}m`
 }
 
@@ -364,27 +368,76 @@ function BookmarkModal({ playerId, onClose, onSelect }) {
 
 // ─── Zielkoordinaten Modal ─────────────────────────────────────────────────────
 
-function SetTargetModal({ fleet, playerId, onClose, onSaved }) {
+// ─── Distanz & ETA Helpers ────────────────────────────────────────────────────
+
+function calcDistance(x1, y1, z1, x2, y2, z2) {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+}
+
+// speed in pc/h, distance in pc → arrive_at als Date
+function calcArriveAt(distancePc, speedPcPerH, speedPercent) {
+  if (speedPcPerH <= 0) return null
+  const effectiveSpeed = speedPcPerH * (speedPercent / 100)
+  const hoursNeeded = distancePc / effectiveSpeed
+  const msNeeded = hoursNeeded * 3600 * 1000
+  return new Date(Date.now() + msNeeded)
+}
+
+function formatEtaDuration(distancePc, speedPcPerH, speedPercent) {
+  if (!speedPcPerH || speedPcPerH <= 0 || !distancePc) return null
+  const effectiveSpeed = speedPcPerH * (speedPercent / 100)
+  if (effectiveSpeed <= 0) return null
+  const hours = distancePc / effectiveSpeed
+  const totalMin = Math.round(hours * 60)
+  if (totalMin < 1) return '< 1 Min'
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h > 0 && m > 0) return `~${h}h ${m}m`
+  if (h > 0) return `~${h}h`
+  return `~${m}m`
+}
+
+function SetTargetModal({ fleet, fleetShips, playerId, onClose, onSaved }) {
   const [tx, setTx] = useState(String(fleet.target_x ?? fleet.x ?? 0))
   const [ty, setTy] = useState(String(fleet.target_y ?? fleet.y ?? 0))
   const [tz, setTz] = useState(String(fleet.target_z ?? fleet.z ?? 0))
   const [saving, setSaving] = useState(false)
   const [showBookmarks, setShowBookmarks] = useState(false)
 
+  // Langsamste Geschwindigkeit in der Flotte (pc/h) × speed_percent
+  const baseSpeed = fleetSpeed(fleetShips)  // langsamstes Schiff, pc/h
+  const speedPercent = fleet.speed_percent ?? 100
+
+  const txN = parseInt(tx), tyN = parseInt(ty), tzN = parseInt(tz)
+  const coordsValid = !isNaN(txN) && !isNaN(tyN) && !isNaN(tzN)
+
+  const distance = coordsValid
+    ? calcDistance(fleet.x ?? 0, fleet.y ?? 0, fleet.z ?? 0, txN, tyN, tzN)
+    : 0
+
+  const etaLabel = coordsValid && baseSpeed > 0
+    ? formatEtaDuration(distance, baseSpeed, speedPercent)
+    : null
+
+  const isSamePos = coordsValid && distance < 0.001
+
   const handleSave = async () => {
-    if (saving) return
-    const x = parseInt(tx), y = parseInt(ty), z = parseInt(tz)
-    if (isNaN(x) || isNaN(y) || isNaN(z)) return
+    if (saving || !coordsValid || isSamePos) return
     setSaving(true)
-    await supabase.from('fleets').update({
-      target_x: x,
-      target_y: y,
-      target_z: z,
+
+    const arriveAt = calcArriveAt(distance, baseSpeed, speedPercent)
+
+    const { error } = await supabase.from('fleets').update({
+      target_x: txN,
+      target_y: tyN,
+      target_z: tzN,
       mission: 'move',
       is_in_transit: true,
+      arrive_at: arriveAt?.toISOString() ?? null,
     }).eq('id', fleet.id)
+
     setSaving(false)
-    onSaved()
+    if (!error) onSaved()
   }
 
   const handleBookmarkSelect = (bm) => {
@@ -417,13 +470,24 @@ function SetTargetModal({ fleet, playerId, onClose, onSaved }) {
           border: '1px solid rgba(34,211,238,0.15)',
         }}>
         <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold text-lg text-slate-200">Zielkoordinaten</h3>
+          <h3 className="font-display font-bold text-lg text-slate-200">Kurs setzen</h3>
           <button onClick={onClose} style={{ color: '#475569' }}><X size={16} /></button>
         </div>
 
-        <p className="text-xs font-mono text-slate-500">
-          Aktuelle Position: <span className="text-slate-400">{coords(fleet.x, fleet.y, fleet.z)}</span>
-        </p>
+        <div className="flex gap-3">
+          <div className="flex-1 rounded-lg p-2.5"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-xs font-mono text-slate-600 mb-0.5">Position</p>
+            <p className="text-xs font-mono text-slate-400">{coords(fleet.x, fleet.y, fleet.z)}</p>
+          </div>
+          <div className="flex-1 rounded-lg p-2.5"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-xs font-mono text-slate-600 mb-0.5">Geschw.</p>
+            <p className="text-xs font-mono" style={{ color: '#fbbf24' }}>
+              {baseSpeed > 0 ? `${Math.round(baseSpeed * speedPercent / 100)} pc/h` : '— (kein Schiff)'}
+            </p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-3 gap-2">
           {[['X', tx, setTx], ['Y', ty, setTy], ['Z', tz, setTz]].map(([label, val, setter]) => (
@@ -444,6 +508,29 @@ function SetTargetModal({ fleet, playerId, onClose, onSaved }) {
           ))}
         </div>
 
+        {/* ETA Preview */}
+        {coordsValid && !isSamePos && (
+          <div className="rounded-lg px-3 py-2.5 flex items-center justify-between"
+            style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.15)' }}>
+            <div>
+              <p className="text-xs font-mono text-slate-500">Distanz</p>
+              <p className="text-sm font-mono text-slate-300">{distance.toFixed(1)} pc</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-mono text-slate-500">ETA</p>
+              <p className="text-sm font-mono font-semibold" style={{ color: etaLabel ? '#22d3ee' : '#475569' }}>
+                {etaLabel ?? (baseSpeed === 0 ? 'Keine Triebwerke' : '—')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {isSamePos && (
+          <p className="text-xs font-mono text-center" style={{ color: '#f87171' }}>
+            Ziel ist identisch mit aktueller Position.
+          </p>
+        )}
+
         {/* Bookmark-Schnellzugriff */}
         <button onClick={() => setShowBookmarks(true)}
           className="w-full flex items-center justify-center gap-2 py-1.5 rounded text-xs font-mono transition-all"
@@ -462,12 +549,15 @@ function SetTargetModal({ fleet, playerId, onClose, onSaved }) {
             style={{ color: '#475569' }}>
             Abbrechen
           </button>
-          <button onClick={handleSave} disabled={saving}
+          <button
+            onClick={handleSave}
+            disabled={saving || !coordsValid || isSamePos || baseSpeed === 0}
             className="flex items-center gap-2 px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
             style={{
-              background: 'rgba(34,211,238,0.15)',
-              border: '1px solid rgba(34,211,238,0.3)',
-              color: '#22d3ee',
+              background: (!coordsValid || isSamePos || baseSpeed === 0) ? 'rgba(255,255,255,0.04)' : 'rgba(34,211,238,0.15)',
+              border: `1px solid ${(!coordsValid || isSamePos || baseSpeed === 0) ? 'rgba(255,255,255,0.06)' : 'rgba(34,211,238,0.3)'}`,
+              color: (!coordsValid || isSamePos || baseSpeed === 0) ? '#334155' : '#22d3ee',
+              cursor: (!coordsValid || isSamePos || baseSpeed === 0) ? 'not-allowed' : 'pointer',
             }}>
             <Send size={12} />
             {saving ? 'Startet...' : 'Kurs setzen'}
@@ -720,10 +810,10 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
                 style={{ background: `${flightMode.color}15`, border: `1px solid ${flightMode.color}30`, color: flightMode.color }}>
                 {flightMode.label}
               </span>
-              {fleet.is_in_transit && fleet.ticks_to_arrive > 0 && (
+              {fleet.is_in_transit && fleet.arrive_at && (
                 <span className="text-xs font-mono flex items-center gap-1" style={{ color: '#22d3ee' }}>
                   <Clock size={10} />
-                  ETA: {etaString(fleet.ticks_to_arrive)}
+                  ETA: {etaString(fleet.arrive_at)}
                 </span>
               )}
             </div>
@@ -907,6 +997,7 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
         {showSetTarget && (
           <SetTargetModal
             fleet={fleet}
+            fleetShips={ships}
             playerId={playerId}
             onClose={() => setShowSetTarget(false)}
             onSaved={handleTargetSaved}
@@ -939,7 +1030,7 @@ function FleetRow({ fleet, ships, onClick }) {
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
   const speed = fleetSpeed(ships)
   const mission = MISSION_LABELS[fleet.mission] ?? MISSION_LABELS.idle
-  const eta = etaString(fleet.ticks_to_arrive)
+  const eta = etaString(fleet.arrive_at)
 
   return (
     <motion.div layout
