@@ -282,48 +282,19 @@ async function processShipBuildQueue(log: string[]) {
       continue
     }
 
-    // Flotte holen oder erstellen
-    const { data: fleet } = await supabase
-      .from('fleets').select('id')
-      .eq('player_id', design.player_id)
-      .eq('is_in_transit', false)
-      .limit(1)
-      .maybeSingle()
+    // Schiff wird OHNE fleet_id erstellt — Spieler weist selbst zu
+    const { error: shipErr } = await supabase.from('ships').insert({
+      design_id: design.id,
+      player_id: design.player_id,
+      fleet_id: null,
+      name: design.name,
+      current_hp: design.total_hp,
+      max_hp: design.total_hp,
+    })
 
-    let fleetId = fleet?.id
-
-    if (!fleetId) {
-      const { data: planet } = await supabase
-        .from('planets').select('x, y, z')
-        .eq('id', item.planet_id).single()
-
-      const { data: newFleet } = await supabase.from('fleets').insert({
-        player_id: design.player_id,
-        name: 'Flotte 1',
-        is_in_transit: false,
-        x: planet?.x ?? 0,
-        y: planet?.y ?? 0,
-        z: planet?.z ?? 100,
-      }).select().single()
-
-      fleetId = newFleet?.id
-    }
-
-    if (fleetId) {
-      const { error: shipErr } = await supabase.from('ships').insert({
-        design_id: design.id,
-        player_id: design.player_id,
-        fleet_id: fleetId,
-        name: design.name,
-        current_hp: design.total_hp,
-        max_hp: design.total_hp,
-        planet_id: item.planet_id,
-      })
-
-      if (shipErr) {
-        log.push(`ship_err: ${shipErr.message}`)
-        continue
-      }
+    if (shipErr) {
+      log.push(`ship_err: ${shipErr.message}`)
+      continue
     }
 
     await supabase.from('ship_build_queue').delete().eq('id', item.id)
@@ -336,26 +307,35 @@ async function processShipBuildQueue(log: string[]) {
 // ─── Flotten-Bewegungen ───────────────────────────────────────────────────────
 
 async function processFleets(log: string[]) {
+  // Alle Flotten die unterwegs sind und deren arrive_at erreicht/überschritten ist
   const { data: arrivedFleets } = await supabase
-    .from('fleets').select('*')
+    .from('fleets')
+    .select('*')
     .eq('is_in_transit', true)
+    .not('arrive_at', 'is', null)
     .lte('arrive_at', new Date().toISOString())
 
   if (!arrivedFleets?.length) return
 
   let arrived = 0
   for (const fleet of arrivedFleets) {
-    await supabase.from('fleets').update({
+    const { error } = await supabase.from('fleets').update({
       is_in_transit: false,
+      mission: 'idle',
       x: fleet.target_x,
       y: fleet.target_y,
-      z: fleet.target_z ?? 100,
+      z: fleet.target_z ?? fleet.z,
       target_x: null,
       target_y: null,
       target_z: null,
       arrive_at: null,
     }).eq('id', fleet.id)
-    arrived++
+
+    if (error) {
+      log.push(`fleet_arrive_err(${fleet.id}): ${error.message}`)
+    } else {
+      arrived++
+    }
   }
 
   if (arrived > 0) log.push(`fleets_arrived=${arrived}`)
