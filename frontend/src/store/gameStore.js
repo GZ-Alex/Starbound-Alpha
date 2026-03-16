@@ -124,28 +124,8 @@ export const useGameStore = create((set, get) => ({
       get().loadPlanetData(planet.id)
     }
 
-    // Load techs + tech effects für mine_production
-    const { data: techs } = await supabase
-      .from('player_technologies')
-      .select('tech_id, level')
-      .eq('player_id', player.id)
-    set({ technologies: techs?.map(t => t.tech_id) ?? [] })
-
-    // Tech-Effekte laden (nur mine_production relevant hier)
-    const techIds = (techs ?? []).filter(t => t.level > 0).map(t => t.tech_id)
-    let techEffectsMap = {}
-    if (techIds.length) {
-      const { data: defs } = await supabase
-        .from('tech_definitions')
-        .select('id, effects')
-        .in('id', techIds)
-      for (const def of defs ?? []) {
-        if (def.effects) techEffectsMap[def.id] = def.effects
-      }
-    }
-    const techLevelMap = {}
-    for (const t of techs ?? []) techLevelMap[t.tech_id] = t.level
-    set({ techEffects: techEffectsMap })
+    // Load techs + tech effects
+    await get().refreshTechnologies(player.id)
 
     // Rasse laden
     let race = null
@@ -219,6 +199,38 @@ export const useGameStore = create((set, get) => ({
     setInterval(() => get().processBuildQueue(), 10000)
     // Planet alle 60s refreshen (Ressourcenproduktion durch Tick-System)
     setInterval(() => get().refreshPlanet(), 60000)
+  },
+
+  // Technologien neu laden (wird nach Forschungsabschluss und periodisch aufgerufen)
+  refreshTechnologies: async (playerId) => {
+    const pid = playerId ?? get().player?.id
+    if (!pid) return
+
+    const { data: techs } = await supabase
+      .from('player_technologies')
+      .select('tech_id, level')
+      .eq('player_id', pid)
+    set({ technologies: techs?.map(t => t.tech_id) ?? [] })
+
+    const techIds = (techs ?? []).filter(t => t.level > 0).map(t => t.tech_id)
+    let techEffectsMap = {}
+    if (techIds.length) {
+      const { data: defs } = await supabase
+        .from('tech_definitions')
+        .select('id, effects')
+        .in('id', techIds)
+      for (const def of defs ?? []) {
+        if (def.effects) techEffectsMap[def.id] = def.effects
+      }
+    }
+    const techLevelMap = {}
+    for (const t of techs ?? []) techLevelMap[t.tech_id] = t.level
+    set({ techEffects: techEffectsMap })
+
+    // Boni neu berechnen mit frischen Tech-Daten
+    const { race, playerSkills } = get()
+    get().recalcMineBonus(race, playerSkills, techEffectsMap, techLevelMap)
+    get().recalcScanRanges()
   },
 
   loadPlanetData: async (planetId) => {
