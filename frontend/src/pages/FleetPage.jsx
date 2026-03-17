@@ -687,41 +687,28 @@ function FleetScanArea({ fleet, ships }) {
     return { astRange: ast, npcRange: npc }
   }, [ships])
 
-  const maxRange = Math.max(astRange, npcRange)
+  // Ast-Scanner sieht ALLES (Asteroiden, Planeten, Stationen, NPCs)
+  // Zielscanner sieht NUR NPCs/Kopfgeld, aber mit eigener (oft größerer) Reichweite
+  // NPC-Reichweite = Maximum aus beiden
+  const effectiveNpcRange = Math.max(astRange, npcRange)
+  const maxRange = effectiveNpcRange
+
   const fx = fleet.x ?? 0, fy = fleet.y ?? 0, fz = fleet.z ?? 0
 
-  // Nutzt get_scan_objects RPC — gleiche Logik wie ScanPage
-  // Ast-Scanner: asteroid_range gesetzt, fleet_range = 0
-  // NPC-Scanner: fleet_range gesetzt, asteroid_range = 0
-  const { data: astObjects = [] } = useQuery({
-    queryKey: ['fleet-scan-ast', fleet.id, fx, fy, fz, astRange],
+  // Ast-Scanner: alles innerhalb astRange
+  const { data: allObjects = [] } = useQuery({
+    queryKey: ['fleet-scan-all', fleet.id, fx, fy, fz, astRange, effectiveNpcRange],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_scan_objects', {
         cx: fx, cy: fy, cz: fz,
         asteroid_range: astRange,
-        fleet_range: 0,
+        fleet_range: effectiveNpcRange,
         p_player_id: null,
       })
       if (error) throw error
       return data ?? []
     },
-    enabled: astRange > 0,
-    refetchInterval: 60000,
-  })
-
-  const { data: npcObjects = [] } = useQuery({
-    queryKey: ['fleet-scan-npc', fleet.id, fx, fy, fz, npcRange],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_scan_objects', {
-        cx: fx, cy: fy, cz: fz,
-        asteroid_range: 0,
-        fleet_range: npcRange,
-        p_player_id: null,
-      })
-      if (error) throw error
-      return data ?? []
-    },
-    enabled: npcRange > 0,
+    enabled: maxRange > 0,
     refetchInterval: 30000,
   })
 
@@ -732,9 +719,18 @@ function FleetScanArea({ fleet, ships }) {
     </div>
   )
 
-  const asteroids = astObjects.filter(o => o.obj_type === 'asteroid')
-  const planets   = astObjects.filter(o => o.obj_type === 'planet' || o.obj_type === 'station')
-  const npcs      = npcObjects.filter(o => o.obj_type === 'npc')
+  // Ast-Scanner sieht alles bis astRange
+  // Zielscanner erweitert NPC-Sicht bis npcRange (falls größer als astRange)
+  const asteroids = allObjects.filter(o => o.obj_type === 'asteroid')
+  const planets   = allObjects.filter(o => o.obj_type === 'planet' || o.obj_type === 'station')
+  const npcs      = allObjects.filter(o => {
+    if (o.obj_type !== 'npc') return false
+    // Im astRange: immer sichtbar (Ast-Scanner sieht alles)
+    if (astRange > 0 && o.distance <= astRange) return true
+    // Jenseits astRange aber in npcRange: nur mit Zielscanner
+    if (npcRange > 0 && o.distance <= npcRange) return true
+    return false
+  })
 
   const visibleAsteroids = showAsteroids ? asteroids : []
   const visiblePlanets   = showPlanets   ? planets   : []
@@ -749,9 +745,13 @@ function FleetScanArea({ fleet, ships }) {
     npc_streitmacht: { label: 'NPC-Streitmacht',     color: '#8b5cf6', threat: 'Extrem' },
   }
 
+  const AST_LABELS = {
+    metall: 'Metallasteroid', silikat: 'Silikatasteroid', eis: 'Eisasteroid',
+    gas: 'Gasblase', erz: 'Erzasteroid', reichhaltig: 'Reichhaltiger Asteroid',
+  }
   const AST_COLORS = {
-    metall:      '#94a3b8', silikat: '#a78bfa', eis: '#67e8f9',
-    gas:         '#34d399', erz: '#f472b6', reichhaltig: '#fbbf24',
+    metall: '#94a3b8', silikat: '#a78bfa', eis: '#67e8f9',
+    gas: '#34d399', erz: '#f472b6', reichhaltig: '#fbbf24',
   }
 
   return (
@@ -760,7 +760,7 @@ function FleetScanArea({ fleet, ships }) {
         <div>
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-1">Scanbereich</p>
           <div className="flex items-center gap-3 flex-wrap">
-            {astRange > 0 && <span className="text-xs font-mono" style={{ color: '#67e8f9' }}>Ast-Scanner · {astRange} pc</span>}
+            {astRange > 0 && <span className="text-xs font-mono" style={{ color: '#67e8f9' }}>Allscanner · {astRange} pc</span>}
             {npcRange > 0 && <span className="text-xs font-mono" style={{ color: '#f87171' }}>Zielscanner · {npcRange} pc</span>}
           </div>
         </div>
@@ -770,7 +770,7 @@ function FleetScanArea({ fleet, ships }) {
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {astRange > 0 && <ScanFilterBtn active={showAsteroids} onToggle={() => setShowAsteroids(v => !v)} label="Asteroiden" color="#67e8f9" />}
         {astRange > 0 && <ScanFilterBtn active={showPlanets}   onToggle={() => setShowPlanets(v => !v)}   label="Planeten"   color="#4ade80" />}
-        {npcRange > 0 && <ScanFilterBtn active={showFleets}    onToggle={() => setShowFleets(v => !v)}    label="Flotten"    color="#f87171" />}
+        {maxRange > 0 && <ScanFilterBtn active={showFleets}    onToggle={() => setShowFleets(v => !v)}    label="Flotten"    color="#f87171" />}
       </div>
 
       {total === 0 ? (
@@ -780,13 +780,12 @@ function FleetScanArea({ fleet, ships }) {
           {visibleFleets.map(o => {
             const npcType = o.data?.npc_type ?? 'pirat_leicht'
             const meta = NPC_COLORS[npcType] ?? { label: npcType, color: '#f87171', threat: '?' }
-            const ships = o.data?.ship_count ?? '?'
             return (
               <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
                 <span className="text-xs font-mono text-slate-300 flex-1">{meta.label}</span>
-                <span className="text-xs font-mono text-slate-600">{ships} Schiffe</span>
+                <span className="text-xs font-mono text-slate-600">{o.data?.ship_count ?? '?'} Schiffe</span>
                 <span className="text-xs font-mono" style={{ color: meta.color }}>{meta.threat}</span>
                 <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
               </div>
@@ -805,8 +804,9 @@ function FleetScanArea({ fleet, ships }) {
             </div>
           ))}
           {visibleAsteroids.map(o => {
-            const color = AST_COLORS[o.data?.type] ?? '#94a3b8'
-            const label = o.data?.type ? o.data.type.charAt(0).toUpperCase() + o.data.type.slice(1) + 'asteroid' : 'Asteroid'
+            const type = o.data?.type
+            const color = AST_COLORS[type] ?? '#94a3b8'
+            const label = AST_LABELS[type] ?? 'Asteroid'
             return (
               <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
