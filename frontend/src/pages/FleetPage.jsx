@@ -862,8 +862,6 @@ function FleetScanArea({ fleet, ships }) {
       )}
     </div>
   )
-}    </div>
-  )
 }
 
 // ─── Fleet Detail View ────────────────────────────────────────────────────────
