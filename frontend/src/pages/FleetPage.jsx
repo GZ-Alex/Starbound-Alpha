@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import {
   Navigation, ChevronLeft, Package, Shield, Zap,
   Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store,
-  Bookmark, BookmarkPlus, Trash2, Send, Users, Globe
+  Bookmark, BookmarkPlus, Trash2, Send, Users, Globe, Info
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -844,6 +844,74 @@ function FleetScanArea({ fleet, ships, onSetTarget }) {
   )
 }
 
+// ─── Ship Detail Popup (für FleetPage) ───────────────────────────────────────
+
+function FleetShipDetailPopup({ ship, chassisDefs, onClose }) {
+  const chassis = chassisDefs.find(c => c.id === ship.ship_designs?.chassis_id)
+  const imgSrc = chassis?.image_key ? `/Starbound-Alpha/ships/${chassis.image_key}.png` : null
+  const d = ship.ship_designs
+
+  const stats = [
+    { label: 'Hülle',        value: `${ship.current_hp} / ${ship.max_hp}`, color: '#4ade80' },
+    { label: 'Angriff',      value: d?.total_attack ?? '—',                 color: '#f87171' },
+    { label: 'Verteidigung', value: d?.total_defense ?? '—',                color: '#38bdf8' },
+    { label: 'Geschw.',      value: d?.total_speed ?? '—',                  color: '#fbbf24' },
+    { label: 'Manöver',      value: d?.total_maneuver ?? '—',               color: '#a78bfa' },
+    { label: 'Laderaum',     value: d?.total_cargo ?? '—',                  color: '#34d399' },
+    { label: 'Scanweite',    value: d?.total_scan_range ?? '—',             color: '#67e8f9' },
+    { label: 'Zellen',       value: d?.total_cells_used ?? '—',             color: '#94a3b8' },
+  ]
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}>
+      <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-lg rounded-xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg, rgba(4,13,26,0.99) 0%, rgba(2,8,20,0.99) 100%)',
+          border: '1px solid rgba(34,211,238,0.15)',
+          maxHeight: '80vh', overflowY: 'auto',
+        }}>
+        <div className="flex items-center gap-4 p-5"
+          style={{ borderBottom: '1px solid rgba(34,211,238,0.08)' }}>
+          {imgSrc && (
+            <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center"
+              style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.12)' }}>
+              <img src={imgSrc} alt={chassis?.name} className="w-full h-full object-contain p-1" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-display font-bold text-lg text-slate-100 truncate">
+              {ship.name ?? d?.name ?? 'Unbenannt'}
+            </h3>
+            <p className="text-xs font-mono text-slate-500">{chassis?.name} · Klasse {chassis?.class}</p>
+            <p className="text-xs font-mono mt-0.5" style={{ color: '#475569' }}>
+              XP: {ship.experience ?? 0} · Level {ship.ship_level ?? 1}
+              {ship.auto_retreat_at > 0 ? ` · Flucht bei ${ship.auto_retreat_at}%` : ' · Flucht deaktiviert'}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 p-1.5 rounded hover:bg-white/5"
+            style={{ color: '#475569' }}><X size={16} /></button>
+        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-4 gap-2">
+            {stats.map(s => (
+              <div key={s.label} className="rounded-lg p-2.5 text-center"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-xs font-mono text-slate-600 mb-1">{s.label}</p>
+                <p className="font-mono font-bold text-sm" style={{ color: s.color }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── Flight Mode Modal ────────────────────────────────────────────────────────
 
 const FLIGHT_MODE_OPTIONS = [
@@ -941,6 +1009,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
   const [showBookmarks, setShowBookmarks] = useState(false)
   const [showFlightMode, setShowFlightMode] = useState(false)
   const [quickTarget, setQuickTarget] = useState(null)
+  const [selectedShip, setSelectedShip] = useState(null)
   const queryClient = useQueryClient()
 
   const handleTargetSaved = () => {
@@ -958,6 +1027,17 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
     await supabase.from('fleets').update({ flight_mode: mode }).eq('id', fleet.id)
     queryClient.invalidateQueries(['fleets'])
     setShowFlightMode(false)
+  }
+
+  const handleRetreatChange = async (shipId, value) => {
+    await supabase.from('ships').update({ auto_retreat_at: value }).eq('id', shipId)
+    queryClient.invalidateQueries(['all-ships'])
+  }
+
+  const handleBulkRetreat = async (value) => {
+    const ids = ships.map(s => s.id)
+    await supabase.from('ships').update({ auto_retreat_at: value }).in('id', ids)
+    queryClient.invalidateQueries(['all-ships'])
   }
 
   return (
@@ -1090,13 +1170,30 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
 
       {/* Schiffe in der Flotte */}
       <div className="panel p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest">
             Schiffe ({ships.length})
           </p>
-          <p className="text-xs font-mono text-slate-600">
-            Schiffe zuweisen → Schiffe-Seite
-          </p>
+          {ships.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-slate-600">Alle fliehen bei:</span>
+              <select
+                onChange={e => handleBulkRetreat(parseInt(e.target.value))}
+                defaultValue=""
+                className="text-xs font-mono rounded px-1.5 py-1"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#64748b', outline: 'none',
+                }}>
+                <option value="" disabled>Setzen…</option>
+                <option value={0}>Nie</option>
+                {[10,20,30,40,50,60,70,80,90].map(v => (
+                  <option key={v} value={v}>{v}%</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         {ships.length === 0 ? (
           <p className="text-sm font-mono text-slate-700">Keine Schiffe in dieser Flotte. Weise Schiffe auf der Schiffe-Seite zu.</p>
@@ -1120,20 +1217,39 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                     <p className="text-sm font-mono text-slate-200 truncate">{ship.name ?? ship.ship_designs?.name ?? '—'}</p>
                     <p className="text-xs font-mono text-slate-600">{chassis?.name ?? '—'}</p>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono" style={{ color: hpCol }}>{hpPct}% HP</span>
-                    <div className="w-16 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-xs font-mono" style={{ color: hpCol }}>{hpPct}%</span>
+                    <div className="w-12 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
                       <div className="h-1 rounded-full" style={{ width: `${hpPct}%`, background: hpCol }} />
                     </div>
                   </div>
-                  <div className="text-xs font-mono text-slate-500 w-24 text-right">
-                    <Package size={9} className="inline mr-1" />
-                    {fmt(ship.ship_designs?.total_cargo)}
-                  </div>
-                  <div className="text-xs font-mono w-20 text-right" style={{ color: '#fbbf24' }}>
+                  <div className="text-xs font-mono text-slate-500 w-20 text-right flex-shrink-0">
                     <Zap size={9} className="inline mr-1" />
                     {fmt(ship.ship_designs?.total_speed)}
                   </div>
+                  {/* Flucht-Dropdown */}
+                  <select
+                    value={ship.auto_retreat_at ?? 0}
+                    onChange={e => handleRetreatChange(ship.id, parseInt(e.target.value))}
+                    className="text-xs font-mono rounded px-1.5 py-1 flex-shrink-0"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: (ship.auto_retreat_at ?? 0) > 0 ? '#fbbf24' : '#334155',
+                      outline: 'none',
+                    }}>
+                    <option value={0}>Nie</option>
+                    {[10,20,30,40,50,60,70,80,90].map(v => (
+                      <option key={v} value={v}>{v}%</option>
+                    ))}
+                  </select>
+                  {/* Detail-Button */}
+                  <button onClick={() => setSelectedShip(ship)}
+                    className="flex-shrink-0 p-1.5 rounded-full transition-all hover:bg-white/5"
+                    style={{ border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}
+                    title="Details">
+                    <Info size={13} />
+                  </button>
                 </div>
               )
             })}
@@ -1246,6 +1362,13 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
             playerId={playerId}
             onClose={() => setShowBookmarks(false)}
             onSelect={null}
+          />
+        )}
+        {selectedShip && (
+          <FleetShipDetailPopup
+            ship={selectedShip}
+            chassisDefs={chassisDefs}
+            onClose={() => setSelectedShip(null)}
           />
         )}
       </AnimatePresence>
