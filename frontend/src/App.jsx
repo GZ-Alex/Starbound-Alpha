@@ -50,7 +50,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/overview"  element={<OverviewPage />} />
             <Route path="/planet"    element={<PlanetPage />} />
             <Route path="/mines"     element={<MinesPage />} />
