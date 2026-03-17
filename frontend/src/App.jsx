@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useGameStore } from '@/store/gameStore'
 import Layout from '@/components/ui/Layout'
 import Landing from '@/pages/Landing'
+import OverviewPage from '@/pages/OverviewPage'
 import Dashboard from '@/pages/Dashboard'
 import PlanetPage from '@/pages/PlanetPage'
 import ShipyardPage from '@/pages/ShipyardPage'
@@ -13,6 +14,7 @@ import FleetPage from '@/pages/FleetPage'
 import MinesPage from '@/pages/MinesPage'
 import ResearchPage from '@/pages/ResearchPage'
 import ScanPage from '@/pages/ScanPage'
+import BattleReportsPage from '@/pages/BattleReportsPage'
 import AdminPage from '@/pages/AdminPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
@@ -48,7 +50,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
+            <Route path="/overview"  element={<OverviewPage />} />
             <Route path="/planet"    element={<PlanetPage />} />
             <Route path="/mines"     element={<MinesPage />} />
             <Route path="/shipyard"  element={<ShipyardPage />} />
@@ -57,9 +60,10 @@ export default function App() {
             <Route path="/bunker"    element={<PlaceholderPage title="Bunker" />} />
             <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
             <Route path="/comms"     element={<PlaceholderPage title="Kommunikationsnetzwerk" />} />
-            <Route path="ships" element={<ShipsPage />} />
+            <Route path="ships"      element={<ShipsPage />} />
             <Route path="/fleet"     element={<FleetPage />} />
             <Route path="/scan"      element={<ScanPage />} />
+            <Route path="/battle-reports" element={<BattleReportsPage />} />
             <Route path="/admin"     element={<AdminPage />} />
           </Route>
         </Routes>
