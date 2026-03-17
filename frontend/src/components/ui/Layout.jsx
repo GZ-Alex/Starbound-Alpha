@@ -10,14 +10,13 @@ import NotificationStack from '@/components/ui/NotificationStack'
 import {
   Building2, Hammer, Rocket, FlaskConical, Anchor,
   Shield, Crosshair, Radio, Navigation, Radar,
-  LogOut, Settings, Clock, Ship, LayoutDashboard, Swords, Crown
+  LogOut, Settings, Clock, Ship, LayoutDashboard, Swords
 } from 'lucide-react'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { to: '/overview',  icon: LayoutDashboard, label: 'Übersicht'           },
-  { to: '/dashboard', icon: Crown,           label: 'Herrscher'           },
   { to: '/planet',    icon: Building2,       label: 'Gebäude'             },
   { to: '/mines',     icon: Hammer,          label: 'Minen'               },
   { to: '/shipyard',  icon: Rocket,          label: 'Werft'               },
@@ -356,7 +355,7 @@ export default function Layout() {
         style={{ background: 'linear-gradient(180deg, rgba(4,13,26,0.98) 0%, rgba(2,4,9,0.99) 100%)' }}>
 
         {/* Rassen-Bild + Spielername — klickbar → Dashboard */}
-        <button onClick={() => navigate('/overview')}
+        <button onClick={() => navigate('/dashboard')}
           className="flex-shrink-0 group w-full text-left"
           style={{ borderBottom: '1px solid rgba(34,211,238,0.1)' }}>
           <div className="relative w-full overflow-hidden"
