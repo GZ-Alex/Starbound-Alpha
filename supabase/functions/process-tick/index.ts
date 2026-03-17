@@ -282,7 +282,11 @@ async function processShipBuildQueue(log: string[]) {
       continue
     }
 
-    // Schiff wird OHNE fleet_id erstellt — Spieler weist selbst zu
+    // Schiff wird OHNE fleet_id erstellt — Position = Heimatplanet
+    // Planet-Position aus ship_build_queue.planet_id holen
+    const { data: buildPlanet } = await supabase
+      .from('planets').select('x, y, z').eq('id', item.planet_id).single()
+
     const { error: shipErr } = await supabase.from('ships').insert({
       design_id: design.id,
       player_id: design.player_id,
@@ -290,6 +294,9 @@ async function processShipBuildQueue(log: string[]) {
       name: design.name,
       current_hp: design.total_hp,
       max_hp: design.total_hp,
+      x: buildPlanet?.x ?? null,
+      y: buildPlanet?.y ?? null,
+      z: buildPlanet?.z ?? null,
     })
 
     if (shipErr) {
@@ -319,22 +326,29 @@ async function processFleets(log: string[]) {
 
   let arrived = 0
   for (const fleet of arrivedFleets) {
+    const newX = fleet.target_x
+    const newY = fleet.target_y
+    const newZ = fleet.target_z ?? fleet.z
+
     const { error } = await supabase.from('fleets').update({
       is_in_transit: false,
       mission: 'idle',
-      x: fleet.target_x,
-      y: fleet.target_y,
-      z: fleet.target_z ?? fleet.z,
+      x: newX,
+      y: newY,
+      z: newZ,
       target_x: null,
       target_y: null,
       target_z: null,
       arrive_at: null,
     }).eq('id', fleet.id)
 
-    if (error) {
-      log.push(`fleet_arrive_err(${fleet.id}): ${error.message}`)
-    } else {
+    if (!error) {
+      // Schiffe in der Flotte mitbewegen
+      await supabase.from('ships').update({ x: newX, y: newY, z: newZ })
+        .eq('fleet_id', fleet.id)
       arrived++
+    } else {
+      log.push(`fleet_arrive_err(${fleet.id}): ${error.message}`)
     }
   }
 
