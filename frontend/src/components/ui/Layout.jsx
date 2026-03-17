@@ -10,23 +10,25 @@ import NotificationStack from '@/components/ui/NotificationStack'
 import {
   Building2, Hammer, Rocket, FlaskConical, Anchor,
   Shield, Crosshair, Radio, Navigation, Radar,
-  LogOut, Settings, Clock, Ship
+  LogOut, Settings, Clock, Ship, LayoutDashboard, Swords
 } from 'lucide-react'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { to: '/planet',    icon: Building2,   label: 'Gebäude'          },
-  { to: '/mines',     icon: Hammer,      label: 'Minen'            },
-  { to: '/shipyard',  icon: Rocket,      label: 'Werft'            },
-  { to: '/research',  icon: FlaskConical, label: 'Forschungszentrum'},
-  { to: '/dock',      icon: Anchor,      label: 'Dock'             },
-  { to: '/bunker',    icon: Shield,      label: 'Bunker'           },
-  { to: '/defense',   icon: Crosshair,   label: 'Verteidigung'     },
-  { to: '/comms',     icon: Radio,       label: 'Komm'             },
-  { to: '/ships',     icon: Ship,        label: 'Schiffe'          },
-  { to: '/fleet',     icon: Navigation,  label: 'Flotten'          },
-  { to: '/scan',      icon: Radar,       label: 'Scan'             },
+  { to: '/overview',  icon: LayoutDashboard, label: 'Übersicht'           },
+  { to: '/planet',    icon: Building2,       label: 'Gebäude'             },
+  { to: '/mines',     icon: Hammer,          label: 'Minen'               },
+  { to: '/shipyard',  icon: Rocket,          label: 'Werft'               },
+  { to: '/research',  icon: FlaskConical,    label: 'Forschungszentrum'   },
+  { to: '/dock',      icon: Anchor,          label: 'Dock'                },
+  { to: '/bunker',    icon: Shield,          label: 'Bunker'              },
+  { to: '/defense',   icon: Crosshair,       label: 'Verteidigung'        },
+  { to: '/comms',     icon: Radio,           label: 'Komm'                },
+  { to: '/ships',     icon: Ship,            label: 'Schiffe'             },
+  { to: '/fleet',     icon: Navigation,      label: 'Flotten'             },
+  { to: '/scan',      icon: Radar,           label: 'Scan'                },
+  { to: '/battle-reports', icon: Swords,     label: 'Kampfberichte'       },
 ]
 
 // ─── Resources ────────────────────────────────────────────────────────────────
@@ -326,7 +328,21 @@ export default function Layout() {
   const { player, planet, logout } = useGameStore()
   const navigate = useNavigate()
 
-  // Rassen-Bild: /races/{race_id}.png, Fallback auf Platzhalter
+  // Ungelesene Notifications für Badge
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['notif-unread', player?.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('player_notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('player_id', player.id)
+        .eq('is_read', false)
+      return count ?? 0
+    },
+    enabled: !!player,
+    refetchInterval: 15000,
+  })
+
   const raceImg = player?.race_id
     ? `/Starbound-Alpha/races/${player.race_id}.png`
     : `/Starbound-Alpha/races/placeholder.png`
@@ -339,7 +355,7 @@ export default function Layout() {
         style={{ background: 'linear-gradient(180deg, rgba(4,13,26,0.98) 0%, rgba(2,4,9,0.99) 100%)' }}>
 
         {/* Rassen-Bild + Spielername — klickbar → Dashboard */}
-        <button onClick={() => navigate('/dashboard')}
+        <button onClick={() => navigate('/overview')}
           className="flex-shrink-0 group w-full text-left"
           style={{ borderBottom: '1px solid rgba(34,211,238,0.1)' }}>
           <div className="relative w-full overflow-hidden"
@@ -382,7 +398,13 @@ export default function Layout() {
             <NavLink key={to} to={to}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Icon size={14} />
-              <span className="text-sm">{label}</span>
+              <span className="text-sm flex-1">{label}</span>
+              {to === '/overview' && unreadCount > 0 && (
+                <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-xs font-mono font-bold"
+                  style={{ background: 'rgba(34,211,238,0.2)', color: '#22d3ee', minWidth: '20px', textAlign: 'center' }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </NavLink>
           ))}
 
