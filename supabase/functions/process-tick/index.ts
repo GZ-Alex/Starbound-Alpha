@@ -183,11 +183,17 @@ async function processPlanetTick(
   }
 }
 
+// ─── Notifications Helper ─────────────────────────────────────────────────────
+
+async function notify(playerId: string, type: string, title: string, message: string, data: Record<string, any> = {}) {
+  await supabase.from('player_notifications').insert({ player_id: playerId, type, title, message, data })
+}
+
 // ─── Gebäude-Queue ────────────────────────────────────────────────────────────
 
 async function processBuildQueue(log: string[]) {
   const { data: doneItems } = await supabase
-    .from('build_queue').select('*')
+    .from('build_queue').select('*, planets(owner_id)')
     .lte('finish_at', new Date().toISOString())
 
   if (!doneItems?.length) return
@@ -207,6 +213,15 @@ async function processBuildQueue(log: string[]) {
     }
 
     await supabase.from('build_queue').delete().eq('id', item.id)
+
+    const ownerId = item.planets?.owner_id
+    if (ownerId) {
+      await notify(ownerId, 'building_done',
+        'Gebäude fertiggestellt',
+        `${item.building_id} wurde auf Level ${item.target_level} ausgebaut.`,
+        { building_id: item.building_id, level: item.target_level, planet_id: item.planet_id }
+      )
+    }
     completed++
   }
 
@@ -254,8 +269,18 @@ async function processResearchQueue(log: string[]) {
         { player_id: item.player_id, tech_id: item.tech_id, level: newLevel },
         { onConflict: 'player_id,tech_id' }
       )
+      await notify(item.player_id, 'research_done',
+        'Forschung erfolgreich',
+        `${item.tech_id} wurde erfolgreich auf Level ${newLevel} erforscht.`,
+        { tech_id: item.tech_id, level: newLevel }
+      )
       completed++
     } else {
+      await notify(item.player_id, 'research_failed',
+        'Forschung fehlgeschlagen',
+        `${item.tech_id} konnte nicht auf das nächste Level erforscht werden.`,
+        { tech_id: item.tech_id }
+      )
       failed++
     }
 
@@ -307,6 +332,12 @@ async function processShipBuildQueue(log: string[]) {
       continue
     }
 
+    await notify(design.player_id, 'ship_built',
+      'Schiff fertiggestellt',
+      `${design.name} wurde erfolgreich gebaut und befindet sich im Dock.`,
+      { ship_name: design.name, chassis_id: design.chassis_id, planet_id: item.planet_id }
+    )
+
     await supabase.from('ship_build_queue').delete().eq('id', item.id)
     completed++
   }
@@ -349,6 +380,12 @@ async function processFleets(log: string[]) {
       // Schiffe in der Flotte mitbewegen
       await supabase.from('ships').update({ x: newX, y: newY, z: newZ })
         .eq('fleet_id', fleet.id)
+
+      await notify(fleet.player_id, 'fleet_arrived',
+        'Flotte angekommen',
+        `${fleet.name ?? 'Flotte'} ist an den Koordinaten ${newX} / ${newY} / ${newZ} angekommen.`,
+        { fleet_id: fleet.id, fleet_name: fleet.name, x: newX, y: newY, z: newZ }
+      )
       arrived++
     } else {
       log.push(`fleet_arrive_err(${fleet.id}): ${error.message}`)
@@ -794,9 +831,9 @@ async function processCombat(log: string[]) {
       maxHp: s.max_hp, attack: s.ship_designs?.total_attack,
     }))
 
-    await supabase.from('battle_reports').insert({
+    const { data: reportData } = await supabase.from('battle_reports').insert({
       attacker_id:    fleet.player_id,
-      defender_id:    null, // NPC
+      defender_id:    null,
       x: fx, y: fy, z: fz,
       attacker_fleet: { fleet_id: fleet.id, ships: playerShipSnapshot },
       defender_fleet: { npc_type: npcType, ships: npcShipSnapshot },
@@ -810,7 +847,14 @@ async function processCombat(log: string[]) {
       },
       winner: result.winner === 'player' ? 'attacker' : result.winner === 'npc' ? 'defender' : 'draw',
       loot: result.loot,
-    })
+    }).select('id').single()
+
+    const winText = result.winner === 'player' ? 'gewonnen' : result.winner === 'npc' ? 'verloren' : 'unentschieden'
+    await notify(fleet.player_id, 'battle',
+      `Kampf ${winText}`,
+      `${fleet.name ?? 'Flotte'} war in einen Kampf bei ${fx} / ${fy} / ${fz} verwickelt und hat ${winText}.`,
+      { battle_report_id: reportData?.id, fleet_id: fleet.id, x: fx, y: fy, z: fz, winner: result.winner, loot: result.loot }
+    )
 
     battles++
     log.push(`combat(${npcType}@${fx}/${fy}/${fz}):${result.winner}`)
