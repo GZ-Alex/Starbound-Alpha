@@ -59,20 +59,22 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
   const baseStats = {
     hp: chassis.base_hp, attack: chassis.base_attack, defense: chassis.base_defense,
     speed: chassis.base_speed, maneuver: chassis.base_maneuver, cargo: chassis.base_cargo,
-    scan_range: 0,
+    scan_range: 0, ast_scan_range: 0, npc_scan_range: 0,
   }
 
   const stats = selectedParts.reduce((acc, pid) => {
     const p = (partDefs ?? []).find(d => d.id === pid)
     if (!p) return acc
     return {
-      hp:         acc.hp         + (p.hp_bonus       || 0),
-      attack:     acc.attack     + (p.attack_bonus    || 0) - (p.attack_malus   || 0),
-      defense:    acc.defense    + (p.defense_bonus   || 0),
-      speed:      acc.speed      + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
-      maneuver:   acc.maneuver   + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
-      cargo:      acc.cargo      + (p.cargo_bonus     || 0),
-      scan_range: acc.scan_range + (p.scan_range      || 0),
+      hp:             acc.hp             + (p.hp_bonus       || 0),
+      attack:         acc.attack         + (p.attack_bonus   || 0) - (p.attack_malus   || 0),
+      defense:        acc.defense        + (p.defense_bonus  || 0),
+      speed:          acc.speed          + (p.speed_bonus    || 0) - (p.speed_malus    || 0),
+      maneuver:       acc.maneuver       + (p.maneuver_bonus || 0) - (p.maneuver_malus || 0),
+      cargo:          acc.cargo          + (p.cargo_bonus    || 0),
+      scan_range:     acc.scan_range     + (p.scan_range     || 0),
+      ast_scan_range: acc.ast_scan_range + (p.category === 'scanner_asteroid' ? (p.scan_range || 0) : 0),
+      npc_scan_range: acc.npc_scan_range + (p.category === 'scanner_npc'      ? (p.scan_range || 0) : 0),
     }
   }, { ...baseStats })
 
@@ -122,6 +124,8 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
         total_maneuver:  stats.maneuver,
         total_cargo:     stats.cargo,
         total_scan_range: stats.scan_range,
+        ast_scan_range:  stats.ast_scan_range,
+        npc_scan_range:  stats.npc_scan_range,
         total_cells_used: totalCells,
         shipyard_space:  chassis.shipyard_space ?? 100,
         build_minutes:   buildMinutes,
