@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import {
   Navigation, ChevronLeft, Package, Shield, Zap,
   Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store,
-  Bookmark, BookmarkPlus, Trash2, Send, Users
+  Bookmark, BookmarkPlus, Trash2, Send, Users, Globe
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
