@@ -575,9 +575,10 @@ function DissolveConfirmModal({ fleet, onClose, onDissolved }) {
 
   const handleDissolve = async () => {
     setDissolving(true)
-    // Schiffe bleiben an ihrer aktuellen Position (fleet.x/y/z) — fleet_id auf null
-    // Die Position wird NICHT geändert, Schiffe bleiben wo die Flotte stand
-    await supabase.from('ships').update({ fleet_id: null }).eq('fleet_id', fleet.id)
+    // Schiffe behalten die Position der aufgelösten Flotte
+    await supabase.from('ships')
+      .update({ fleet_id: null, x: fleet.x, y: fleet.y, z: fleet.z })
+      .eq('fleet_id', fleet.id)
     // Flotte löschen
     await supabase.from('fleets').delete().eq('id', fleet.id)
     setDissolving(false)
@@ -1026,21 +1027,16 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
       {(() => {
         const nearby = allShips.filter(s =>
           !s.fleet_id &&
-          (s.planet_x ?? planet?.x) === fleet.x &&
-          (s.planet_y ?? planet?.y) === fleet.y &&
-          (s.planet_z ?? planet?.z) === fleet.z
+          s.x === fleet.x && s.y === fleet.y && s.z === fleet.z
         )
-        // Fallback: zeige alle Schiffe ohne Flotte wenn Koordinaten nicht auflösbar
-        const docked = allShips.filter(s => !s.fleet_id)
-        const toShow = nearby.length > 0 ? nearby : docked
-        if (!toShow.length) return null
+        if (!nearby.length) return null
         return (
           <div className="panel p-5">
             <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">
-              Im Dock — ohne Flotte ({toShow.length})
+              Auf dieser Position — ohne Flotte ({nearby.length})
             </p>
             <div className="space-y-2">
-              {toShow.map(ship => {
+              {nearby.map(ship => {
                 const chassis = chassisDefs.find(c => c.id === ship.ship_designs?.chassis_id)
                 const imgSrc = chassis?.image_key ? `/Starbound-Alpha/ships/${chassis.image_key}.png` : null
                 const hpPct = ship.max_hp > 0 ? Math.round((ship.current_hp / ship.max_hp) * 100) : 0
