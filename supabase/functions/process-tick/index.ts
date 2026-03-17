@@ -406,87 +406,53 @@ async function processAsteroidTick(log: string[]) {
 
 // ── NPC Chassis-Pool nach Schwierigkeit ──────────────────────────────────────
 
-const NPC_DIFFICULTY = {
-  pirat_leicht: 'rookie',
-  pirat_mittel: 'veteran',
+const NPC_DIFFICULTY: Record<string, string> = {
+  pirat_leicht:    'rookie',
+  pirat_mittel:    'veteran',
   piraten_verbund: 'elite',
   haendler_konvoi: 'rookie',
   npc_streitmacht: 'commander',
-} as const
+}
 
 type Difficulty = 'rookie' | 'soldat' | 'veteran' | 'elite' | 'commander'
 
-// Multiplikatoren pro Schwierigkeit
 const DIFF_STATS: Record<Difficulty, { statMul: number; hpMul: number }> = {
-  rookie:    { statMul: 1.0, hpMul: 1.5  },
-  soldat:    { statMul: 1.5, hpMul: 2.0  },
-  veteran:   { statMul: 2.0, hpMul: 2.5  },
-  elite:     { statMul: 2.5, hpMul: 3.0  },
-  commander: { statMul: 3.0, hpMul: 4.0  },
+  rookie:    { statMul: 1.0, hpMul: 1.5 },
+  soldat:    { statMul: 1.5, hpMul: 2.0 },
+  veteran:   { statMul: 2.0, hpMul: 2.5 },
+  elite:     { statMul: 2.5, hpMul: 3.0 },
+  commander: { statMul: 3.0, hpMul: 4.0 },
 }
 
-// Klassen-Pool pro Schwierigkeit: [Kampfschiffe, Handelsschiffe]
 const DIFF_CLASSES: Record<Difficulty, { combat: string[]; trade: string[] }> = {
-  rookie:    { combat: ['B','B','C'],           trade: ['Z'] },
-  soldat:    { combat: ['B','C','C'],           trade: ['Z'] },
-  veteran:   { combat: ['B','C','C','D'],       trade: ['A'] },
-  elite:     { combat: ['C','C','D','D','E'],   trade: ['A'] },
-  commander: { combat: ['D','D','E','E'],       trade: ['A'] },
+  rookie:    { combat: ['B','B','C'],         trade: ['Z'] },
+  soldat:    { combat: ['B','C','C'],         trade: ['Z'] },
+  veteran:   { combat: ['B','C','C','D'],     trade: ['A'] },
+  elite:     { combat: ['C','C','D','D','E'], trade: ['A'] },
+  commander: { combat: ['D','D','E','E'],     trade: ['A'] },
 }
 
-// Schuss-Anzahl pro Klasse
-const CLASS_SHOTS: Record<string, number> = {
-  Z: 0, A: 0, B: 1, C: 2, D: 3, E: 6,
-}
+const CLASS_SHOTS: Record<string, number> = { Z: 0, A: 0, B: 1, C: 2, D: 3, E: 6 }
 
-// Schadens-Formel
 function calcDamage(attack: number, defense: number): number {
-  const dmg = attack * (1 - defense / (defense + 100))
-  return Math.max(1, Math.round(dmg))
+  return Math.max(1, Math.round(attack * (1 - defense / (defense + 100))))
 }
 
-// Trefferchance (10%-90%)
-function hitChance(attackerManeuver: number, defenderManeuver: number): number {
-  const raw = 50 + attackerManeuver * 0.5 - defenderManeuver * 0.5
-  return Math.min(90, Math.max(10, raw)) / 100
+function hitChance(atkManeuver: number, defManeuver: number): number {
+  return Math.min(0.90, Math.max(0.10, (50 + atkManeuver * 0.5 - defManeuver * 0.5) / 100))
 }
 
-// Zufallszahl 0-1
-function rand(): number {
-  return Math.random()
-}
-
-// ── NPC Schiff generieren ──────────────────────────────────────────────────────
+function rand(): number { return Math.random() }
 
 interface NpcShip {
-  id: string
-  chassisClass: string
-  chassisId: string
-  name: string
-  hp: number
-  maxHp: number
-  attack: number
-  defense: number
-  speed: number
-  maneuver: number
-  cargo: number
-  shots: number
-  targetClass: string // priorisiertes Ziel
-  isTrader: boolean
-  loot: Record<string, number>
+  id: string; chassisClass: string; chassisId: string; name: string
+  hp: number; maxHp: number; attack: number; defense: number
+  speed: number; maneuver: number; cargo: number; shots: number
+  targetClass: string; isTrader: boolean; loot: Record<string, number>
 }
 
-function buildNpcShip(
-  chassis: any,
-  diff: Difficulty,
-  isTrader: boolean,
-  idx: number
-): NpcShip {
+function buildNpcShip(chassis: any, diff: Difficulty, isTrader: boolean, idx: number): NpcShip {
   const { statMul, hpMul } = DIFF_STATS[diff]
-  const baseHp = Math.round(chassis.base_hp * hpMul)
-  const shots = isTrader ? 0 : (CLASS_SHOTS[chassis.class] ?? 0)
-
-  // Händler haben zufällige Rohstoffe
   const loot: Record<string, number> = {}
   if (isTrader) {
     const resources = ['titan','silizium','helium','aluminium','uran']
@@ -496,378 +462,355 @@ function buildNpcShip(
       loot[res] = (loot[res] ?? 0) + Math.floor(500 + rand() * 2000)
     }
   }
-
   return {
-    id: `npc_${idx}`,
-    chassisClass: chassis.class,
-    chassisId: chassis.id,
+    id: `npc_${idx}`, chassisClass: chassis.class, chassisId: chassis.id,
     name: isTrader ? `${chassis.name} (Händler)` : chassis.name,
-    hp: baseHp,
-    maxHp: baseHp,
+    hp: Math.round(chassis.base_hp * hpMul), maxHp: Math.round(chassis.base_hp * hpMul),
     attack:   Math.round(chassis.base_attack   * statMul),
     defense:  Math.round(chassis.base_defense  * statMul),
     speed:    Math.round(chassis.base_speed    * statMul),
     maneuver: Math.round(chassis.base_maneuver * statMul),
-    cargo:    chassis.base_cargo,
-    shots,
-    targetClass: chassis.class, // gleiche Klasse wird priorisiert
-    isTrader,
-    loot,
+    cargo: chassis.base_cargo,
+    shots: isTrader ? 0 : (CLASS_SHOTS[chassis.class] ?? 0),
+    targetClass: chassis.class, isTrader, loot,
   }
 }
 
-// NPC-Flotte für einen npc_type generieren
 function buildNpcFleet(npcType: string, chassisDefs: any[]): NpcShip[] {
-  const diff = (NPC_DIFFICULTY[npcType as keyof typeof NPC_DIFFICULTY] ?? 'rookie') as Difficulty
+  const diff = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
   const pool = DIFF_CLASSES[diff]
-
   const ships: NpcShip[] = []
   let idx = 0
-
-  // 1-3 Kampfschiffe
   const combatCount = 1 + Math.floor(rand() * Math.min(3, pool.combat.length))
   for (let i = 0; i < combatCount; i++) {
     const cls = pool.combat[Math.floor(rand() * pool.combat.length)]
-    const candidates = chassisDefs.filter(c => c.class === cls && !c.id.includes('station'))
-    if (!candidates.length) continue
-    const chassis = candidates[Math.floor(rand() * candidates.length)]
-    ships.push(buildNpcShip(chassis, diff, false, idx++))
+    const cands = chassisDefs.filter((c: any) => c.class === cls && !c.id.includes('station'))
+    if (!cands.length) continue
+    ships.push(buildNpcShip(cands[Math.floor(rand() * cands.length)], diff, false, idx++))
   }
-
-  // 1 Handelsschiff
   const tradeCls = pool.trade[Math.floor(rand() * pool.trade.length)]
-  const tradeCandidates = chassisDefs.filter(c =>
-    c.class === tradeCls &&
-    c.base_cargo > 0 &&
-    !c.id.includes('station') &&
-    !c.id.includes('probe')
+  const tradeCands = chassisDefs.filter((c: any) =>
+    c.class === tradeCls && c.base_cargo > 0 && !c.id.includes('station') && !c.id.includes('probe')
   )
-  if (tradeCandidates.length) {
-    const chassis = tradeCandidates[Math.floor(rand() * tradeCandidates.length)]
-    ships.push(buildNpcShip(chassis, diff, true, idx++))
-  }
-
+  if (tradeCands.length)
+    ships.push(buildNpcShip(tradeCands[Math.floor(rand() * tradeCands.length)], diff, true, idx++))
   return ships
 }
 
-// ── Spieler-Schiff Interface ───────────────────────────────────────────────────
-
 interface CombatShip {
-  id: string
-  name: string
-  chassisClass: string
-  hp: number
-  maxHp: number
-  attack: number
-  defense: number
-  speed: number
-  maneuver: number
-  shots: number
-  autoRetreatAt: number // HP-% 0=nie
-  isPlayer: true
+  id: string; name: string; chassisClass: string
+  hp: number; maxHp: number; attack: number; defense: number
+  speed: number; maneuver: number; shots: number
+  autoRetreatAt: number; isPlayer: true
 }
 
 function playerShipToCombat(ship: any, chassisDefs: any[]): CombatShip {
   const d = ship.ship_designs
   const chassis = chassisDefs.find((c: any) => c.id === d?.chassis_id)
   const cls = chassis?.class ?? 'B'
-
-  // Waffen zählen aus installed_parts
   const parts: string[] = d?.installed_parts ?? []
   const weaponCount = parts.filter((p: string) =>
-    p.startsWith('laser') || p.startsWith('ion_cannon') ||
-    p.startsWith('railgun') || p.startsWith('turret')
+    p.startsWith('laser') || p.startsWith('ion_cannon') || p.startsWith('railgun') || p.startsWith('turret')
   ).length
-  const shots = Math.max(1, weaponCount)
-
   return {
-    id: ship.id,
-    name: ship.name ?? d?.name ?? 'Schiff',
-    chassisClass: cls,
-    hp: ship.current_hp,
-    maxHp: ship.max_hp,
-    attack: d?.total_attack ?? chassis?.base_attack ?? 10,
-    defense: d?.total_defense ?? chassis?.base_defense ?? 5,
-    speed: d?.total_speed ?? chassis?.base_speed ?? 20,
+    id: ship.id, name: ship.name ?? d?.name ?? 'Schiff', chassisClass: cls,
+    hp: ship.current_hp, maxHp: ship.max_hp,
+    attack:   d?.total_attack   ?? chassis?.base_attack   ?? 10,
+    defense:  d?.total_defense  ?? chassis?.base_defense  ?? 5,
+    speed:    d?.total_speed    ?? chassis?.base_speed    ?? 20,
     maneuver: d?.total_maneuver ?? chassis?.base_maneuver ?? 20,
-    shots,
+    shots: Math.max(1, weaponCount),
     autoRetreatAt: ship.auto_retreat_at ?? 0,
     isPlayer: true,
   }
 }
 
-// ── Kampf-Simulation ──────────────────────────────────────────────────────────
-
-interface RoundLog {
-  round: number
-  actions: Array<{
-    attackerId: string
-    attackerName: string
-    targetId: string
-    targetName: string
-    hit: boolean
-    damage: number
-    targetHpAfter: number
-    destroyed: boolean
-  }>
-  playerHpTotal: number
-  npcHpTotal: number
+interface RoundAction {
+  attackerId: string; attackerName: string
+  targetId: string; targetName: string
+  hit: boolean; damage: number; targetHpAfter: number; destroyed: boolean
 }
 
-function simulateBattle(
-  playerShips: CombatShip[],
-  npcShips: NpcShip[],
-  maxRounds = 20
-): {
-  rounds: RoundLog[]
-  playerSurvivors: string[]
-  npcSurvivors: string[]
-  winner: 'player' | 'npc' | 'draw'
-  loot: Record<string, number>
-} {
-  // Arbeits-Kopien mit HP
-  const pShips = playerShips.map(s => ({ ...s }))
-  const nShips = npcShips.map(s => ({ ...s }))
-  const rounds: RoundLog[] = []
+// Simuliert EINE Runde — mutiert hp in-place
+// NPCs fliehen nie (no autoRetreat for NPCs)
+function simulateOneRound(
+  pShips: CombatShip[],
+  nShips: NpcShip[]
+): { actions: RoundAction[]; playerHpTotal: number; npcHpTotal: number; fleeingPlayerIds: string[] } {
+  const actions: RoundAction[] = []
+  const fleeingPlayerIds: string[] = []
 
-  for (let round = 1; round <= maxRounds; round++) {
-    const alivePlayers = pShips.filter(s => s.hp > 0)
-    const aliveNpcs    = nShips.filter(s => s.hp > 0)
-    if (!alivePlayers.length || !aliveNpcs.length) break
+  type Fighter = { id: string; name: string; maneuver: number; side: 'player' | 'npc' }
+  const order: Fighter[] = [
+    ...pShips.filter(s => s.hp > 0).map(s => ({ id: s.id, name: s.name, maneuver: s.maneuver + rand() * 5, side: 'player' as const })),
+    ...nShips.filter(s => s.hp > 0).map(s => ({ id: s.id, name: s.name, maneuver: s.maneuver + rand() * 5, side: 'npc' as const })),
+  ].sort((a, b) => b.maneuver - a.maneuver)
 
-    const actions: RoundLog['actions'] = []
-
-    // Alle Kämpfer in Reihenfolge: höheres Manöver geht zuerst
-    type Fighter = { id: string; name: string; maneuver: number; isPlayer: boolean; side: 'player'|'npc' }
-    const order: Fighter[] = [
-      ...alivePlayers.map(s => ({ id: s.id, name: s.name, maneuver: s.maneuver + rand() * 5, isPlayer: true as const, side: 'player' as const })),
-      ...aliveNpcs.map(s => ({ id: s.id, name: s.name, maneuver: s.maneuver + rand() * 5, isPlayer: false as const, side: 'npc' as const })),
-    ].sort((a, b) => b.maneuver - a.maneuver)
-
-    for (const fighter of order) {
-      if (fighter.isPlayer) {
-        const attacker = pShips.find(s => s.id === fighter.id)
-        if (!attacker || attacker.hp <= 0) continue
-        const enemiesAlive = nShips.filter(s => s.hp > 0)
-        if (!enemiesAlive.length) break
-
-        // Schießt so oft wie shots erlaubt
-        for (let shot = 0; shot < attacker.shots; shot++) {
-          const stillAlive = nShips.filter(s => s.hp > 0)
-          if (!stillAlive.length) break
-          // Priorisiere gleiche Klasse, sonst zufällig
-          const preferred = stillAlive.filter(s => s.chassisClass === attacker.chassisClass)
-          const target = preferred.length ? preferred[Math.floor(rand() * preferred.length)] : stillAlive[Math.floor(rand() * stillAlive.length)]
-          const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
-          const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
-          if (hit) target.hp = Math.max(0, target.hp - damage)
-          actions.push({
-            attackerId: attacker.id, attackerName: attacker.name,
-            targetId: target.id, targetName: target.name,
-            hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0,
-          })
-        }
-      } else {
-        const attacker = nShips.find(s => s.id === fighter.id)
-        if (!attacker || attacker.hp <= 0 || attacker.isTrader || attacker.shots === 0) continue
-        const enemiesAlive = pShips.filter(s => s.hp > 0)
-        if (!enemiesAlive.length) break
-
-        for (let shot = 0; shot < attacker.shots; shot++) {
-          const stillAlive = pShips.filter(s => s.hp > 0)
-          if (!stillAlive.length) break
-          // Priorisiere gleiche Klasse
-          const preferred = stillAlive.filter(s => s.chassisClass === attacker.targetClass)
-          const target = preferred.length ? preferred[Math.floor(rand() * preferred.length)] : stillAlive[Math.floor(rand() * stillAlive.length)]
-          const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
-          const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
-          if (hit) target.hp = Math.max(0, target.hp - damage)
-          actions.push({
-            attackerId: attacker.id, attackerName: attacker.name,
-            targetId: target.id, targetName: target.name,
-            hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0,
-          })
-        }
+  for (const fighter of order) {
+    if (fighter.side === 'player') {
+      const attacker = pShips.find(s => s.id === fighter.id)
+      if (!attacker || attacker.hp <= 0) continue
+      const targets = nShips.filter(s => s.hp > 0)
+      if (!targets.length) break
+      for (let shot = 0; shot < attacker.shots; shot++) {
+        const alive = nShips.filter(s => s.hp > 0)
+        if (!alive.length) break
+        const pref = alive.filter(s => s.chassisClass === attacker.chassisClass)
+        const target = pref.length ? pref[Math.floor(rand() * pref.length)] : alive[Math.floor(rand() * alive.length)]
+        const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
+        const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
+        if (hit) target.hp = Math.max(0, target.hp - damage)
+        actions.push({ attackerId: attacker.id, attackerName: attacker.name, targetId: target.id, targetName: target.name, hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0 })
       }
-
-      // Auto-Retreat prüfen für Spieler-Schiffe nach jedem Schuss-Satz
-      for (const ps of pShips) {
-        if (ps.hp > 0 && ps.autoRetreatAt > 0) {
-          const hpPct = (ps.hp / ps.maxHp) * 100
-          if (hpPct <= ps.autoRetreatAt) ps.hp = -1 // markiert als geflohen
-        }
+    } else {
+      const attacker = nShips.find(s => s.id === fighter.id)
+      if (!attacker || attacker.hp <= 0 || attacker.isTrader || attacker.shots === 0) continue
+      const alive = pShips.filter(s => s.hp > 0)
+      if (!alive.length) break
+      for (let shot = 0; shot < attacker.shots; shot++) {
+        const stillAlive = pShips.filter(s => s.hp > 0)
+        if (!stillAlive.length) break
+        const pref = stillAlive.filter(s => s.chassisClass === attacker.targetClass)
+        const target = pref.length ? pref[Math.floor(rand() * pref.length)] : stillAlive[Math.floor(rand() * stillAlive.length)]
+        const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
+        const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
+        if (hit) target.hp = Math.max(0, target.hp - damage)
+        actions.push({ attackerId: attacker.id, attackerName: attacker.name, targetId: target.id, targetName: target.name, hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0 })
       }
-    }
-
-    rounds.push({
-      round,
-      actions,
-      playerHpTotal: pShips.filter(s => s.hp > 0).reduce((s, p) => s + p.hp, 0),
-      npcHpTotal:    nShips.filter(s => s.hp > 0).reduce((s, n) => s + n.hp, 0),
-    })
-
-    if (!pShips.filter(s => s.hp > 0).length || !nShips.filter(s => s.hp > 0).length) break
-  }
-
-  const playerSurvivors = pShips.filter(s => s.hp > 0).map(s => s.id)
-  const npcSurvivors    = nShips.filter(s => s.hp > 0).map(s => s.id)
-
-  // Loot von zerstörten/übergebenen Händlern sammeln
-  const loot: Record<string, number> = {}
-  const destroyedTraders = nShips.filter(s => s.hp <= 0 && s.isTrader)
-  for (const trader of destroyedTraders) {
-    for (const [res, amt] of Object.entries(trader.loot ?? {})) {
-      loot[res] = (loot[res] ?? 0) + (amt as number)
     }
   }
 
-  let winner: 'player' | 'npc' | 'draw'
-  if (!playerSurvivors.length && !npcSurvivors.length) winner = 'draw'
-  else if (!playerSurvivors.length) winner = 'npc'
-  else winner = 'player'
+  // Auto-Retreat prüfen nach der Runde
+  for (const ps of pShips) {
+    if (ps.hp > 0 && ps.autoRetreatAt > 0) {
+      if ((ps.hp / ps.maxHp) * 100 <= ps.autoRetreatAt) {
+        ps.hp = -1 // geflohen
+        fleeingPlayerIds.push(ps.id)
+      }
+    }
+  }
 
-  return { rounds, playerSurvivors, npcSurvivors, winner, loot }
+  return {
+    actions,
+    playerHpTotal: pShips.filter(s => s.hp > 0).reduce((a, s) => a + s.hp, 0),
+    npcHpTotal:    nShips.filter(s => s.hp > 0).reduce((a, s) => a + s.hp, 0),
+    fleeingPlayerIds,
+  }
 }
 
-// ── Hauptfunktion: Kämpfe im Tick auslösen ────────────────────────────────────
+// ── Hauptfunktion: Kämpfe im Tick auflösen ────────────────────────────────────
 
 async function processCombat(log: string[]) {
-  // Alle stationären, aggressiven Spielerflotten laden
+  const chassisDefs = await supabase.from('chassis_definitions').select('*').then(r => r.data ?? [])
+  if (!chassisDefs.length) return
+
+  // ── 1. Abgelaufene NPC-Kampfflotten löschen ────────────────────────────────
+  await supabase.from('npc_combat_fleets').delete().lt('expires_at', new Date().toISOString())
+
+  // ── 2. Laufende Kämpfe: je eine Runde simulieren ──────────────────────────
+  const { data: activeBattles } = await supabase
+    .from('active_battles')
+    .select('*, fleets(player_id, flight_mode, x, y, z, ships(*, ship_designs(*)))')
+
+  let battlesResolved = 0
+
+  for (const battle of activeBattles ?? []) {
+    const pShips: CombatShip[] = battle.player_ships
+    const nShips: NpcShip[]    = battle.npc_ships
+    const alivePlayers = pShips.filter((s: CombatShip) => s.hp > 0)
+    const aliveNpcs    = nShips.filter((s: NpcShip) => s.hp > 0)
+
+    if (!alivePlayers.length || !aliveNpcs.length) {
+      // Kampf bereits entschieden — aufräumen
+      await finalizeBattle(battle, pShips, nShips, chassisDefs, log)
+      await supabase.from('active_battles').delete().eq('id', battle.id)
+      battlesResolved++
+      continue
+    }
+
+    // Eine Runde simulieren
+    const roundResult = simulateOneRound(pShips, nShips)
+    const roundLog = {
+      round: battle.round + 1,
+      actions: roundResult.actions,
+      playerHpTotal: roundResult.playerHpTotal,
+      npcHpTotal: roundResult.npcHpTotal,
+    }
+    const newRoundsLog = [...(battle.rounds_log ?? []), roundLog]
+
+    const stillAlivePlayers = pShips.filter((s: CombatShip) => s.hp > 0)
+    const stillAliveNpcs    = nShips.filter((s: NpcShip) => s.hp > 0)
+    const battleOver = !stillAlivePlayers.length || !stillAliveNpcs.length
+
+    if (battleOver) {
+      // Kampf vorbei — finalisieren
+      await supabase.from('active_battles').update({
+        player_ships: pShips, npc_ships: nShips,
+        round: battle.round + 1, rounds_log: newRoundsLog,
+        last_tick_at: new Date().toISOString(),
+      }).eq('id', battle.id)
+      await finalizeBattle({ ...battle, rounds_log: newRoundsLog, round: battle.round + 1 }, pShips, nShips, chassisDefs, log)
+      await supabase.from('active_battles').delete().eq('id', battle.id)
+      battlesResolved++
+    } else {
+      // Kampf läuft weiter
+      await supabase.from('active_battles').update({
+        player_ships: pShips, npc_ships: nShips,
+        round: battle.round + 1, rounds_log: newRoundsLog,
+        last_tick_at: new Date().toISOString(),
+      }).eq('id', battle.id)
+    }
+  }
+
+  // ── 3. Neue Kämpfe auslösen ────────────────────────────────────────────────
   const { data: aggressiveFleets } = await supabase
     .from('fleets')
     .select('*, ships(*, ship_designs(*))')
     .eq('is_in_transit', false)
     .in('flight_mode', ['enemy', 'annihilation', 'bounty'])
 
-  if (!aggressiveFleets?.length) return
+  let newBattles = 0
 
-  // Chassis-Definitionen für NPC-Generierung
-  const { data: chassisDefs } = await supabase
-    .from('chassis_definitions')
-    .select('id, class, base_hp, base_attack, base_defense, base_speed, base_maneuver, base_cargo')
-
-  if (!chassisDefs?.length) return
-
-  let battles = 0
-
-  for (const fleet of aggressiveFleets) {
+  for (const fleet of aggressiveFleets ?? []) {
     const ships = (fleet.ships ?? []) as any[]
     if (!ships.length) continue
 
+    // Kein Kampf wenn bereits aktiver Kampf
+    const { data: existing } = await supabase
+      .from('active_battles').select('id').eq('fleet_id', fleet.id).limit(1)
+    if (existing?.length) continue
+
     const fx = fleet.x ?? 0, fy = fleet.y ?? 0, fz = fleet.z ?? 0
 
-    // Prüfe ob NPCs an dieser Position existieren (gleiche Logik wie coord_hash im RPC)
-    // Wir nutzen einen einfachen deterministischen Hash: gleiche Koordinate + time_slot
-    const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
-    const hashVal = coordHashJs(fx, fy, fz, timeSlot)
-    if (hashVal > 0.25) continue // kein NPC an dieser Position
-
-    // NPC-Typ bestimmen
-    const typeHash = coordHashJs(fx, fy, fz, timeSlot + 1)
-    let npcType: string
-    if (typeHash < 0.70)       npcType = 'pirat_leicht'
-    else if (typeHash < 0.90)  npcType = 'pirat_mittel'
-    else                       npcType = 'piraten_verbund'
-
-    // Nur kämpfen wenn flight_mode es erlaubt
-    if (fleet.flight_mode === 'bounty' && !npcType.startsWith('pirat')) continue
-
-    // Kampf bereits diesen Tick? (vermeidet Doppelkämpfe)
-    const { data: existingReport } = await supabase
-      .from('battle_reports')
-      .select('id')
-      .eq('attacker_id', fleet.player_id)
-      .gte('occurred_at', new Date(Date.now() - 35000).toISOString()) // letzte 35s
+    // Persistente NPC-Flotte an dieser Position suchen
+    let { data: npcFleetRow } = await supabase
+      .from('npc_combat_fleets')
+      .select('*')
+      .eq('x', fx).eq('y', fy).eq('z', fz)
+      .gt('expires_at', new Date().toISOString())
       .limit(1)
-    if (existingReport?.length) continue
+      .maybeSingle()
 
-    // Spieler-Schiffe vorbereiten
-    const playerCombatShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs))
+    // Wenn keine persistente NPC-Flotte: coord_hash prüfen ob NPC hier sein sollte
+    if (!npcFleetRow) {
+      const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
+      const hashVal = coordHashJs(fx, fy, fz, timeSlot)
+      if (hashVal > 0.025) continue // NPC-Dichte: 1/10 des vorherigen Wertes
 
-    // NPC-Flotte generieren
-    const npcFleet = buildNpcFleet(npcType, chassisDefs)
+      const typeHash = coordHashJs(fx, fy, fz, timeSlot + 1)
+      const npcType = typeHash < 0.70 ? 'pirat_leicht' : typeHash < 0.90 ? 'pirat_mittel' : 'piraten_verbund'
+      if (fleet.flight_mode === 'bounty' && !npcType.startsWith('pirat')) continue
 
-    // Simulation
-    const pShipsCopy = playerCombatShips.map(s => ({ ...s }))
-    const result = simulateBattle(pShipsCopy, npcFleet)
+      const diff = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
+      const npcShips = buildNpcFleet(npcType, chassisDefs)
 
-    // HP der Spieler-Schiffe aktualisieren
-    for (const ps of pShipsCopy) {
-      const ship = ships.find((s: any) => s.id === ps.id)
-      if (!ship) continue
-      const survived = result.playerSurvivors.includes(ps.id)
-      if (survived) {
-        await supabase.from('ships').update({ current_hp: Math.max(1, ps.hp) }).eq('id', ps.id)
-      } else {
-        // Schiff zerstört oder geflohen
-        if (ps.hp === -1) {
-          // Geflohen: bleibt mit 1 HP
-          await supabase.from('ships').update({ current_hp: 1 }).eq('id', ps.id)
-        } else {
-          // Zerstört: als Wrack
-          await supabase.from('wrecks').insert({ x: fx, y: fy, z: fz, resources: {} })
-          await supabase.from('ships').delete().eq('id', ps.id)
-        }
-      }
+      const { data: inserted } = await supabase.from('npc_combat_fleets').insert({
+        npc_type: npcType, difficulty: diff, x: fx, y: fy, z: fz,
+        ships: npcShips, time_slot: timeSlot,
+        expires_at: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+      }).select().single()
+      npcFleetRow = inserted
     }
 
-    // Loot auf Flotte verteilen wenn Spieler gewonnen
-    if (result.winner === 'player' && Object.keys(result.loot).length > 0) {
-      const currentCargo = fleet.cargo ?? {}
-      const newCargo: Record<string, number> = { ...currentCargo }
-      for (const [res, amt] of Object.entries(result.loot)) {
-        newCargo[res] = (newCargo[res] ?? 0) + (amt as number)
-      }
-      await supabase.from('fleets').update({ cargo: newCargo }).eq('id', fleet.id)
-    }
+    if (!npcFleetRow) continue
 
-    // Battle Report speichern
-    const npcShipSnapshot = npcFleet.map(s => ({
-      id: s.id, name: s.name, chassisClass: s.chassisClass,
-      hp: s.hp, maxHp: s.maxHp, attack: s.attack, defense: s.defense,
-    }))
-    const playerShipSnapshot = ships.map((s: any) => ({
-      id: s.id, name: s.name ?? s.ship_designs?.name,
-      maxHp: s.max_hp, attack: s.ship_designs?.total_attack,
-    }))
+    const npcShips: NpcShip[] = npcFleetRow.ships
+    const aliveNpcs = npcShips.filter((s: NpcShip) => s.hp > 0)
+    if (!aliveNpcs.length) continue // NPC-Flotte bereits zerstört
 
-    const { data: reportData } = await supabase.from('battle_reports').insert({
-      attacker_id:    fleet.player_id,
-      defender_id:    null,
-      x: fx, y: fy, z: fz,
-      attacker_fleet: { fleet_id: fleet.id, ships: playerShipSnapshot },
-      defender_fleet: { npc_type: npcType, ships: npcShipSnapshot },
-      rounds:         result.rounds,
-      result: {
-        winner:           result.winner,
-        player_survivors: result.playerSurvivors.length,
-        npc_survivors:    result.npcSurvivors.length,
-        rounds_fought:    result.rounds.length,
-        loot:             result.loot,
-      },
-      winner: result.winner === 'player' ? 'attacker' : result.winner === 'npc' ? 'defender' : 'draw',
-      loot: result.loot,
-    }).select('id').single()
+    // Neuen Kampf starten
+    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs))
+    await supabase.from('active_battles').insert({
+      player_id: fleet.player_id, fleet_id: fleet.id,
+      npc_fleet_id: npcFleetRow.id, x: fx, y: fy, z: fz,
+      player_ships: pShips, npc_ships: npcShips,
+      round: 0, rounds_log: [],
+    })
 
-    const winText = result.winner === 'player' ? 'gewonnen' : result.winner === 'npc' ? 'verloren' : 'unentschieden'
     await notify(fleet.player_id, 'battle',
-      `Kampf ${winText}`,
-      `${fleet.name ?? 'Flotte'} war in einen Kampf bei ${fx} / ${fy} / ${fz} verwickelt und hat ${winText}.`,
-      { battle_report_id: reportData?.id, fleet_id: fleet.id, x: fx, y: fy, z: fz, winner: result.winner, loot: result.loot }
+      'Kampf begonnen',
+      `${fleet.name ?? 'Flotte'} hat Feindkontakt bei ${fx} / ${fy} / ${fz}.`,
+      { fleet_id: fleet.id, x: fx, y: fy, z: fz }
     )
-
-    battles++
-    log.push(`combat(${npcType}@${fx}/${fy}/${fz}):${result.winner}`)
+    newBattles++
+    log.push(`battle_started@${fx}/${fy}/${fz}`)
   }
 
-  if (battles > 0) log.push(`battles=${battles}`)
+  if (battlesResolved > 0) log.push(`battles_resolved=${battlesResolved}`)
+  if (newBattles > 0) log.push(`battles_new=${newBattles}`)
 }
 
-// Deterministischer Hash — exaktes JS-Äquivalent zur PostgreSQL coord_hash Funktion:
-// SELECT (((x * 1000003) # (y * 999983) # (z * 999979) # salt) & 2147483647)::FLOAT / 2147483647.0
+// ── Kampf finalisieren ────────────────────────────────────────────────────────
+
+async function finalizeBattle(
+  battle: any, pShips: CombatShip[], nShips: NpcShip[],
+  chassisDefs: any[], log: string[]
+) {
+  const playerSurvivors = pShips.filter((s: CombatShip) => s.hp > 0).map((s: CombatShip) => s.id)
+  const npcSurvivors    = nShips.filter((s: NpcShip) => s.hp > 0)
+  const winner = !playerSurvivors.length && !npcSurvivors.length ? 'draw'
+    : !playerSurvivors.length ? 'npc' : 'player'
+
+  // Spieler-Schiff HP aktualisieren
+  for (const ps of pShips) {
+    if (ps.hp === -1) {
+      await supabase.from('ships').update({ current_hp: 1 }).eq('id', ps.id) // geflohen
+    } else if (ps.hp <= 0) {
+      await supabase.from('wrecks').insert({ x: battle.x, y: battle.y, z: battle.z, resources: {} })
+      await supabase.from('ships').delete().eq('id', ps.id) // zerstört
+    } else {
+      await supabase.from('ships').update({ current_hp: ps.hp }).eq('id', ps.id)
+    }
+  }
+
+  // NPC-Flotte HP aktualisieren (bleibt persistent bis zerstört)
+  if (battle.npc_fleet_id) {
+    if (!npcSurvivors.length) {
+      await supabase.from('npc_combat_fleets').delete().eq('id', battle.npc_fleet_id)
+    } else {
+      await supabase.from('npc_combat_fleets').update({ ships: nShips }).eq('id', battle.npc_fleet_id)
+    }
+  }
+
+  // Loot sammeln
+  const loot: Record<string, number> = {}
+  if (winner === 'player') {
+    for (const trader of nShips.filter((s: NpcShip) => s.hp <= 0 && s.isTrader)) {
+      for (const [res, amt] of Object.entries(trader.loot ?? {})) {
+        loot[res] = (loot[res] ?? 0) + (amt as number)
+      }
+    }
+    if (Object.keys(loot).length > 0) {
+      const { data: fleetData } = await supabase.from('fleets').select('cargo').eq('id', battle.fleet_id).single()
+      const newCargo: Record<string, number> = { ...(fleetData?.cargo ?? {}) }
+      for (const [res, amt] of Object.entries(loot)) newCargo[res] = (newCargo[res] ?? 0) + (amt as number)
+      await supabase.from('fleets').update({ cargo: newCargo }).eq('id', battle.fleet_id)
+    }
+  }
+
+  // Battle Report
+  const { data: reportData } = await supabase.from('battle_reports').insert({
+    attacker_id: battle.player_id, defender_id: null,
+    x: battle.x, y: battle.y, z: battle.z,
+    attacker_fleet: { fleet_id: battle.fleet_id, ships: pShips },
+    defender_fleet: { npc_fleet_id: battle.npc_fleet_id, ships: nShips },
+    rounds: battle.rounds_log ?? [],
+    result: { winner, player_survivors: playerSurvivors.length, npc_survivors: npcSurvivors.length, rounds_fought: battle.round, loot },
+    winner: winner === 'player' ? 'attacker' : winner === 'npc' ? 'defender' : 'draw',
+    loot,
+  }).select('id').single()
+
+  const winText = winner === 'player' ? 'gewonnen' : winner === 'npc' ? 'verloren' : 'unentschieden'
+  await notify(battle.player_id, 'battle',
+    `Kampf ${winText}`,
+    `Deine Flotte hat den Kampf bei ${battle.x} / ${battle.y} / ${battle.z} ${winText}.`,
+    { battle_report_id: reportData?.id, fleet_id: battle.fleet_id, x: battle.x, y: battle.y, z: battle.z, winner, loot }
+  )
+  log.push(`battle_finished(${winner})@${battle.x}/${battle.y}/${battle.z}`)
+}
+
+// Deterministischer Hash — exaktes JS-Äquivalent zur PostgreSQL coord_hash Funktion
 function coordHashJs(x: number, y: number, z: number, salt: number): number {
-  // XOR-Verknüpfung wie in PostgreSQL (# = XOR in PG)
-  // Wichtig: JavaScript Bitoperationen arbeiten mit 32-bit signed integers
   const h = ((x * 1000003) ^ (y * 999983) ^ (z * 999979) ^ salt) & 2147483647
   return h / 2147483647.0
 }
