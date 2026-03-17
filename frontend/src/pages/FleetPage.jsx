@@ -654,34 +654,40 @@ function dist3d(ax, ay, az, bx, by, bz) {
   return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2)
 }
 
+// ─── Scan Filter Button ────────────────────────────────────────────────────────
+
+function ScanFilterBtn({ active, onToggle, label, color }) {
+  return (
+    <button onClick={onToggle}
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-all"
+      style={{
+        background: active ? `${color}15` : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${active ? color + '40' : 'rgba(255,255,255,0.08)'}`,
+        color: active ? color : '#334155',
+      }}>
+      {label}
+    </button>
+  )
+}
+
 function FleetScanArea({ fleet, ships }) {
   const [showAsteroids, setShowAsteroids] = useState(true)
   const [showPlanets,   setShowPlanets]   = useState(true)
   const [showFleets,    setShowFleets]    = useState(true)
 
-  // Scanreichweiten getrennt nach Scanner-Kategorie berechnen
   const { astRange, npcRange } = useMemo(() => {
     if (!ships.length) return { astRange: 0, npcRange: 0 }
     let ast = 0, npc = 0
     for (const ship of ships) {
-      const parts = ship.ship_designs?.installed_parts ?? []
-      // installed_parts ist ein String-Array von Part-IDs
-      // Wir brauchen die Part-Definitionen — die kommen aus dem Cache
-      // Stattdessen: total_scan_range vom Design nutzen, aufgeteilt nach Kategorie
-      // Da wir keine getrennten Totals haben, nutzen wir den Typ des Scanners
-      // scanner_asteroid → ast_range, scanner_npc → npc_range
-      // Fallback: total_scan_range gilt für beide wenn keine Kategorie bekannt
-      ast = Math.max(ast, ship.ship_designs?.ast_scan_range ?? ship.ship_designs?.total_scan_range ?? 0)
-      npc = Math.max(npc, ship.ship_designs?.npc_scan_range ?? ship.ship_designs?.total_scan_range ?? 0)
+      ast = Math.max(ast, ship.ship_designs?.ast_scan_range ?? 0)
+      npc = Math.max(npc, ship.ship_designs?.npc_scan_range ?? 0)
     }
     return { astRange: ast, npcRange: npc }
   }, [ships])
 
   const maxRange = Math.max(astRange, npcRange)
   const fx = fleet.x ?? 0, fy = fleet.y ?? 0, fz = fleet.z ?? 0
-
-  const inAstRange = (x, y, z) => dist3d(fx, fy, fz, x, y, z) <= astRange
-  const inNpcRange = (x, y, z) => dist3d(fx, fy, fz, x, y, z) <= npcRange
+  const d = (x, y, z) => dist3d(fx, fy, fz, x ?? 0, y ?? 0, z ?? 0)
 
   const { data: asteroids = [] } = useQuery({
     queryKey: ['fleet-scan-asteroids', fleet.id],
@@ -715,24 +721,12 @@ function FleetScanArea({ fleet, ships }) {
   const { data: planets = [] } = useQuery({
     queryKey: ['fleet-scan-planets', fleet.id],
     queryFn: async () => {
-      const { data } = await supabase.from('planets').select('id, name, x, y, z, owner_id')
+      const { data } = await supabase.from('planets').select('id, name, x, y, z').not('x', 'is', null)
       return data ?? []
     },
     enabled: astRange > 0,
     refetchInterval: 60000,
   })
-
-  // Ast-Scanner: sieht Asteroiden, Planeten, Stationen
-  const nearAsteroids = asteroids.filter(a => inAstRange(a.x, a.y, a.z))
-  const nearPlanets   = planets.filter(p => inAstRange(p.x, p.y, p.z))
-  const nearStations  = stations.filter(s => inAstRange(s.x, s.y, s.z))
-  // NPC-Scanner: sieht nur NPC-Flotten (Piraten etc.)
-  const nearNPC       = npcFleets.filter(f => inNpcRange(f.x, f.y, f.z))
-
-  const visibleAsteroids = showAsteroids ? nearAsteroids : []
-  const visiblePlanets   = showPlanets   ? nearPlanets   : []
-  const visibleFleets    = showFleets    ? nearNPC        : []
-  const total = nearAsteroids.length + nearPlanets.length + nearNPC.length + nearStations.length
 
   if (maxRange === 0) return (
     <div className="panel p-4">
@@ -741,62 +735,40 @@ function FleetScanArea({ fleet, ships }) {
     </div>
   )
 
-  // Filter-Toggle Button
-  const FilterBtn = ({ active, onToggle, label, color }) => (
-    <button onClick={onToggle}
-      className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-all"
-      style={{
-        background: active ? `${color}15` : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${active ? color + '40' : 'rgba(255,255,255,0.08)'}`,
-        color: active ? color : '#334155',
-      }}>
-      {label}
-    </button>
-  )
+  const nearAsteroids = asteroids.filter(a => d(a.x, a.y, a.z) <= astRange)
+  const nearPlanets   = planets.filter(p   => d(p.x, p.y, p.z) <= astRange)
+  const nearStations  = stations.filter(s  => d(s.x, s.y, s.z) <= astRange)
+  const nearNPC       = npcFleets.filter(f  => d(f.x, f.y, f.z) <= npcRange)
+
+  const visibleAsteroids = showAsteroids ? nearAsteroids : []
+  const visiblePlanets   = showPlanets   ? nearPlanets   : []
+  const visibleStations  = showPlanets   ? nearStations  : []
+  const visibleFleets    = showFleets    ? nearNPC        : []
+  const total = nearAsteroids.length + nearPlanets.length + nearNPC.length + nearStations.length
 
   return (
     <div className="panel p-5">
-      {/* Header + Reichweiten-Info */}
       <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
         <div>
           <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-1">Scanbereich</p>
           <div className="flex items-center gap-3 flex-wrap">
-            {astRange > 0 && (
-              <span className="text-xs font-mono" style={{ color: '#67e8f9' }}>
-                Ast-Scanner · {astRange} pc
-              </span>
-            )}
-            {npcRange > 0 && (
-              <span className="text-xs font-mono" style={{ color: '#f87171' }}>
-                Zielscanner · {npcRange} pc
-              </span>
-            )}
+            {astRange > 0 && <span className="text-xs font-mono" style={{ color: '#67e8f9' }}>Ast-Scanner · {astRange} pc</span>}
+            {npcRange > 0 && <span className="text-xs font-mono" style={{ color: '#f87171' }}>Zielscanner · {npcRange} pc</span>}
           </div>
         </div>
         <span className="text-xs font-mono text-slate-600">{total} Objekte</span>
       </div>
 
-      {/* Filter-Buttons */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        {astRange > 0 && (
-          <FilterBtn active={showAsteroids} onToggle={() => setShowAsteroids(v => !v)}
-            label="Asteroiden" color="#67e8f9" />
-        )}
-        {astRange > 0 && (
-          <FilterBtn active={showPlanets} onToggle={() => setShowPlanets(v => !v)}
-            label="Planeten" color="#4ade80" />
-        )}
-        {npcRange > 0 && (
-          <FilterBtn active={showFleets} onToggle={() => setShowFleets(v => !v)}
-            label="Flotten" color="#f87171" />
-        )}
+        {astRange > 0 && <ScanFilterBtn active={showAsteroids} onToggle={() => setShowAsteroids(v => !v)} label="Asteroiden" color="#67e8f9" />}
+        {astRange > 0 && <ScanFilterBtn active={showPlanets}   onToggle={() => setShowPlanets(v => !v)}   label="Planeten"   color="#4ade80" />}
+        {npcRange > 0 && <ScanFilterBtn active={showFleets}    onToggle={() => setShowFleets(v => !v)}    label="Flotten"    color="#f87171" />}
       </div>
 
       {total === 0 ? (
         <p className="text-sm font-mono text-slate-700">Keine Objekte in Scanreichweite.</p>
       ) : (
         <div className="space-y-1.5">
-          {/* NPC-Flotten — nur Zielscanner */}
           {visibleFleets.map(f => {
             const meta = NPC_TYPE_LABELS[f.npc_type] ?? { label: f.npc_type, color: '#f87171', threat: '?' }
             return (
@@ -805,39 +777,27 @@ function FleetScanArea({ fleet, ships }) {
                 <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
                 <span className="text-xs font-mono text-slate-300 flex-1 truncate">{f.name}</span>
                 <span className="text-xs font-mono" style={{ color: meta.color }}>{meta.threat}</span>
-                <span className="text-xs font-mono text-slate-600">
-                  {dist3d(fx, fy, fz, f.x, f.y, f.z).toFixed(1)} pc
-                </span>
+                <span className="text-xs font-mono text-slate-600">{d(f.x, f.y, f.z).toFixed(1)} pc</span>
               </div>
             )
           })}
-
-          {/* Planeten — Ast-Scanner */}
           {visiblePlanets.map(p => (
             <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
               <Globe size={11} style={{ color: '#4ade80', flexShrink: 0 }} />
               <span className="text-xs font-mono text-slate-300 flex-1 truncate">{p.name ?? 'Unbekannter Planet'}</span>
-              <span className="text-xs font-mono text-slate-600">
-                {dist3d(fx, fy, fz, p.x, p.y, p.z).toFixed(1)} pc
-              </span>
+              <span className="text-xs font-mono text-slate-600">{d(p.x, p.y, p.z).toFixed(1)} pc</span>
             </div>
           ))}
-
-          {/* Handelsstationen — Ast-Scanner */}
-          {showPlanets && nearStations.map(s => (
+          {visibleStations.map(s => (
             <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
               <Store size={11} style={{ color: '#34d399', flexShrink: 0 }} />
               <span className="text-xs font-mono text-slate-300 flex-1 truncate">{s.name}</span>
               <span className="text-xs font-mono text-slate-600">WIP</span>
-              <span className="text-xs font-mono text-slate-600">
-                {dist3d(fx, fy, fz, s.x, s.y, s.z).toFixed(1)} pc
-              </span>
+              <span className="text-xs font-mono text-slate-600">{d(s.x, s.y, s.z).toFixed(1)} pc</span>
             </div>
           ))}
-
-          {/* Asteroiden — Ast-Scanner */}
           {visibleAsteroids.map(a => {
             const meta = ASTEROID_TYPE_LABELS[a.asteroid_type] ?? { label: a.asteroid_type, color: '#94a3b8' }
             return (
@@ -846,14 +806,10 @@ function FleetScanArea({ fleet, ships }) {
                 <Gem size={11} style={{ color: meta.color, flexShrink: 0 }} />
                 <span className="text-xs font-mono text-slate-300 flex-1 truncate">{meta.label}</span>
                 <span className="text-xs font-mono text-slate-600">WIP</span>
-                <span className="text-xs font-mono text-slate-600">
-                  {dist3d(fx, fy, fz, a.x, a.y, a.z).toFixed(1)} pc
-                </span>
+                <span className="text-xs font-mono text-slate-600">{d(a.x, a.y, a.z).toFixed(1)} pc</span>
               </div>
             )
           })}
-
-          {/* Hinweis wenn alles ausgefiltert */}
           {visibleAsteroids.length === 0 && visiblePlanets.length === 0 &&
            visibleFleets.length === 0 && total > 0 && (
             <p className="text-xs font-mono text-slate-700">Alle Objekte ausgeblendet.</p>
