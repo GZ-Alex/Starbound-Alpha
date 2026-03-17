@@ -694,8 +694,8 @@ async function processCombat(log: string[]) {
     // Wenn keine persistente NPC-Flotte: coord_hash prüfen ob NPC hier sein sollte
     if (!npcFleetRow) {
       const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
-      const hashVal = coordHashJs(fx, fy, fz, timeSlot)
-      if (hashVal > 0.025) continue // NPC-Dichte: 1/10 des vorherigen Wertes
+      const hashVal = coordHashJs(fx, fy, fz, 0)
+      if (hashVal > 0.10) continue // ~10% der Gitterpunkte haben NPCs (salt=0, stabil)
 
       const typeHash = coordHashJs(fx, fy, fz, timeSlot + 1)
       const npcType = typeHash < 0.70 ? 'pirat_leicht' : typeHash < 0.90 ? 'pirat_mittel' : 'piraten_verbund'
