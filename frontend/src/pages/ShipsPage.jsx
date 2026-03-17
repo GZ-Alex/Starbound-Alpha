@@ -52,11 +52,10 @@ function BulkAssignModal({ ships, fleets, planet, onClose, onAssigned }) {
   const [saving, setSaving] = useState(false)
   const queryClient = useQueryClient()
 
-  // Schiffe haben unterschiedliche Positionen — ermittle "Heimatposition"
-  // Schiffe ohne fleet_id sind am Planeten
+  // Position des Schiffs: eigene Koordinaten wenn vorhanden, sonst Flotte, sonst Planet
   const shipPosition = ships[0]?.fleet_id
     ? fleets.find(f => f.id === ships[0].fleet_id)
-    : planet
+    : (ships[0]?.x != null ? { x: ships[0].x, y: ships[0].y, z: ships[0].z } : planet)
 
   // Nur Flotten an gleicher Position die nicht unterwegs sind
   const eligibleFleets = fleets.filter(f =>
@@ -476,7 +475,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       <div className="w-32 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Position</p>
         <p className="text-xs font-mono text-slate-400">
-          {fleet ? coords(fleet) : (planet ? `${planet.x ?? 0}/${planet.y ?? 0}/${planet.z ?? 0}` : '—')}
+          {fleet ? coords(fleet) : (ship.x != null ? `${ship.x}/${ship.y}/${ship.z}` : (planet ? `${planet.x ?? 0}/${planet.y ?? 0}/${planet.z ?? 0}` : '—'))}
         </p>
       </div>
 
