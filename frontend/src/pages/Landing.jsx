@@ -62,7 +62,7 @@ export default function Landing() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (player) navigate('/dashboard')
+    if (player) navigate('/overview')
   }, [player])
 
   const resetForm = () => {
@@ -79,7 +79,7 @@ export default function Landing() {
     setLoading(true)
     try {
       await login(username.trim())
-      navigate('/dashboard')
+      navigate('/overview')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -92,7 +92,7 @@ export default function Landing() {
     setLoading(true)
     try {
       await register(username.trim(), profession, raceId)
-      navigate('/dashboard')
+      navigate('/overview')
     } catch (err) {
       setError(err.message)
     } finally {
