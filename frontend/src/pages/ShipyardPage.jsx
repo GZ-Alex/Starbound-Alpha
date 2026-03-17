@@ -315,10 +315,10 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
 
 // ─── Chassis Card ──────────────────────────────────────────────────────────────
 
-function ChassisCard({ chassis, player, shipyardLevel, onSelect, locked, requiredTechName }) {
+function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
   const noYard    = shipyardLevel < 1
   const wrongProf = chassis.required_profession && player?.profession !== chassis.required_profession
-  const disabled  = noYard || wrongProf || locked
+  const disabled  = noYard || wrongProf
   const color     = CLASS_COLORS[chassis.class]
 
   return (
@@ -337,11 +337,6 @@ function ChassisCard({ chassis, player, shipyardLevel, onSelect, locked, require
           style={{ background: `${color}25`, color, border: `1px solid ${color}50` }}>
           {chassis.class}
         </div>
-        {locked && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <Lock size={28} style={{ color: '#334155' }} />
-          </div>
-        )}
         {!disabled && (
           <div className="absolute bottom-8 right-2 text-xs text-cyan-400/50 font-mono flex items-center gap-1">
             <ChevronRight size={11} /> Designer
@@ -369,14 +364,7 @@ function ChassisCard({ chassis, player, shipyardLevel, onSelect, locked, require
             </div>
           ))}
         </div>
-        {locked && (
-          <div className="flex items-center gap-1.5 text-xs font-mono"
-            style={{ color: '#475569' }}>
-            <Lock size={10} />
-            <span>Benötigt: {requiredTechName ?? chassis.required_tech}</span>
-          </div>
-        )}
-        {wrongProf && !locked && (
+        {wrongProf && (
           <p className="text-xs text-red-400/60 font-mono">
             Nur für {PROFESSION_LABELS[chassis.required_profession]}
           </p>
@@ -392,16 +380,16 @@ export default function ShipyardPage() {
   const { planet, player, buildings, hasTech, refreshTechnologies } = useGameStore()
   const [classFilter, setClassFilter] = useState('all')
   const [designer, setDesigner]       = useState(null)
+  const [techReady, setTechReady]     = useState(false)
   const queryClient = useQueryClient()
 
   const shipyardLevel = buildings.find(b => b.building_id === 'shipyard')?.level ?? 0
 
-  // Technologien alle 30s auffrischen — erkennt neue Forschungserfolge
+  // Technologien beim Mount sofort laden, dann alle 30s auffrischen
   useEffect(() => {
-    refreshTechnologies()
+    refreshTechnologies().then(() => setTechReady(true))
     const interval = setInterval(() => {
       refreshTechnologies()
-      // part-defs und chassis-defs neu laden damit neu freigeschaltete Teile erscheinen
       queryClient.invalidateQueries({ queryKey: ['part-defs'] })
       queryClient.invalidateQueries({ queryKey: ['chassis-defs'] })
     }, 30000)
@@ -458,28 +446,8 @@ export default function ShipyardPage() {
 
   const allChassis     = chassisDefs ?? []
   const available      = allChassis.filter(c => !c.required_tech || hasTech(c.required_tech))
-  const locked         = allChassis.filter(c => c.required_tech && !hasTech(c.required_tech))
   const classes        = ['all', ...new Set(allChassis.map(c => c.class))]
   const filtered       = available.filter(c => classFilter === 'all' || c.class === classFilter)
-  const filteredLocked = locked.filter(c => classFilter === 'all' || c.class === classFilter)
-
-  // Tech-Namen für gesperrte Chassis (z.B. "Schwerer Kreuzer Mk.I")
-  const lockedTechIds = locked.map(c => c.required_tech).filter(Boolean)
-  const { data: techDefs = [] } = useQuery({
-    queryKey: ['tech-defs-names', lockedTechIds.join(',')],
-    queryFn: async () => {
-      if (!lockedTechIds.length) return []
-      const { data } = await supabase
-        .from('tech_definitions')
-        .select('id, name')
-        .in('id', lockedTechIds)
-      return data ?? []
-    },
-    staleTime: 60000,
-    enabled: lockedTechIds.length > 0,
-  })
-
-  const getTechName = (techId) => techDefs.find(t => t.id === techId)?.name ?? techId
 
   if (shipyardLevel < 1) return (
     <div className="max-w-2xl mx-auto">
@@ -488,6 +456,12 @@ export default function ShipyardPage() {
         <h2 className="text-xl font-display text-slate-300">Schiffswerft nicht gebaut</h2>
         <p className="text-slate-500">Baue zuerst eine Schiffswerft auf deinem Planeten.</p>
       </div>
+    </div>
+  )
+
+  if (!techReady) return (
+    <div className="flex items-center justify-center h-64 text-slate-500 font-mono text-sm">
+      Lade Werft...
     </div>
   )
 
@@ -559,14 +533,14 @@ export default function ShipyardPage() {
         })}
       </div>
 
-      {/* Empty state — nur wenn auch keine gesperrten da sind */}
-      {filtered.length === 0 && filteredLocked.length === 0 && (
+      {/* Empty state */}
+      {filtered.length === 0 && (
         <div className="panel p-8 text-center text-slate-500 text-sm">
           Keine Schiffe verfügbar. Erforsche neue Technologien im Forschungszentrum.
         </div>
       )}
 
-      {/* Chassis Grid — freigeschaltete */}
+      {/* Chassis Grid — nur freigeschaltete */}
       {filtered.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map(chassis => (
@@ -575,26 +549,6 @@ export default function ShipyardPage() {
               locked={false} />
           ))}
         </div>
-      )}
-
-      {/* Gesperrte Chassis — ausgegraut mit Tech-Anforderung */}
-      {filteredLocked.length > 0 && (
-        <>
-          <div className="flex items-center gap-3 mt-2">
-            <Lock size={12} style={{ color: '#334155' }} />
-            <span className="text-xs font-mono uppercase tracking-widest" style={{ color: '#334155' }}>
-              Durch Forschung freischaltbar ({filteredLocked.length})
-            </span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.04)' }} />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredLocked.map(chassis => (
-              <ChassisCard key={chassis.id} chassis={chassis} player={player}
-                shipyardLevel={shipyardLevel} onSelect={setDesigner}
-                locked={true} requiredTechName={getTechName(chassis.required_tech)} />
-            ))}
-          </div>
-        </>
       )}
 
       <AnimatePresence>
