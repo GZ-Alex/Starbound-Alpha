@@ -397,10 +397,10 @@ function formatEtaDuration(distancePc, speedPcPerH, speedPercent) {
   return `~${m}m`
 }
 
-function SetTargetModal({ fleet, fleetShips, playerId, onClose, onSaved }) {
-  const [tx, setTx] = useState(String(fleet.target_x ?? fleet.x ?? 0))
-  const [ty, setTy] = useState(String(fleet.target_y ?? fleet.y ?? 0))
-  const [tz, setTz] = useState(String(fleet.target_z ?? fleet.z ?? 0))
+function SetTargetModal({ fleet, fleetShips, playerId, initialTarget, onClose, onSaved }) {
+  const [tx, setTx] = useState(String(initialTarget?.x ?? fleet.target_x ?? fleet.x ?? 0))
+  const [ty, setTy] = useState(String(initialTarget?.y ?? fleet.target_y ?? fleet.y ?? 0))
+  const [tz, setTz] = useState(String(initialTarget?.z ?? fleet.target_z ?? fleet.z ?? 0))
   const [saving, setSaving] = useState(false)
   const [showBookmarks, setShowBookmarks] = useState(false)
 
@@ -672,7 +672,7 @@ function ScanFilterBtn({ active, onToggle, label, color }) {
   )
 }
 
-function FleetScanArea({ fleet, ships }) {
+function FleetScanArea({ fleet, ships, onSetTarget }) {
   const [showAsteroids, setShowAsteroids] = useState(true)
   const [showPlanets,   setShowPlanets]   = useState(true)
   const [showFleets,    setShowFleets]    = useState(true)
@@ -725,16 +725,18 @@ function FleetScanArea({ fleet, ships }) {
   const planets   = allObjects.filter(o => o.obj_type === 'planet' || o.obj_type === 'station')
   const npcs      = allObjects.filter(o => {
     if (o.obj_type !== 'npc') return false
-    // Im astRange: immer sichtbar (Ast-Scanner sieht alles)
     if (astRange > 0 && o.distance <= astRange) return true
-    // Jenseits astRange aber in npcRange: nur mit Zielscanner
     if (npcRange > 0 && o.distance <= npcRange) return true
     return false
   })
 
-  const visibleAsteroids = showAsteroids ? asteroids : []
-  const visiblePlanets   = showPlanets   ? planets   : []
-  const visibleFleets    = showFleets    ? npcs       : []
+  // Alles zusammen sortiert nach Distanz
+  const allVisible = [
+    ...(showFleets    ? npcs      : []),
+    ...(showPlanets   ? planets   : []),
+    ...(showAsteroids ? asteroids : []),
+  ].sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))
+
   const total = asteroids.length + planets.length + npcs.length
 
   const NPC_COLORS = {
@@ -775,51 +777,67 @@ function FleetScanArea({ fleet, ships }) {
 
       {total === 0 ? (
         <p className="text-sm font-mono text-slate-700">Keine Objekte in Scanreichweite.</p>
+      ) : allVisible.length === 0 ? (
+        <p className="text-xs font-mono text-slate-700">Alle Objekte ausgeblendet.</p>
       ) : (
         <div className="space-y-1.5">
-          {visibleFleets.map(o => {
-            const npcType = o.data?.npc_type ?? 'pirat_leicht'
-            const meta = NPC_COLORS[npcType] ?? { label: npcType, color: '#f87171', threat: '?' }
+          {allVisible.map(o => {
+            const isNpc     = o.obj_type === 'npc'
+            const isStation = o.obj_type === 'station'
+            const isPlanet  = o.obj_type === 'planet'
+            const isAst     = o.obj_type === 'asteroid'
+
+            let icon, label, subLabel, color
+            if (isNpc) {
+              const npcType = o.data?.npc_type ?? 'pirat_leicht'
+              const meta = NPC_COLORS[npcType] ?? { label: npcType, color: '#f87171', threat: '?' }
+              icon     = <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
+              label    = meta.label
+              subLabel = `${o.data?.ship_count ?? '?'} Schiffe · ${meta.threat}`
+              color    = meta.color
+            } else if (isStation) {
+              icon     = <Store size={11} style={{ color: '#34d399', flexShrink: 0 }} />
+              label    = o.data?.name ?? 'Handelsstation'
+              subLabel = 'Station'
+              color    = '#34d399'
+            } else if (isPlanet) {
+              icon     = <Globe size={11} style={{ color: '#4ade80', flexShrink: 0 }} />
+              label    = o.data?.name ?? 'Planet'
+              subLabel = o.data?.username ? `Spieler: ${o.data.username}` : 'Planet'
+              color    = '#4ade80'
+            } else {
+              const type = o.data?.type
+              color    = AST_COLORS[type] ?? '#94a3b8'
+              icon     = <Gem size={11} style={{ color, flexShrink: 0 }} />
+              label    = AST_LABELS[type] ?? 'Asteroid'
+              subLabel = null
+            }
+
             return (
               <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
-                <span className="text-xs font-mono text-slate-300 flex-1">{meta.label}</span>
-                <span className="text-xs font-mono text-slate-600">{o.data?.ship_count ?? '?'} Schiffe</span>
-                <span className="text-xs font-mono" style={{ color: meta.color }}>{meta.threat}</span>
-                <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
+                {icon}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-mono text-slate-300 truncate">{label}</p>
+                  <p className="text-xs font-mono text-slate-600">{o.obj_x} / {o.obj_y} / {o.obj_z}{subLabel ? ` · ${subLabel}` : ''}</p>
+                </div>
+                <span className="text-xs font-mono text-slate-600 flex-shrink-0">{o.distance?.toFixed(1)} pc</span>
+                {onSetTarget && (
+                  <button
+                    onClick={() => onSetTarget(o.obj_x, o.obj_y, o.obj_z)}
+                    className="flex-shrink-0 px-2 py-0.5 rounded text-xs font-mono transition-all"
+                    style={{
+                      background: 'rgba(34,211,238,0.08)',
+                      border: '1px solid rgba(34,211,238,0.2)',
+                      color: '#22d3ee',
+                    }}
+                    title="Kurs setzen">
+                    →
+                  </button>
+                )}
               </div>
             )
           })}
-          {visiblePlanets.map(o => (
-            <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
-              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              {o.obj_type === 'station'
-                ? <Store size={11} style={{ color: '#34d399', flexShrink: 0 }} />
-                : <Globe size={11} style={{ color: '#4ade80', flexShrink: 0 }} />}
-              <span className="text-xs font-mono text-slate-300 flex-1 truncate">
-                {o.data?.name ?? (o.obj_type === 'station' ? 'Handelsstation' : 'Planet')}
-              </span>
-              <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
-            </div>
-          ))}
-          {visibleAsteroids.map(o => {
-            const type = o.data?.type
-            const color = AST_COLORS[type] ?? '#94a3b8'
-            const label = AST_LABELS[type] ?? 'Asteroid'
-            return (
-              <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <Gem size={11} style={{ color, flexShrink: 0 }} />
-                <span className="text-xs font-mono text-slate-300 flex-1 truncate">{label}</span>
-                <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
-              </div>
-            )
-          })}
-          {visibleAsteroids.length === 0 && visiblePlanets.length === 0 &&
-           visibleFleets.length === 0 && total > 0 && (
-            <p className="text-xs font-mono text-slate-700">Alle Objekte ausgeblendet.</p>
-          )}
         </div>
       )}
     </div>
@@ -847,11 +865,18 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
   const [showSetTarget, setShowSetTarget] = useState(false)
   const [showDissolve, setShowDissolve] = useState(false)
   const [showBookmarks, setShowBookmarks] = useState(false)
+  const [quickTarget, setQuickTarget] = useState(null) // {x, y, z} für Scan-Schnellnavigation
   const queryClient = useQueryClient()
 
   const handleTargetSaved = () => {
     setShowSetTarget(false)
+    setQuickTarget(null)
     queryClient.invalidateQueries(['fleets'])
+  }
+
+  const handleQuickTarget = (x, y, z) => {
+    setQuickTarget({ x, y, z })
+    setShowSetTarget(true)
   }
 
   return (
@@ -1099,7 +1124,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
       </div>
 
       {/* Scan-Bereich */}
-      <FleetScanArea fleet={fleet} ships={ships} />
+      <FleetScanArea fleet={fleet} ships={ships} onSetTarget={!isTransit ? handleQuickTarget : null} />
 
       {/* Modals */}
       <AnimatePresence>
@@ -1108,7 +1133,8 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
             fleet={fleet}
             fleetShips={ships}
             playerId={playerId}
-            onClose={() => setShowSetTarget(false)}
+            initialTarget={quickTarget}
+            onClose={() => { setShowSetTarget(false); setQuickTarget(null) }}
             onSaved={handleTargetSaved}
           />
         )}
