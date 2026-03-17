@@ -10,13 +10,14 @@ import NotificationStack from '@/components/ui/NotificationStack'
 import {
   Building2, Hammer, Rocket, FlaskConical, Anchor,
   Shield, Crosshair, Radio, Navigation, Radar,
-  LogOut, Settings, Clock, Ship, LayoutDashboard, Swords
+  LogOut, Settings, Clock, Ship, LayoutDashboard, Swords, Crown
 } from 'lucide-react'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { to: '/overview',  icon: LayoutDashboard, label: 'Übersicht'           },
+  { to: '/dashboard', icon: Crown,           label: 'Herrscher'           },
   { to: '/planet',    icon: Building2,       label: 'Gebäude'             },
   { to: '/mines',     icon: Hammer,          label: 'Minen'               },
   { to: '/shipyard',  icon: Rocket,          label: 'Werft'               },
