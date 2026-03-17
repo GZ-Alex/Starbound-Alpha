@@ -691,12 +691,18 @@ async function processCombat(log: string[]) {
       .limit(1)
       .maybeSingle()
 
-    // Wenn keine persistente NPC-Flotte: coord_hash prüfen ob NPC hier sein sollte
+    // Wenn keine persistente NPC-Flotte: Modulo-Check ob NPC hier sein sollte
+    // Gleiche Logik wie get_scan_objects: jeder 10. Gitterpunkt (npc_step=15)
     if (!npcFleetRow) {
-      const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
-      const hashVal = coordHashJs(fx, fy, fz, 0)
-      if (hashVal > 0.10) continue // ~10% der Gitterpunkte haben NPCs (salt=0, stabil)
+      const npcStep = 15
+      // Koordinaten müssen auf Gitter ausgerichtet sein
+      const gx = Math.round(fx / npcStep) * npcStep
+      const gy = Math.round(fy / npcStep) * npcStep
+      const gz = Math.round(fz / npcStep) * npcStep
+      if (gx !== fx || gy !== fy || gz !== fz) continue // Flotte nicht auf NPC-Gitter
+      if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
 
+      const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
       const typeHash = coordHashJs(fx, fy, fz, timeSlot + 1)
       const npcType = typeHash < 0.70 ? 'pirat_leicht' : typeHash < 0.90 ? 'pirat_mittel' : 'piraten_verbund'
       if (fleet.flight_mode === 'bounty' && !npcType.startsWith('pirat')) continue
