@@ -844,6 +844,80 @@ function FleetScanArea({ fleet, ships, onSetTarget }) {
   )
 }
 
+// ─── Flight Mode Modal ────────────────────────────────────────────────────────
+
+const FLIGHT_MODE_OPTIONS = [
+  {
+    id: 'neutral',
+    label: 'Neutral',
+    color: '#64748b',
+    desc: 'Löst keine Kämpfe aus. Andere Flotten mit aggressiven Parametern können trotzdem angreifen.',
+  },
+  {
+    id: 'enemy',
+    label: 'Feindlich',
+    color: '#f87171',
+    desc: 'Greift Allianz-Feinde an. Löst Kämpfe aus sobald feindliche Flotten auf gleicher Koordinate sind.',
+  },
+  {
+    id: 'bounty',
+    label: 'Kopfgeldjagd',
+    color: '#fb923c',
+    desc: 'Greift Spieler mit Kopfgeld und NPC-Piratenflotten an.',
+  },
+  {
+    id: 'annihilation',
+    label: 'Vernichtung',
+    color: '#ef4444',
+    desc: 'Kämpft gegen alle außer Verbündeten. Zieht verbündete Flotten auf gleicher Koordinate in den Kampf.',
+  },
+]
+
+function FlightModeModal({ currentMode, onClose, onSelect }) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}>
+      <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl p-6 space-y-3"
+        style={{
+          background: 'linear-gradient(135deg, rgba(4,13,26,0.99) 0%, rgba(2,8,20,0.99) 100%)',
+          border: '1px solid rgba(34,211,238,0.15)',
+        }}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-display font-bold text-lg text-slate-200">Flugparameter</h3>
+          <button onClick={onClose} style={{ color: '#475569' }}><X size={16} /></button>
+        </div>
+        <p className="text-xs font-mono text-slate-600 pb-1">
+          Bestimmt ob und gegen wen deine Flotte Kämpfe auslöst.
+        </p>
+        {FLIGHT_MODE_OPTIONS.map(opt => (
+          <button key={opt.id} onClick={() => onSelect(opt.id)}
+            className="w-full text-left px-3 py-3 rounded-lg transition-all"
+            style={{
+              background: currentMode === opt.id ? `${opt.color}12` : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${currentMode === opt.id ? opt.color + '50' : 'rgba(255,255,255,0.07)'}`,
+            }}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ background: currentMode === opt.id ? opt.color : '#334155' }} />
+              <span className="text-sm font-mono font-semibold" style={{ color: currentMode === opt.id ? opt.color : '#94a3b8' }}>
+                {opt.label}
+              </span>
+              {currentMode === opt.id && (
+                <span className="ml-auto text-xs font-mono" style={{ color: opt.color }}>Aktiv</span>
+              )}
+            </div>
+            <p className="text-xs font-mono pl-4" style={{ color: '#475569' }}>{opt.desc}</p>
+          </button>
+        ))}
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── Fleet Detail View ────────────────────────────────────────────────────────
 
 function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, onBack, onDissolved }) {
@@ -865,7 +939,8 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
   const [showSetTarget, setShowSetTarget] = useState(false)
   const [showDissolve, setShowDissolve] = useState(false)
   const [showBookmarks, setShowBookmarks] = useState(false)
-  const [quickTarget, setQuickTarget] = useState(null) // {x, y, z} für Scan-Schnellnavigation
+  const [showFlightMode, setShowFlightMode] = useState(false)
+  const [quickTarget, setQuickTarget] = useState(null)
   const queryClient = useQueryClient()
 
   const handleTargetSaved = () => {
@@ -877,6 +952,12 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
   const handleQuickTarget = (x, y, z) => {
     setQuickTarget({ x, y, z })
     setShowSetTarget(true)
+  }
+
+  const handleFlightModeChange = async (mode) => {
+    await supabase.from('fleets').update({ flight_mode: mode }).eq('id', fleet.id)
+    queryClient.invalidateQueries(['fleets'])
+    setShowFlightMode(false)
   }
 
   return (
@@ -903,10 +984,18 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                 style={{ background: `${mission.color}15`, border: `1px solid ${mission.color}30`, color: mission.color }}>
                 {mission.label}
               </span>
-              <span className="text-xs font-mono px-2 py-0.5 rounded"
-                style={{ background: `${flightMode.color}15`, border: `1px solid ${flightMode.color}30`, color: flightMode.color }}>
-                {flightMode.label}
-              </span>
+              <button
+                onClick={() => !isTransit && setShowFlightMode(true)}
+                className="text-xs font-mono px-2 py-0.5 rounded transition-all"
+                style={{
+                  background: `${flightMode.color}15`,
+                  border: `1px solid ${flightMode.color}${isTransit ? '30' : '50'}`,
+                  color: flightMode.color,
+                  cursor: isTransit ? 'default' : 'pointer',
+                }}
+                title={isTransit ? 'Im Flug — nicht änderbar' : 'Flugparameter ändern'}>
+                {flightMode.label} {!isTransit && '▾'}
+              </button>
               {isTransit && fleet.arrive_at && (
                 <span className="text-xs font-mono flex items-center gap-1" style={{ color: '#22d3ee' }}>
                   <Clock size={10} />
@@ -1128,6 +1217,13 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
 
       {/* Modals */}
       <AnimatePresence>
+        {showFlightMode && (
+          <FlightModeModal
+            currentMode={fleet.flight_mode}
+            onClose={() => setShowFlightMode(false)}
+            onSelect={handleFlightModeChange}
+          />
+        )}
         {showSetTarget && (
           <SetTargetModal
             fleet={fleet}
