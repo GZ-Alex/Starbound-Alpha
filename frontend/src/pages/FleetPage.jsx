@@ -575,7 +575,8 @@ function DissolveConfirmModal({ fleet, onClose, onDissolved }) {
 
   const handleDissolve = async () => {
     setDissolving(true)
-    // Alle Schiffe der Flotte auf fleet_id = null setzen
+    // Schiffe bleiben an ihrer aktuellen Position (fleet.x/y/z) — fleet_id auf null
+    // Die Position wird NICHT geändert, Schiffe bleiben wo die Flotte stand
     await supabase.from('ships').update({ fleet_id: null }).eq('fleet_id', fleet.id)
     // Flotte löschen
     await supabase.from('fleets').delete().eq('id', fleet.id)
@@ -822,7 +823,7 @@ function FleetScanArea({ fleet, ships }) {
 
 // ─── Fleet Detail View ────────────────────────────────────────────────────────
 
-function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved }) {
+function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, onBack, onDissolved }) {
   const hpPct = fleetHpPct(ships)
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
@@ -1021,6 +1022,51 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
         )}
       </div>
 
+      {/* Schiffe ohne Flotte auf gleicher Position */}
+      {(() => {
+        const nearby = allShips.filter(s =>
+          !s.fleet_id &&
+          (s.planet_x ?? planet?.x) === fleet.x &&
+          (s.planet_y ?? planet?.y) === fleet.y &&
+          (s.planet_z ?? planet?.z) === fleet.z
+        )
+        // Fallback: zeige alle Schiffe ohne Flotte wenn Koordinaten nicht auflösbar
+        const docked = allShips.filter(s => !s.fleet_id)
+        const toShow = nearby.length > 0 ? nearby : docked
+        if (!toShow.length) return null
+        return (
+          <div className="panel p-5">
+            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">
+              Im Dock — ohne Flotte ({toShow.length})
+            </p>
+            <div className="space-y-2">
+              {toShow.map(ship => {
+                const chassis = chassisDefs.find(c => c.id === ship.ship_designs?.chassis_id)
+                const imgSrc = chassis?.image_key ? `/Starbound-Alpha/ships/${chassis.image_key}.png` : null
+                const hpPct = ship.max_hp > 0 ? Math.round((ship.current_hp / ship.max_hp) * 100) : 0
+                const hpCol = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
+                return (
+                  <div key={ship.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded"
+                      style={{ background: 'rgba(34,211,238,0.04)', border: '1px solid rgba(34,211,238,0.08)' }}>
+                      {imgSrc
+                        ? <img src={imgSrc} alt={chassis?.name} className="w-full h-full object-contain p-0.5" />
+                        : <span className="text-slate-600 text-sm">🚀</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-mono text-slate-400 truncate">{ship.name ?? ship.ship_designs?.name ?? '—'}</p>
+                      <p className="text-xs font-mono text-slate-700">{chassis?.name ?? '—'}</p>
+                    </div>
+                    <span className="text-xs font-mono" style={{ color: hpCol }}>{hpPct}% HP</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Ladung */}
       <div className="panel p-5">
         <div className="flex items-center justify-between mb-3">
@@ -1174,7 +1220,7 @@ function FleetRow({ fleet, ships, onClick }) {
 // ─── FleetPage ────────────────────────────────────────────────────────────────
 
 export default function FleetPage() {
-  const { player } = useGameStore()
+  const { player, planet } = useGameStore()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedFleet, setSelectedFleet] = useState(null)
@@ -1263,8 +1309,10 @@ export default function FleetPage() {
       <FleetDetail
         fleet={detailFleet}
         ships={getShipsForFleet(detailFleet.id)}
+        allShips={ships}
         chassisDefs={chassisDefs}
         playerId={player?.id}
+        planet={planet}
         onBack={() => setSelectedFleet(null)}
         onDissolved={handleDissolved}
       />
