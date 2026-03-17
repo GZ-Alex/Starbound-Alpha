@@ -369,7 +369,7 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
 
 // ─── Ship Row ─────────────────────────────────────────────────────────────────
 
-function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onToggleSelect, onDetail, onAssign, onGoToFleet }) {
+function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onToggleSelect, onDetail, onAssign, onGoToFleet, onRetreatChange }) {
   const imgSrc = chassis?.image_key
     ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
@@ -487,8 +487,25 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
         </p>
       </div>
 
-      {/* Detail Button */}
-      <div className="flex-shrink-0 ml-auto" onClick={e => e.stopPropagation()}>
+      {/* Flucht bei % + Detail Button */}
+      <div className="flex-shrink-0 ml-auto flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+        {/* Auto-Retreat Dropdown */}
+        <select
+          value={ship.auto_retreat_at ?? 0}
+          onChange={e => onRetreatChange(ship.id, parseInt(e.target.value))}
+          className="text-xs font-mono rounded px-1.5 py-1 transition-all"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: ship.auto_retreat_at > 0 ? '#fbbf24' : '#334155',
+            outline: 'none',
+          }}
+          title="Automatisch fliehen wenn HP unter diesem Wert">
+          <option value={0}>Nie fliehen</option>
+          {[10,20,30,40,50,60,70,80,90].map(v => (
+            <option key={v} value={v}>Flucht bei {v}%</option>
+          ))}
+        </select>
         <button onClick={() => onDetail(ship)}
           className="p-1.5 rounded-full transition-all hover:bg-white/5"
           style={{ border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}
@@ -594,6 +611,11 @@ export default function ShipsPage() {
     navigate(`/fleet?highlight=${fleetId}`)
   }
 
+  const handleRetreatChange = async (shipId, value) => {
+    await supabase.from('ships').update({ auto_retreat_at: value }).eq('id', shipId)
+    queryClient.invalidateQueries(['ships', player?.id])
+  }
+
   const selectedDesign = selectedShip?.ship_designs
   const selectedChassis = selectedDesign ? getChassis(selectedDesign.chassis_id) : null
   const selectedFleet = selectedShip?.fleet_id ? getFleet(selectedShip.fleet_id) : null
@@ -677,6 +699,9 @@ export default function ShipsPage() {
           <div className="w-20 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Geschw.</span>
           </div>
+          <div className="ml-auto flex-shrink-0">
+            <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flucht</span>
+          </div>
         </div>
       )}
 
@@ -703,6 +728,7 @@ export default function ShipsPage() {
               onDetail={setSelectedShip}
               onAssign={handleBulkAssign}
               onGoToFleet={handleGoToFleet}
+              onRetreatChange={handleRetreatChange}
             />
           ))}
         </div>
