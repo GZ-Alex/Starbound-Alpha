@@ -240,9 +240,12 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
     ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
 
+  // installed_parts kann ein flaches ID-Array ["engine_ion_s", ...] sein
+  // oder ein Objekt-Array [{part_id, slot_index}, ...] — beide unterstützen
   const installedParts = (design?.installed_parts ?? []).map(p => {
-    const def = partDefs.find(d => d.id === p.part_id)
-    return def ? { ...def, slot_index: p.slot_index } : null
+    const partId = typeof p === 'string' ? p : p.part_id
+    const def = partDefs.find(d => d.id === partId)
+    return def ? { ...def, slot_index: typeof p === 'object' ? p.slot_index : null } : null
   }).filter(Boolean)
 
   const stats = [
