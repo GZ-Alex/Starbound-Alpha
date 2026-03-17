@@ -768,10 +768,17 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
   const hpPct = fleetHpPct(ships)
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
-  const mission = MISSION_LABELS[fleet.mission] ?? MISSION_LABELS.idle
   const flightMode = FLIGHT_MODE_LABELS[fleet.flight_mode] ?? FLIGHT_MODE_LABELS.neutral
   const speed = fleetSpeed(ships)
   const cargoEntries = Object.entries(fleet.cargo ?? {}).filter(([, v]) => v > 0)
+
+  // Flotte gilt als "im Flug" nur wenn arrive_at in der Zukunft liegt
+  const isTransit = fleet.is_in_transit &&
+    fleet.arrive_at && new Date(fleet.arrive_at) > new Date()
+
+  const mission = isTransit
+    ? MISSION_LABELS.move
+    : MISSION_LABELS[fleet.mission] ?? MISSION_LABELS.idle
 
   const [showSetTarget, setShowSetTarget] = useState(false)
   const [showDissolve, setShowDissolve] = useState(false)
@@ -796,6 +803,7 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
 
       {/* Fleet Header */}
       <div className="panel p-5">
+        {/* Name + Status-Badges */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
             <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide truncate">
@@ -810,63 +818,13 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
                 style={{ background: `${flightMode.color}15`, border: `1px solid ${flightMode.color}30`, color: flightMode.color }}>
                 {flightMode.label}
               </span>
-              {fleet.is_in_transit && fleet.arrive_at && (
+              {isTransit && fleet.arrive_at && (
                 <span className="text-xs font-mono flex items-center gap-1" style={{ color: '#22d3ee' }}>
                   <Clock size={10} />
                   ETA: {etaString(fleet.arrive_at)}
                 </span>
               )}
             </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-            {/* Bookmarks */}
-            <button onClick={() => setShowBookmarks(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
-              style={{
-                background: 'rgba(251,191,36,0.08)',
-                border: '1px solid rgba(251,191,36,0.2)',
-                color: '#fbbf24',
-              }}>
-              <Bookmark size={11} />
-              Bookmarks
-            </button>
-
-            {/* Kurs setzen */}
-            {!fleet.is_in_transit && (
-              <button onClick={() => setShowSetTarget(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-semibold transition-all"
-                style={{
-                  background: 'rgba(34,211,238,0.1)',
-                  border: '1px solid rgba(34,211,238,0.25)',
-                  color: '#22d3ee',
-                }}>
-                <Send size={11} />
-                Kurs setzen
-              </button>
-            )}
-
-            {/* Flotte auflösen */}
-            {!fleet.is_in_transit && (
-              <button onClick={() => setShowDissolve(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
-                style={{
-                  background: 'rgba(239,68,68,0.08)',
-                  border: '1px solid rgba(239,68,68,0.2)',
-                  color: '#f87171',
-                }}>
-                <Trash2 size={11} />
-                Auflösen
-              </button>
-            )}
-
-            {fleet.is_in_transit && (
-              <div className="px-3 py-1.5 rounded"
-                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-                <p className="text-xs font-mono" style={{ color: '#fbbf24' }}>Im Flug · keine Befehle möglich</p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -878,10 +836,10 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
             <p className="text-sm font-mono text-slate-300">{coords(fleet.x, fleet.y, fleet.z)}</p>
           </div>
 
-          {/* Ziel mit Kurs setzen */}
+          {/* Ziel */}
           <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <p className="text-xs font-mono text-slate-600 mb-1">Ziel</p>
-            <p className="text-sm font-mono" style={{ color: fleet.is_in_transit ? '#22d3ee' : '#475569' }}>
+            <p className="text-sm font-mono" style={{ color: isTransit ? '#22d3ee' : '#475569' }}>
               {coords(fleet.target_x, fleet.target_y, fleet.target_z)}
             </p>
           </div>
@@ -902,6 +860,53 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Action Buttons — unter den Statskästen */}
+        <div className="flex items-center gap-2 mt-4 flex-wrap">
+          <button onClick={() => setShowBookmarks(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+            style={{
+              background: 'rgba(251,191,36,0.08)',
+              border: '1px solid rgba(251,191,36,0.2)',
+              color: '#fbbf24',
+            }}>
+            <Bookmark size={11} />
+            Bookmarks
+          </button>
+
+          {!isTransit && (
+            <button onClick={() => setShowSetTarget(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-semibold transition-all"
+              style={{
+                background: 'rgba(34,211,238,0.1)',
+                border: '1px solid rgba(34,211,238,0.25)',
+                color: '#22d3ee',
+              }}>
+              <Send size={11} />
+              Kurs setzen
+            </button>
+          )}
+
+          {!isTransit && (
+            <button onClick={() => setShowDissolve(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+              style={{
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                color: '#f87171',
+              }}>
+              <Trash2 size={11} />
+              Auflösen
+            </button>
+          )}
+
+          {isTransit && (
+            <div className="px-3 py-1.5 rounded"
+              style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+              <p className="text-xs font-mono" style={{ color: '#fbbf24' }}>Im Flug · keine Befehle möglich</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1029,8 +1034,12 @@ function FleetRow({ fleet, ships, onClick }) {
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
   const speed = fleetSpeed(ships)
-  const mission = MISSION_LABELS[fleet.mission] ?? MISSION_LABELS.idle
   const eta = etaString(fleet.arrive_at)
+
+  // Flotte gilt als "im Flug" nur wenn arrive_at in der Zukunft liegt
+  const isTransit = fleet.is_in_transit &&
+    fleet.arrive_at && new Date(fleet.arrive_at) > new Date()
+  const mission = isTransit ? MISSION_LABELS.move : (MISSION_LABELS[fleet.mission] ?? MISSION_LABELS.idle)
 
   return (
     <motion.div layout
@@ -1044,7 +1053,7 @@ function FleetRow({ fleet, ships, onClick }) {
 
       <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
         style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.15)' }}>
-        <Navigation size={15} style={{ color: fleet.is_in_transit ? '#22d3ee' : '#475569' }} />
+        <Navigation size={15} style={{ color: isTransit ? '#22d3ee' : '#475569' }} />
       </div>
 
       <div className="w-40 flex-shrink-0">
@@ -1066,7 +1075,7 @@ function FleetRow({ fleet, ships, onClick }) {
 
       <div className="w-32 flex-shrink-0">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Ziel</p>
-        <p className="text-xs font-mono" style={{ color: fleet.is_in_transit ? '#22d3ee' : '#475569' }}>
+        <p className="text-xs font-mono" style={{ color: isTransit ? '#22d3ee' : '#475569' }}>
           {coords(fleet.target_x, fleet.target_y, fleet.target_z)}
         </p>
       </div>
