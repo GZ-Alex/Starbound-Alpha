@@ -689,45 +689,40 @@ function FleetScanArea({ fleet, ships }) {
 
   const maxRange = Math.max(astRange, npcRange)
   const fx = fleet.x ?? 0, fy = fleet.y ?? 0, fz = fleet.z ?? 0
-  const d = (x, y, z) => dist3d(fx, fy, fz, x ?? 0, y ?? 0, z ?? 0)
 
-  const { data: asteroids = [] } = useQuery({
-    queryKey: ['fleet-scan-asteroids', fleet.id],
+  // Nutzt get_scan_objects RPC — gleiche Logik wie ScanPage
+  // Ast-Scanner: asteroid_range gesetzt, fleet_range = 0
+  // NPC-Scanner: fleet_range gesetzt, asteroid_range = 0
+  const { data: astObjects = [] } = useQuery({
+    queryKey: ['fleet-scan-ast', fleet.id, fx, fy, fz, astRange],
     queryFn: async () => {
-      const { data } = await supabase.from('asteroids').select('*').eq('is_depleted', false)
+      const { data, error } = await supabase.rpc('get_scan_objects', {
+        cx: fx, cy: fy, cz: fz,
+        asteroid_range: astRange,
+        fleet_range: 0,
+        p_player_id: null,
+      })
+      if (error) throw error
       return data ?? []
     },
     enabled: astRange > 0,
     refetchInterval: 60000,
   })
 
-  const { data: npcFleets = [] } = useQuery({
-    queryKey: ['fleet-scan-npc', fleet.id],
+  const { data: npcObjects = [] } = useQuery({
+    queryKey: ['fleet-scan-npc', fleet.id, fx, fy, fz, npcRange],
     queryFn: async () => {
-      const { data } = await supabase.from('npc_fleets').select('*, npc_ships(id)')
+      const { data, error } = await supabase.rpc('get_scan_objects', {
+        cx: fx, cy: fy, cz: fz,
+        asteroid_range: 0,
+        fleet_range: npcRange,
+        p_player_id: null,
+      })
+      if (error) throw error
       return data ?? []
     },
     enabled: npcRange > 0,
     refetchInterval: 30000,
-  })
-
-  const { data: stations = [] } = useQuery({
-    queryKey: ['trade-stations'],
-    queryFn: async () => {
-      const { data } = await supabase.from('trade_stations').select('*')
-      return data ?? []
-    },
-    staleTime: Infinity,
-  })
-
-  const { data: planets = [] } = useQuery({
-    queryKey: ['fleet-scan-planets', fleet.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('planets').select('id, name, x, y, z').not('x', 'is', null)
-      return data ?? []
-    },
-    enabled: astRange > 0,
-    refetchInterval: 60000,
   })
 
   if (maxRange === 0) return (
@@ -737,16 +732,27 @@ function FleetScanArea({ fleet, ships }) {
     </div>
   )
 
-  const nearAsteroids = asteroids.filter(a => d(a.x, a.y, a.z) <= astRange)
-  const nearPlanets   = planets.filter(p   => d(p.x, p.y, p.z) <= astRange)
-  const nearStations  = stations.filter(s  => d(s.x, s.y, s.z) <= astRange)
-  const nearNPC       = npcFleets.filter(f  => d(f.x, f.y, f.z) <= npcRange)
+  const asteroids = astObjects.filter(o => o.obj_type === 'asteroid')
+  const planets   = astObjects.filter(o => o.obj_type === 'planet' || o.obj_type === 'station')
+  const npcs      = npcObjects.filter(o => o.obj_type === 'npc')
 
-  const visibleAsteroids = showAsteroids ? nearAsteroids : []
-  const visiblePlanets   = showPlanets   ? nearPlanets   : []
-  const visibleStations  = showPlanets   ? nearStations  : []
-  const visibleFleets    = showFleets    ? nearNPC        : []
-  const total = nearAsteroids.length + nearPlanets.length + nearNPC.length + nearStations.length
+  const visibleAsteroids = showAsteroids ? asteroids : []
+  const visiblePlanets   = showPlanets   ? planets   : []
+  const visibleFleets    = showFleets    ? npcs       : []
+  const total = asteroids.length + planets.length + npcs.length
+
+  const NPC_COLORS = {
+    pirat_leicht:    { label: 'Piraten-Patrouille', color: '#f87171', threat: 'Leicht' },
+    pirat_mittel:    { label: 'Piratengruppe',       color: '#fb923c', threat: 'Mittel' },
+    piraten_verbund: { label: 'Piraten-Verbund',     color: '#ef4444', threat: 'Schwer' },
+    haendler_konvoi: { label: 'Händler-Konvoi',      color: '#34d399', threat: 'Passiv' },
+    npc_streitmacht: { label: 'NPC-Streitmacht',     color: '#8b5cf6', threat: 'Extrem' },
+  }
+
+  const AST_COLORS = {
+    metall:      '#94a3b8', silikat: '#a78bfa', eis: '#67e8f9',
+    gas:         '#34d399', erz: '#f472b6', reichhaltig: '#fbbf24',
+  }
 
   return (
     <div className="panel p-5">
@@ -771,44 +777,42 @@ function FleetScanArea({ fleet, ships }) {
         <p className="text-sm font-mono text-slate-700">Keine Objekte in Scanreichweite.</p>
       ) : (
         <div className="space-y-1.5">
-          {visibleFleets.map(f => {
-            const meta = NPC_TYPE_LABELS[f.npc_type] ?? { label: f.npc_type, color: '#f87171', threat: '?' }
+          {visibleFleets.map(o => {
+            const npcType = o.data?.npc_type ?? 'pirat_leicht'
+            const meta = NPC_COLORS[npcType] ?? { label: npcType, color: '#f87171', threat: '?' }
+            const ships = o.data?.ship_count ?? '?'
             return (
-              <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded"
+              <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
-                <span className="text-xs font-mono text-slate-300 flex-1 truncate">{f.name}</span>
+                <span className="text-xs font-mono text-slate-300 flex-1">{meta.label}</span>
+                <span className="text-xs font-mono text-slate-600">{ships} Schiffe</span>
                 <span className="text-xs font-mono" style={{ color: meta.color }}>{meta.threat}</span>
-                <span className="text-xs font-mono text-slate-600">{d(f.x, f.y, f.z).toFixed(1)} pc</span>
+                <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
               </div>
             )
           })}
-          {visiblePlanets.map(p => (
-            <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded"
+          {visiblePlanets.map(o => (
+            <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <Globe size={11} style={{ color: '#4ade80', flexShrink: 0 }} />
-              <span className="text-xs font-mono text-slate-300 flex-1 truncate">{p.name ?? 'Unbekannter Planet'}</span>
-              <span className="text-xs font-mono text-slate-600">{d(p.x, p.y, p.z).toFixed(1)} pc</span>
+              {o.obj_type === 'station'
+                ? <Store size={11} style={{ color: '#34d399', flexShrink: 0 }} />
+                : <Globe size={11} style={{ color: '#4ade80', flexShrink: 0 }} />}
+              <span className="text-xs font-mono text-slate-300 flex-1 truncate">
+                {o.data?.name ?? (o.obj_type === 'station' ? 'Handelsstation' : 'Planet')}
+              </span>
+              <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
             </div>
           ))}
-          {visibleStations.map(s => (
-            <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded"
-              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <Store size={11} style={{ color: '#34d399', flexShrink: 0 }} />
-              <span className="text-xs font-mono text-slate-300 flex-1 truncate">{s.name}</span>
-              <span className="text-xs font-mono text-slate-600">WIP</span>
-              <span className="text-xs font-mono text-slate-600">{d(s.x, s.y, s.z).toFixed(1)} pc</span>
-            </div>
-          ))}
-          {visibleAsteroids.map(a => {
-            const meta = ASTEROID_TYPE_LABELS[a.asteroid_type] ?? { label: a.asteroid_type, color: '#94a3b8' }
+          {visibleAsteroids.map(o => {
+            const color = AST_COLORS[o.data?.type] ?? '#94a3b8'
+            const label = o.data?.type ? o.data.type.charAt(0).toUpperCase() + o.data.type.slice(1) + 'asteroid' : 'Asteroid'
             return (
-              <div key={a.id} className="flex items-center gap-2 px-3 py-2 rounded"
+              <div key={o.obj_id} className="flex items-center gap-2 px-3 py-2 rounded"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <Gem size={11} style={{ color: meta.color, flexShrink: 0 }} />
-                <span className="text-xs font-mono text-slate-300 flex-1 truncate">{meta.label}</span>
-                <span className="text-xs font-mono text-slate-600">WIP</span>
-                <span className="text-xs font-mono text-slate-600">{d(a.x, a.y, a.z).toFixed(1)} pc</span>
+                <Gem size={11} style={{ color, flexShrink: 0 }} />
+                <span className="text-xs font-mono text-slate-300 flex-1 truncate">{label}</span>
+                <span className="text-xs font-mono text-slate-600">{o.distance?.toFixed(1)} pc</span>
               </div>
             )
           })}
