@@ -55,19 +55,19 @@ function calcModuleCost(mod, level) {
 
 // Reparaturkosten: 0.05% aller Modul-Kosten pro 1% fehlender HP
 function calcRepairCost(alliance, moduleLevels, moduleDefs, hpMissingPct) {
-  const totals: Record<string, number> = {}
+  const totals = {}
   for (const lvl of moduleLevels) {
     if (!lvl.level) continue
-    const mod = moduleDefs.find((m: any) => m.id === lvl.module_id)
+    const mod = moduleDefs.find((m) => m.id === lvl.module_id)
     if (!mod) continue
     for (let l = 1; l <= lvl.level; l++) {
       const cost = calcModuleCost(mod, l - 1)
       for (const [k, v] of Object.entries(cost)) {
-        totals[k] = (totals[k] ?? 0) + (v as number) * 0.0005 * hpMissingPct
+        totals[k] = (totals[k] ?? 0) + (v ) * 0.0005 * hpMissingPct
       }
     }
   }
-  return Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, Math.ceil(v as number)]))
+  return Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, Math.ceil(v )]))
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
   const costs = calcModuleCost(mod, currentLevel)
   const buildMinutes = Math.round(mod.build_minutes * Math.pow(1.6, currentLevel))
 
-  const inQueue = buildQueue?.some((q: any) => q.module_id === mod.id)
+  const inQueue = buildQueue?.some((q) => q.module_id === mod.id)
   const isTransit = alliance.hq_in_transit
   const canBuild = !inQueue && !isTransit && membership?.rank !== 'member'
 
@@ -244,11 +244,11 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
 // ─── Cargo Panel ──────────────────────────────────────────────────────────────
 
 function CargoPanel({ alliance, planet, membership, queryClient, player }) {
-  const [transferAmts, setTransferAmts] = useState<Record<string, string>>({})
+  const [transferAmts, setTransferAmts] = {})
   const [busy, setBusy] = useState(false)
 
   const hqCargo = alliance.hq_cargo ?? {}
-  const cargoUsed = Object.values(hqCargo).reduce((a: number, b: any) => a + (b as number), 0)
+  const cargoUsed = Object.values(hqCargo).reduce((a, b) => a + (b ), 0)
   const cargoMax = alliance.hq_cargo_max ?? 100000
   const canUnload = membership?.rank === 'founder' || membership?.can_unload_hq
 
@@ -268,9 +268,9 @@ function CargoPanel({ alliance, planet, membership, queryClient, player }) {
     enabled: !!player && !!alliance.hq_x,
   })
 
-  const handleUpload = async (fleetId: string, fleetCargo: Record<string, number>) => {
+  const handleUpload = async (fleetId, fleetCargo) => {
     if (busy) return
-    const amounts: Record<string, number> = {}
+    const amounts = {}
     for (const [k, v] of Object.entries(transferAmts)) {
       const amt = parseInt(v)
       if (amt > 0 && (fleetCargo[k] ?? 0) >= amt) amounts[k] = amt
@@ -301,9 +301,9 @@ function CargoPanel({ alliance, planet, membership, queryClient, player }) {
     setBusy(false)
   }
 
-  const handleDownload = async (fleetId: string, fleetCargo: Record<string, number>) => {
+  const handleDownload = async (fleetId, fleetCargo) => {
     if (busy || !canUnload) return
-    const amounts: Record<string, number> = {}
+    const amounts = {}
     for (const [k, v] of Object.entries(transferAmts)) {
       const amt = parseInt(v)
       if (amt > 0 && (hqCargo[k] ?? 0) >= amt) amounts[k] = amt
@@ -354,7 +354,7 @@ function CargoPanel({ alliance, planet, membership, queryClient, player }) {
       {fleets.length > 0 && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
           <p className="text-xs font-mono text-slate-500 mb-3">Transfer mit Flotte</p>
-          {fleets.map((fleet: any) => (
+          {fleets.map((fleet) => (
             <div key={fleet.id} className="space-y-2">
               <p className="text-xs font-mono text-slate-400">{fleet.name}</p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -433,10 +433,10 @@ function MoveHQModal({ alliance, player, onClose, queryClient }) {
     onClose()
   }
 
-  const handlePaste = (e: any) => {
+  const handlePaste = (e) => {
     const text = e.clipboardData.getData('text')
-    const parts = text.split(/[\s/,]+/).map((s: string) => s.trim()).filter(Boolean)
-    if (parts.length >= 3 && parts.every((p: string) => !isNaN(parseInt(p)))) {
+    const parts = text.split(/[\s/,]+/).map((s) => s.trim()).filter(Boolean)
+    if (parts.length >= 3 && parts.every((p) => !isNaN(parseInt(p)))) {
       e.preventDefault()
       setTx(parts[0]); setTy(parts[1]); setTz(parts[2])
     }
@@ -448,7 +448,7 @@ function MoveHQModal({ alliance, player, onClose, queryClient }) {
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}>
       <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-        onClick={(e: any) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-xl p-6 space-y-4"
         style={{
           background: 'linear-gradient(135deg, rgba(4,13,26,0.99) 0%, rgba(2,8,20,0.99) 100%)',
@@ -563,7 +563,7 @@ export default function AllianceHQPage() {
   })
 
   const levelMap = useMemo(() =>
-    Object.fromEntries(moduleLevels.map((l: any) => [l.module_id, l.level])),
+    Object.fromEntries(moduleLevels.map((l) => [l.module_id, l.level])),
     [moduleLevels]
   )
 
@@ -590,13 +590,13 @@ export default function AllianceHQPage() {
   }
 
   // Modul bauen
-  const handleBuild = async (mod: any, nextLevel: number, costs: Record<string, number>, buildMinutes: number) => {
+  const handleBuild = async (mod, nextLevel, costs, buildMinutes) => {
     if (busy || !alliance) return
     setBusy(true)
 
     // Kosten abziehen (credits aus Kasse, Rest aus HQ-Laderaum)
     const newHqCargo = { ...(alliance.hq_cargo ?? {}) }
-    const allianceUpdates: Record<string, any> = {}
+    const allianceUpdates = {}
 
     for (const [k, amt] of Object.entries(costs)) {
       if (!amt) continue
@@ -741,7 +741,7 @@ export default function AllianceHQPage() {
           {/* Module Tab */}
           {tab === 'modules' && (
             <div className="space-y-2">
-              {moduleDefs.map((mod: any) => (
+              {moduleDefs.map((mod) => (
                 <ModuleCard
                   key={mod.id}
                   mod={mod}
@@ -801,7 +801,7 @@ export default function AllianceHQPage() {
 
 // ─── Repair Panel ─────────────────────────────────────────────────────────────
 
-function RepairPanel({ alliance, moduleLevels, moduleDefs, membership, queryClient, busy, setBusy }: any) {
+function RepairPanel({ alliance, moduleLevels, moduleDefs, membership, queryClient, busy, setBusy }) {
   const hp    = alliance.hq_hp ?? 100000
   const maxHp = alliance.hq_max_hp ?? 100000
   const hpMissingPct = Math.max(0, ((maxHp - hp) / maxHp) * 100)
@@ -814,8 +814,8 @@ function RepairPanel({ alliance, moduleLevels, moduleDefs, membership, queryClie
   )
 
   const repairMinutes = useMemo(() => {
-    const totalModuleMinutes = moduleDefs.reduce((sum: number, mod: any) => {
-      const lvl = moduleLevels.find((l: any) => l.module_id === mod.id)?.level ?? 0
+    const totalModuleMinutes = moduleDefs.reduce((sum, mod) => {
+      const lvl = moduleLevels.find((l) => l.module_id === mod.id)?.level ?? 0
       return sum + mod.build_minutes * lvl
     }, 0)
     return Math.round(totalModuleMinutes * 0.0005 * hpMissingPct)
@@ -828,7 +828,7 @@ function RepairPanel({ alliance, moduleLevels, moduleDefs, membership, queryClie
     const newHqCargo = { ...(alliance.hq_cargo ?? {}) }
     for (const [k, amt] of Object.entries(repairCosts)) {
       if (k === 'credits') continue
-      newHqCargo[k] = Math.max(0, (newHqCargo[k] ?? 0) - (amt as number))
+      newHqCargo[k] = Math.max(0, (newHqCargo[k] ?? 0) - (amt ))
     }
     const creditsDeduction = repairCosts['credits'] ?? 0
 
@@ -862,7 +862,7 @@ function RepairPanel({ alliance, moduleLevels, moduleDefs, membership, queryClie
               {Object.entries(repairCosts).map(([k, v]) => (
                 <span key={k} className="text-xs font-mono px-2 py-0.5 rounded"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: '#94a3b8' }}>
-                  {fmt(v as number)} {COST_LABELS[k] ?? k}
+                  {fmt(v )} {COST_LABELS[k] ?? k}
                 </span>
               ))}
               <span className="text-xs font-mono px-2 py-0.5 rounded"
