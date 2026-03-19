@@ -46,8 +46,12 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
   const [building, setBuilding] = useState(false)
   const { addNotification } = useGameStore()
 
-  const getAvailableParts = (category) =>
-    (partDefs ?? []).filter(p => {
+  const getAvailableParts = (category) => {
+    const mkOrder = (id) => {
+      const m = id.match(/_(\d+)(_pvt|_adm)?$/)
+      return m ? parseInt(m[1]) : 99
+    }
+    return (partDefs ?? []).filter(p => {
       if (p.category !== category) return false
       // Primärwaffen: weapon_class muss zum Chassis passen
       // Turrets: dürfen in alle Chassis, kein weapon_class Filter
@@ -55,7 +59,8 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
       if (p.required_profession && p.required_profession !== player?.profession) return false
       if (p.required_tech && !hasTech(p.required_tech)) return false
       return true
-    })
+    }).sort((a, b) => mkOrder(a.id) - mkOrder(b.id))
+  }
 
   const baseStats = {
     hp: chassis.base_hp, attack: chassis.base_attack, defense: chassis.base_defense,
