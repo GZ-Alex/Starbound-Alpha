@@ -138,10 +138,15 @@ function CreateAllianceForm({ player, onCreated }) {
     // players.alliance_id setzen
     await supabase.from('players').update({ alliance_id: alliance.id }).eq('id', player.id)
 
-    queryClient.invalidateQueries(['my-alliance'])
-    queryClient.invalidateQueries(['player'])
+    // Player-State in localStorage aktualisieren damit reload korrekt lädt
+    const { data: updatedPlayer } = await supabase
+      .from('players').select('*').eq('id', player.id).single()
+    if (updatedPlayer) {
+      localStorage.setItem('sb_player', JSON.stringify(updatedPlayer))
+    }
+
     setSaving(false)
-    onCreated(alliance)
+    window.location.reload()
   }
 
   return (
@@ -438,13 +443,13 @@ function AllianceHeader({ alliance, player, membership, members, queryClient, on
   }
 
   const handleLeave = async () => {
-    if (isFounder) return // Gründer kann nicht einfach verlassen
+    if (isFounder) return
     await supabase.from('alliance_members').delete()
       .eq('alliance_id', alliance.id).eq('player_id', player.id)
     await supabase.from('players').update({ alliance_id: null }).eq('id', player.id)
-    queryClient.invalidateQueries(['my-alliance'])
-    queryClient.invalidateQueries(['player'])
-    onLeft()
+    const { data: updatedPlayer } = await supabase.from('players').select('*').eq('id', player.id).single()
+    if (updatedPlayer) localStorage.setItem('sb_player', JSON.stringify(updatedPlayer))
+    window.location.reload()
   }
 
   return (
@@ -526,7 +531,9 @@ function MembersTab({ alliance, members, membership, player, queryClient }) {
       alliance_id: alliance.id, player_id: app.player_id, rank: 'member',
     })
     await supabase.from('players').update({ alliance_id: alliance.id }).eq('id', app.player_id)
-    await supabase.from('alliance_applications').update({ status: 'accepted', reviewed_by: player.id, reviewed_at: new Date().toISOString() }).eq('id', app.id)
+    await supabase.from('alliance_applications').update({
+      status: 'accepted', reviewed_by: player.id, reviewed_at: new Date().toISOString()
+    }).eq('id', app.id)
     loadApplications()
     queryClient.invalidateQueries(['alliance-members', alliance.id])
   }
