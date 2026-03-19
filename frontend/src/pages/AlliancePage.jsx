@@ -453,56 +453,59 @@ function AllianceHeader({ alliance, player, membership, members, queryClient, on
   }
 
   return (
-    <div className="panel p-5">
-      <div className="flex items-start gap-5 flex-wrap">
-        {/* Logo */}
-        <div className="relative flex-shrink-0">
-          {alliance.logo_url
-            ? <img src={alliance.logo_url} className="w-20 h-20 rounded-xl object-cover"
-                style={{ border: '1px solid rgba(34,211,238,0.2)' }} alt="Logo" />
-            : <div className="w-20 h-20 rounded-xl flex items-center justify-center text-xl font-mono font-bold"
-                style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.15)', color: '#22d3ee' }}>
-                [{alliance.tag}]
-              </div>}
-          {isFounder && (
-            <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-all"
-              style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)' }}
-              title="Logo hochladen">
-              <Upload size={11} style={{ color: '#22d3ee' }} />
-              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleLogoUpload} />
-            </label>
-          )}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <h2 className="text-2xl font-display font-bold text-slate-100">
-            <span className="text-cyan-400">[{alliance.tag}]</span> {alliance.name}
-          </h2>
-          <p className="text-sm font-mono text-slate-500 mt-1">
-            {members.length} / {alliance.member_limit} Mitglieder
-          </p>
-          <div className="flex items-center gap-2 mt-2">
-            {membership && (
-              <span className="text-xs font-mono px-2 py-0.5 rounded"
-                style={{
-                  background: `${RANK_CONFIG[membership.rank]?.color}15`,
-                  border: `1px solid ${RANK_CONFIG[membership.rank]?.color}30`,
-                  color: RANK_CONFIG[membership.rank]?.color,
-                }}>
-                {RANK_CONFIG[membership.rank]?.label}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Allianz verlassen */}
-        {!isFounder && (
+    <div className="panel p-6">
+      {/* Verlassen Button oben rechts */}
+      {!isFounder && (
+        <div className="flex justify-end mb-2">
           <button onClick={handleLeave}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
             style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171' }}>
             <LogOut size={11} /> Verlassen
           </button>
+        </div>
+      )}
+
+      {/* Name — zentriert, groß */}
+      <h2 className="text-center font-display font-bold text-slate-100" style={{ fontSize: '2rem', lineHeight: 1.2 }}>
+        <span style={{ color: '#22d3ee' }}>[{alliance.tag}]</span> {alliance.name}
+      </h2>
+
+      {/* Logo — zentriert, groß */}
+      <div className="flex justify-center mt-5">
+        <div className="relative">
+          {alliance.logo_url
+            ? <img src={alliance.logo_url} className="rounded-2xl object-cover"
+                style={{ width: '120px', height: '120px', border: '2px solid rgba(34,211,238,0.25)' }} alt="Logo" />
+            : <div className="rounded-2xl flex items-center justify-center font-mono font-bold"
+                style={{ width: '120px', height: '120px', fontSize: '1.5rem', background: 'rgba(34,211,238,0.06)', border: '2px solid rgba(34,211,238,0.15)', color: '#22d3ee' }}>
+                [{alliance.tag}]
+              </div>}
+          {isFounder && (
+            <label className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all"
+              style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)' }}
+              title="Logo hochladen">
+              <Upload size={13} style={{ color: '#22d3ee' }} />
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleLogoUpload} />
+            </label>
+          )}
+        </div>
+      </div>
+
+      {/* Mitgliederanzahl + eigener Rang — zentriert */}
+      <div className="flex flex-col items-center gap-2 mt-4">
+        <p className="text-sm font-mono text-slate-400">
+          <span className="font-semibold" style={{ color: '#22d3ee' }}>{members.length}</span>
+          <span className="text-slate-600"> / {alliance.member_limit} Mitglieder</span>
+        </p>
+        {membership && (
+          <span className="text-xs font-mono px-2 py-0.5 rounded"
+            style={{
+              background: `${RANK_CONFIG[membership.rank]?.color}15`,
+              border: `1px solid ${RANK_CONFIG[membership.rank]?.color}30`,
+              color: RANK_CONFIG[membership.rank]?.color,
+            }}>
+            {RANK_CONFIG[membership.rank]?.label}
+          </span>
         )}
       </div>
     </div>
@@ -763,6 +766,34 @@ function TreasuryTab({ alliance, player, membership, canManage, members, queryCl
     },
   })
 
+  const { data: transactions = [] } = useQuery({
+    queryKey: ['treasury-log', alliance.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('alliance_treasury_log')
+        .select('*')
+        .eq('alliance_id', alliance.id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      return data ?? []
+    },
+    refetchInterval: 15000,
+  })
+
+  const logTransaction = async (type, amount, fromUsername, toUsername) => {
+    await supabase.from('alliance_treasury_log').insert({
+      alliance_id: alliance.id,
+      type,
+      amount,
+      from_username: fromUsername,
+      to_username: toUsername,
+      balance_after: type === 'deposit'
+        ? (alliance.credits_treasury ?? 0) + amount
+        : (alliance.credits_treasury ?? 0) - amount,
+    })
+    queryClient.invalidateQueries(['treasury-log', alliance.id])
+  }
+
   const handleDeposit = async () => {
     const amt = parseInt(depositAmt)
     if (!amt || amt <= 0 || busy) return
@@ -770,6 +801,7 @@ function TreasuryTab({ alliance, player, membership, canManage, members, queryCl
     setBusy(true)
     await supabase.from('planets').update({ credits: (planet.credits ?? 0) - amt }).eq('owner_id', player.id)
     await supabase.from('alliances').update({ credits_treasury: (alliance.credits_treasury ?? 0) + amt }).eq('id', alliance.id)
+    await logTransaction('deposit', amt, player.username, null)
     queryClient.invalidateQueries(['my-alliance', alliance.id])
     queryClient.invalidateQueries(['planet', player.id])
     setDepositAmt('')
@@ -786,6 +818,7 @@ function TreasuryTab({ alliance, player, membership, canManage, members, queryCl
     const { data: targetPlanet } = await supabase.from('planets').select('credits').eq('owner_id', target.player_id).single()
     await supabase.from('planets').update({ credits: (targetPlanet?.credits ?? 0) + amt }).eq('owner_id', target.player_id)
     await supabase.from('alliances').update({ credits_treasury: (alliance.credits_treasury ?? 0) - amt }).eq('id', alliance.id)
+    await logTransaction('payout', amt, player.username, payoutTo)
     queryClient.invalidateQueries(['my-alliance', alliance.id])
     setPayoutAmt('')
     setPayoutTo('')
@@ -793,53 +826,87 @@ function TreasuryTab({ alliance, player, membership, canManage, members, queryCl
   }
 
   return (
-    <div className="panel p-5 space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-mono text-slate-600 uppercase tracking-widest">Allianzkasse</p>
-        <p className="font-display font-bold text-xl text-cyan-400">{fmt(alliance.credits_treasury ?? 0)} Credits</p>
-      </div>
-
-      {/* Einzahlen */}
-      <div className="space-y-2">
-        <p className="text-xs font-mono text-slate-500">Einzahlen (Kontostand: {fmt(planet?.credits ?? 0)} Cr)</p>
-        <div className="flex gap-2">
-          <input value={depositAmt} onChange={e => setDepositAmt(e.target.value)}
-            type="number" placeholder="Betrag"
-            className="flex-1 px-3 py-2 rounded text-sm font-mono"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }} />
-          <button onClick={handleDeposit} disabled={busy}
-            className="px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
-            style={{ background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.3)', color: '#22d3ee' }}>
-            Einzahlen
-          </button>
+    <div className="space-y-4">
+      <div className="panel p-5 space-y-5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-mono text-slate-600 uppercase tracking-widest">Allianzkasse</p>
+          <p className="font-display font-bold text-xl text-cyan-400">{fmt(alliance.credits_treasury ?? 0)} Credits</p>
         </div>
-      </div>
 
-      {/* Auszahlen (nur Admin/Gründer) */}
-      {canManage && (
-        <div className="space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
-          <p className="text-xs font-mono text-slate-500">Auszahlen an Mitglied</p>
+        {/* Einzahlen */}
+        <div className="space-y-2">
+          <p className="text-xs font-mono text-slate-500">Einzahlen (Kontostand: {fmt(planet?.credits ?? 0)} Cr)</p>
           <div className="flex gap-2">
-            <select value={payoutTo} onChange={e => setPayoutTo(e.target.value)}
-              className="flex-1 px-3 py-2 rounded text-sm font-mono"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }}>
-              <option value="">Mitglied wählen</option>
-              {members.map(m => (
-                <option key={m.player_id} value={m.players?.username}>{m.players?.username}</option>
-              ))}
-            </select>
-            <input value={payoutAmt} onChange={e => setPayoutAmt(e.target.value)}
+            <input value={depositAmt} onChange={e => setDepositAmt(e.target.value)}
               type="number" placeholder="Betrag"
-              className="px-3 py-2 rounded text-sm font-mono"
-              style={{ width: '100px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }} />
-            <button onClick={handlePayout} disabled={busy}
+              className="flex-1 px-3 py-2 rounded text-sm font-mono"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }} />
+            <button onClick={handleDeposit} disabled={busy}
               className="px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
-              style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)', color: '#4ade80' }}>
-              Auszahlen
+              style={{ background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.3)', color: '#22d3ee' }}>
+              Einzahlen
             </button>
           </div>
         </div>
-      )}
+
+        {/* Auszahlen (nur Admin/Gründer) */}
+        {canManage && (
+          <div className="space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
+            <p className="text-xs font-mono text-slate-500">Auszahlen an Mitglied</p>
+            <div className="flex gap-2">
+              <select value={payoutTo} onChange={e => setPayoutTo(e.target.value)}
+                className="flex-1 px-3 py-2 rounded text-sm font-mono"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }}>
+                <option value="">Mitglied wählen</option>
+                {members.map(m => (
+                  <option key={m.player_id} value={m.players?.username}>{m.players?.username}</option>
+                ))}
+              </select>
+              <input value={payoutAmt} onChange={e => setPayoutAmt(e.target.value)}
+                type="number" placeholder="Betrag"
+                className="px-3 py-2 rounded text-sm font-mono"
+                style={{ width: '100px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }} />
+              <button onClick={handlePayout} disabled={busy}
+                className="px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
+                style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)', color: '#4ade80' }}>
+                Auszahlen
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Transaktions-Historie */}
+      <div className="panel p-4 space-y-2">
+        <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">Transaktions-Historie</p>
+        {transactions.length === 0 ? (
+          <p className="text-sm font-mono text-slate-600 text-center py-4">Noch keine Transaktionen.</p>
+        ) : transactions.map(tx => {
+          const isDeposit = tx.type === 'deposit'
+          return (
+            <div key={tx.id} className="flex items-center gap-3 px-3 py-2 rounded-lg"
+              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <span className="text-base flex-shrink-0">{isDeposit ? '↑' : '↓'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-slate-300">
+                  {isDeposit
+                    ? <><span className="text-cyan-400">{tx.from_username}</span> hat eingezahlt</>
+                    : <><span className="text-slate-400">{tx.from_username}</span> → <span className="text-green-400">{tx.to_username}</span></>
+                  }
+                </p>
+                <p className="text-xs font-mono text-slate-600">{timeAgo(tx.created_at)}</p>
+              </div>
+              <span className="text-sm font-mono font-semibold flex-shrink-0"
+                style={{ color: isDeposit ? '#22d3ee' : '#4ade80' }}>
+                {isDeposit ? '+' : '-'}{fmt(tx.amount)} Cr
+              </span>
+              <span className="text-xs font-mono text-slate-700 flex-shrink-0">
+                ={fmt(tx.balance_after)} Cr
+              </span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
