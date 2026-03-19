@@ -213,14 +213,17 @@ function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, q
   // Alle verfügbaren Parts nach Kategorie
   const CATEGORIES = [
     { id: 'engine',         label: 'Antrieb' },
+    { id: 'engine_aux',     label: 'Sekundärantrieb' },
+    { id: 'booster',        label: 'Booster' },
     { id: 'primary_weapon', label: 'Primärwaffe' },
     { id: 'turret',         label: 'Turret' },
     { id: 'armor',          label: 'Panzerung' },
-    { id: 'shield',         label: 'Schild' },
-    { id: 'booster',        label: 'Booster' },
+    { id: 'shield_hp',      label: 'HP-Schild' },
+    { id: 'shield_def',     label: 'Def-Schild' },
     { id: 'cargo',          label: 'Ladebucht' },
-    { id: 'scanner',        label: 'Scanner' },
     { id: 'mining',         label: 'Bergbau' },
+    { id: 'scanner_asteroid', label: 'Ast-Scanner' },
+    { id: 'scanner_npc',    label: 'NPC-Scanner' },
     { id: 'extension',      label: 'Erweiterung' },
   ]
 
@@ -332,13 +335,26 @@ function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, q
           {/* Rechte Spalte: Bauteile */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {CATEGORIES.map(({ id: catId, label }) => {
+              const sortOrder = (id) => {
+                if (/_s$/.test(id)) return 1
+                if (/_m$/.test(id)) return 2
+                if (/_l$/.test(id)) return 3
+                if (/_xl$/.test(id)) return 4
+                if (/_xxl$/.test(id)) return 5
+                const m = id.match(/_(\d+)(_pvt|_adm)?$/)
+                return m ? parseInt(m[1]) : 99
+              }
+              const classOrd = { A:1, B:2, C:3, D:4, E:5 }
               const available = partDefs.filter(p => {
                 if (p.category !== catId) return false
-                if (catId === 'primary_weapon' && p.weapon_class && p.weapon_class !== chassis?.class) return false
+                if (p.required_profession && p.required_profession !== player?.profession) return false
                 return true
               }).sort((a, b) => {
-                const mk = id => { const m = id.match(/_(\d+)(_pvt|_adm)?$/); return m ? parseInt(m[1]) : 99 }
-                return mk(a.id) - mk(b.id)
+                if (catId === 'turret') {
+                  return ((classOrd[a.weapon_class]??9)*100 + sortOrder(a.id)) -
+                         ((classOrd[b.weapon_class]??9)*100 + sortOrder(b.id))
+                }
+                return sortOrder(a.id) - sortOrder(b.id)
               })
               if (!available.length) return null
               return (
