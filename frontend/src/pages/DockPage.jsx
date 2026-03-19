@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wrench, Trash2, Settings, ChevronDown, ChevronUp,
-  CheckSquare, Square, AlertTriangle, Plus, Minus, Lock
+  CheckSquare, Square, AlertTriangle, Plus, Minus, Lock, X
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -350,7 +350,7 @@ function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, q
                 if (p.required_profession && p.required_profession !== player?.profession) return false
                 return true
               }).sort((a, b) => {
-                if (catId === 'turret') {
+                if (catId === 'turret' || catId === 'primary_weapon') {
                   return ((classOrd[a.weapon_class]??9)*100 + sortOrder(a.id)) -
                          ((classOrd[b.weapon_class]??9)*100 + sortOrder(b.id))
                 }
