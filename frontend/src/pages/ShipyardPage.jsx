@@ -1,10 +1,10 @@
 // src/pages/ShipyardPage.jsx
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Rocket, X, ChevronRight, Hammer, AlertTriangle, Lock } from 'lucide-react'
+import { Rocket, X, ChevronRight, Hammer, AlertTriangle } from 'lucide-react'
 
 const CLASS_LABELS  = { Z: 'Klasse Z', A: 'Klasse A', B: 'Klasse B', C: 'Klasse C', D: 'Klasse D', E: 'Klasse E' }
 const CLASS_COLORS  = { Z: '#94a3b8', A: '#34d399', B: '#38bdf8', C: '#a78bfa', D: '#fb923c', E: '#f472b6' }
@@ -49,32 +49,29 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
   const getAvailableParts = (category) =>
     (partDefs ?? []).filter(p => {
       if (p.category !== category) return false
-      if (p.weapon_class && p.weapon_class !== chassis.class) return false
+      // Primärwaffen: weapon_class muss zum Chassis passen
+      // Turrets: dürfen in alle Chassis, kein weapon_class Filter
+      if (category === 'primary_weapon' && p.weapon_class && p.weapon_class !== chassis.class) return false
       if (p.required_profession && p.required_profession !== player?.profession) return false
-      return true // required_tech wird unten pro Teil geprüft
+      if (p.required_tech && !hasTech(p.required_tech)) return false
+      return true
     })
-
-  const isPartLocked = (part) => part.required_tech && !hasTech(part.required_tech)
 
   const baseStats = {
     hp: chassis.base_hp, attack: chassis.base_attack, defense: chassis.base_defense,
     speed: chassis.base_speed, maneuver: chassis.base_maneuver, cargo: chassis.base_cargo,
-    scan_range: 0, ast_scan_range: 0, npc_scan_range: 0,
   }
 
   const stats = selectedParts.reduce((acc, pid) => {
     const p = (partDefs ?? []).find(d => d.id === pid)
     if (!p) return acc
     return {
-      hp:             acc.hp             + (p.hp_bonus       || 0),
-      attack:         acc.attack         + (p.attack_bonus   || 0) - (p.attack_malus   || 0),
-      defense:        acc.defense        + (p.defense_bonus  || 0),
-      speed:          acc.speed          + (p.speed_bonus    || 0) - (p.speed_malus    || 0),
-      maneuver:       acc.maneuver       + (p.maneuver_bonus || 0) - (p.maneuver_malus || 0),
-      cargo:          acc.cargo          + (p.cargo_bonus    || 0),
-      scan_range:     acc.scan_range     + (p.scan_range     || 0),
-      ast_scan_range: acc.ast_scan_range + (p.category === 'scanner_asteroid' ? (p.scan_range || 0) : 0),
-      npc_scan_range: acc.npc_scan_range + (p.category === 'scanner_npc'      ? (p.scan_range || 0) : 0),
+      hp:       acc.hp       + (p.hp_bonus       || 0),
+      attack:   acc.attack   + (p.attack_bonus    || 0) - (p.attack_malus   || 0),
+      defense:  acc.defense  + (p.defense_bonus   || 0),
+      speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
+      maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
+      cargo:    acc.cargo    + (p.cargo_bonus     || 0),
     }
   }, { ...baseStats })
 
@@ -95,12 +92,48 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
   }, {})
 
   const canAfford = Object.entries(costs).every(([res, amt]) => (planet?.[res] ?? 0) >= amt)
-  const hasEngine = selectedParts.some(pid => (partDefs ?? []).find(d => d.id === pid)?.category === 'engine')
-  const cellsOk   = totalCells <= chassis.total_cells
-  const canBuild  = hasEngine && cellsOk && canAfford
 
-  const togglePart = (pid) =>
-    setSelectedParts(prev => prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid])
+  // Antrieb: genau 1 Hauptantrieb erforderlich
+  const engineCount = selectedParts.filter(pid =>
+    (partDefs ?? []).find(d => d.id === pid)?.category === 'engine'
+  ).length
+  const hasEngine  = engineCount === 1
+
+  // Primärwaffen: max chassis.max_primary_weapons (default 1)
+  const primaryCount = selectedParts.filter(pid =>
+    (partDefs ?? []).find(d => d.id === pid)?.category === 'primary_weapon'
+  ).length
+  const maxPrimary = chassis.max_primary_weapons ?? 1
+  const primaryOk  = primaryCount <= maxPrimary
+
+  const cellsOk  = totalCells <= chassis.total_cells
+  const canBuild = hasEngine && cellsOk && canAfford && primaryOk
+
+  const togglePart = (pid) => {
+    const part = (partDefs ?? []).find(d => d.id === pid)
+    if (!part) return
+    setSelectedParts(prev => {
+      const isSelected = prev.includes(pid)
+      if (isSelected) return prev.filter(p => p !== pid)
+
+      // Antrieb: nur 1 erlaubt — ersetze bestehenden
+      if (part.category === 'engine') {
+        const withoutEngines = prev.filter(p => {
+          const existing = (partDefs ?? []).find(d => d.id === p)
+          return existing?.category !== 'engine'
+        })
+        return [...withoutEngines, pid]
+      }
+      // Primärwaffe: max-Check
+      if (part.category === 'primary_weapon') {
+        const currentPrimary = prev.filter(p =>
+          (partDefs ?? []).find(d => d.id === p)?.category === 'primary_weapon'
+        ).length
+        if (currentPrimary >= maxPrimary) return prev // kein weiterer Slot
+      }
+      return [...prev, pid]
+    })
+  }
 
   const handleBuild = async () => {
     if (!canBuild || building) return
@@ -123,9 +156,6 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
         total_speed:     stats.speed,
         total_maneuver:  stats.maneuver,
         total_cargo:     stats.cargo,
-        total_scan_range: stats.scan_range,
-        ast_scan_range:  stats.ast_scan_range,
-        npc_scan_range:  stats.npc_scan_range,
         total_cells_used: totalCells,
         shipyard_space:  chassis.shipyard_space ?? 100,
         build_minutes:   buildMinutes,
@@ -196,6 +226,18 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
                   }} />
               </div>
             </div>
+            <div className="flex justify-between text-xs font-mono text-slate-500">
+              <span>Primärwaffen</span>
+              <span style={{ color: primaryCount > maxPrimary ? '#f87171' : primaryCount > 0 ? '#4ade80' : '#475569' }}>
+                {primaryCount} / {maxPrimary}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs font-mono text-slate-500">
+              <span>Antrieb</span>
+              <span style={{ color: engineCount === 1 ? '#4ade80' : '#f87171' }}>
+                {engineCount === 0 ? 'Fehlt' : engineCount === 1 ? '✓' : `${engineCount}x (zu viele)`}
+              </span>
+            </div>
 
             {PART_CATEGORIES.map(({ id, label, required }) => {
               const parts = getAvailableParts(id)
@@ -208,30 +250,21 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
                   </p>
                   <div className="space-y-0.5">
                     {parts.map(part => {
-                      const sel    = selectedParts.includes(part.id)
-                      const locked = isPartLocked(part)
-                      const full   = !sel && !locked && (totalCells + (part.cells_required || 0)) > chassis.total_cells
-                      const disabled = (full && !sel) || locked
+                      const sel  = selectedParts.includes(part.id)
+                      const full = !sel && (totalCells + (part.cells_required || 0)) > chassis.total_cells
                       return (
-                        <button key={part.id} onClick={() => !disabled && togglePart(part.id)}
-                          disabled={disabled}
+                        <button key={part.id} onClick={() => !full && togglePart(part.id)}
+                          disabled={full && !sel}
                           className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
                           style={{
-                            background: locked
-                              ? 'rgba(255,255,255,0.01)'
-                              : sel ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
-                            border: locked
-                              ? '1px solid rgba(255,255,255,0.04)'
-                              : sel ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                            color: locked ? '#1e293b' : sel ? '#22d3ee' : full ? '#1e293b' : '#94a3b8',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            background: sel ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
+                            border: sel ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                            color: sel ? '#22d3ee' : full ? '#1e293b' : '#94a3b8',
+                            cursor: full && !sel ? 'not-allowed' : 'pointer',
                           }}>
-                          <div className="flex justify-between items-center">
+                          <div className="flex justify-between">
                             <span className="truncate">{part.name}</span>
-                            {locked
-                              ? <Lock size={9} style={{ color: '#1e293b', flexShrink: 0 }} />
-                              : <span className="text-slate-600 ml-1 flex-shrink-0">{part.cells_required}Z</span>
-                            }
+                            <span className="text-slate-600 ml-1 flex-shrink-0">{part.cells_required}Z</span>
                           </div>
                         </button>
                       )
@@ -275,10 +308,22 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
               </div>
             </div>
 
-            {!hasEngine && (
+            {engineCount === 0 && (
               <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
                 style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-                <AlertTriangle size={14} /> Kein Antrieb — Schiff kann nicht gebaut werden
+                <AlertTriangle size={14} /> Kein Antrieb — genau 1 Hauptantrieb erforderlich
+              </div>
+            )}
+            {engineCount > 1 && (
+              <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
+                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                <AlertTriangle size={14} /> Zu viele Antriebe — nur 1 Hauptantrieb erlaubt
+              </div>
+            )}
+            {!primaryOk && (
+              <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
+                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                <AlertTriangle size={14} /> Zu viele Primärwaffen — max. {maxPrimary} für dieses Chassis
               </div>
             )}
 
@@ -329,15 +374,13 @@ function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
   const color     = CLASS_COLORS[chassis.class]
 
   return (
-    <motion.div
-      className="panel overflow-hidden"
-      style={{ opacity: disabled ? 0.45 : 1, cursor: disabled ? 'default' : 'pointer' }}
+    <motion.div className="panel overflow-hidden cursor-pointer" style={{ opacity: disabled ? 0.4 : 1 }}
       whileHover={!disabled ? { borderColor: `${color}50` } : {}}
       onClick={() => !disabled && onSelect(chassis)}>
       <div className="relative overflow-hidden" style={{ height: 300 }}>
         <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name}
           className="w-full h-full object-cover"
-          style={{ filter: disabled ? 'grayscale(80%) brightness(0.4)' : 'brightness(0.9)' }} />
+          style={{ filter: disabled ? 'grayscale(80%) brightness(0.5)' : 'brightness(0.9)' }} />
         <div className="absolute inset-0"
           style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(4,13,26,0.97) 100%)' }} />
         <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-xs font-mono font-bold"
@@ -384,24 +427,11 @@ function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ShipyardPage() {
-  const { planet, player, buildings, hasTech, refreshTechnologies } = useGameStore()
+  const { planet, player, buildings, hasTech } = useGameStore()
   const [classFilter, setClassFilter] = useState('all')
   const [designer, setDesigner]       = useState(null)
-  const [techReady, setTechReady]     = useState(false)
-  const queryClient = useQueryClient()
 
   const shipyardLevel = buildings.find(b => b.building_id === 'shipyard')?.level ?? 0
-
-  // Technologien beim Mount sofort laden, dann alle 30s auffrischen
-  useEffect(() => {
-    refreshTechnologies().then(() => setTechReady(true))
-    const interval = setInterval(() => {
-      refreshTechnologies()
-      queryClient.invalidateQueries({ queryKey: ['part-defs'] })
-      queryClient.invalidateQueries({ queryKey: ['chassis-defs'] })
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [])
 
   const { data: chassisDefs } = useQuery({
     queryKey: ['chassis-defs'],
@@ -409,7 +439,7 @@ export default function ShipyardPage() {
       const { data } = await supabase.from('chassis_definitions').select('*').order('class')
       return data ?? []
     },
-    staleTime: 30000, // 30s — wird oben manuell invalidiert
+    staleTime: Infinity,
   })
 
   const { data: partDefs } = useQuery({
@@ -418,7 +448,7 @@ export default function ShipyardPage() {
       const { data } = await supabase.from('ship_part_definitions').select('*')
       return data ?? []
     },
-    staleTime: 30000, // 30s — wird oben manuell invalidiert
+    staleTime: Infinity,
   })
 
   const { data: myShips, refetch: refetchShips } = useQuery({
@@ -451,10 +481,9 @@ export default function ShipyardPage() {
   const usedCapacity = usedByShips + usedByQueue
   const freeCapacity = shipyardCapacity - usedCapacity
 
-  const allChassis     = chassisDefs ?? []
-  const available      = allChassis.filter(c => !c.required_tech || hasTech(c.required_tech))
-  const classes        = ['all', ...new Set(allChassis.map(c => c.class))]
-  const filtered       = available.filter(c => classFilter === 'all' || c.class === classFilter)
+  const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
+  const classes   = ['all', ...new Set(available.map(c => c.class))]
+  const filtered  = available.filter(c => classFilter === 'all' || c.class === classFilter)
 
   if (shipyardLevel < 1) return (
     <div className="max-w-2xl mx-auto">
@@ -463,12 +492,6 @@ export default function ShipyardPage() {
         <h2 className="text-xl font-display text-slate-300">Schiffswerft nicht gebaut</h2>
         <p className="text-slate-500">Baue zuerst eine Schiffswerft auf deinem Planeten.</p>
       </div>
-    </div>
-  )
-
-  if (!techReady) return (
-    <div className="flex items-center justify-center h-64 text-slate-500 font-mono text-sm">
-      Lade Werft...
     </div>
   )
 
@@ -547,16 +570,13 @@ export default function ShipyardPage() {
         </div>
       )}
 
-      {/* Chassis Grid — nur freigeschaltete */}
-      {filtered.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(chassis => (
-            <ChassisCard key={chassis.id} chassis={chassis} player={player}
-              shipyardLevel={shipyardLevel} onSelect={setDesigner}
-              locked={false} />
-          ))}
-        </div>
-      )}
+      {/* Chassis Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        {filtered.map(chassis => (
+          <ChassisCard key={chassis.id} chassis={chassis} player={player}
+            shipyardLevel={shipyardLevel} onSelect={setDesigner} />
+        ))}
+      </div>
 
       <AnimatePresence>
         {designer && (
