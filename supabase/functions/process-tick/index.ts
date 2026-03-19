@@ -105,9 +105,10 @@ Deno.serve(async (req) => {
       // ── Umbau-Queue ───────────────────────────────────────────────────────
       await processRefitQueue(log)
 
-      // ── HQ-Bau-Queue + Transit ────────────────────────────────────────────
+      // ── HQ-Bau-Queue + Transit + Reparatur ────────────────────────────────
       await processHQBuildQueue(log)
       await processHQTransit(log)
+      await processHQRepair(log)
 
       // ── 8. Flotten-Bewegungen ─────────────────────────────────────────────
       await processFleets(log)
@@ -584,6 +585,28 @@ async function processHQTransit(log: string[]) {
       hq_last_moved: new Date().toISOString(),
     }).eq('id', a.id)
     log.push(`hq_arrived(${a.id})`)
+  }
+}
+
+// ─── HQ-Reparatur ─────────────────────────────────────────────────────────────
+
+async function processHQRepair(log: string[]) {
+  const { data: alliances } = await supabase
+    .from('alliances')
+    .select('id, hq_hp, hq_max_hp, hq_repair_finish_at')
+    .eq('hq_status', 'repairing')
+    .not('hq_repair_finish_at', 'is', null)
+    .lte('hq_repair_finish_at', new Date().toISOString())
+
+  if (!alliances?.length) return
+
+  for (const a of alliances) {
+    await supabase.from('alliances').update({
+      hq_hp: a.hq_max_hp,
+      hq_status: 'intact',
+      hq_repair_finish_at: null,
+    }).eq('id', a.id)
+    log.push(`hq_repaired(${a.id})`)
   }
 }
 
