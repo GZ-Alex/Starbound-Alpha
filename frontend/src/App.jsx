@@ -17,6 +17,7 @@ import ScanPage from '@/pages/ScanPage'
 import BattleReportsPage from '@/pages/BattleReportsPage'
 import DockPage from '@/pages/DockPage.jsx'
 import AlliancePage from '@/pages/AlliancePage'
+import AllianceHQPage from '@/pages/AllianceHQPage'
 import AdminPage from '@/pages/AdminPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
             <Route path="/comms"     element={<PlaceholderPage title="Kommunikationsnetzwerk" />} />
             <Route path="/alliance"  element={<AlliancePage />} />
+            <Route path="/alliance/hq" element={<AllianceHQPage />} />
             <Route path="ships"      element={<ShipsPage />} />
             <Route path="/fleet"     element={<FleetPage />} />
             <Route path="/scan"      element={<ScanPage />} />
