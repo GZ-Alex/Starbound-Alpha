@@ -15,6 +15,7 @@ import MinesPage from '@/pages/MinesPage'
 import ResearchPage from '@/pages/ResearchPage'
 import ScanPage from '@/pages/ScanPage'
 import BattleReportsPage from '@/pages/BattleReportsPage'
+import DockPage from '@/pages/DockPage'
 import AdminPage from '@/pages/AdminPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
@@ -56,7 +57,7 @@ export default function App() {
             <Route path="/mines"     element={<MinesPage />} />
             <Route path="/shipyard"  element={<ShipyardPage />} />
             <Route path="/research"  element={<ResearchPage />} />
-            <Route path="/dock"      element={<PlaceholderPage title="Dock" />} />
+            <Route path="/dock"      element={<DockPage />} />
             <Route path="/bunker"    element={<PlaceholderPage title="Bunker" />} />
             <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
             <Route path="/comms"     element={<PlaceholderPage title="Kommunikationsnetzwerk" />} />
