@@ -19,18 +19,19 @@ const CLASS_DESC    = {
 const PROFESSION_LABELS = { admiral: 'Admiral', trader: 'Händler', privateer: 'Freibeuter' }
 
 const PART_CATEGORIES = [
-  { id: 'engine',           label: 'Antrieb',     required: true  },
-  { id: 'booster',          label: 'Booster',     required: false },
-  { id: 'primary_weapon',   label: 'Primärwaffe', required: false },
-  { id: 'turret',           label: 'Turret',      required: false },
-  { id: 'armor',            label: 'Panzerung',   required: false },
-  { id: 'shield_hp',        label: 'HP-Schild',   required: false },
-  { id: 'shield_def',       label: 'Def-Schild',  required: false },
-  { id: 'cargo',            label: 'Ladebucht',   required: false },
-  { id: 'mining',           label: 'Bergbau',     required: false },
-  { id: 'scanner_asteroid', label: 'Ast-Scanner', required: false },
-  { id: 'scanner_npc',      label: 'NPC-Scanner', required: false },
-  { id: 'extension',        label: 'Erweiterung', required: false },
+  { id: 'engine',           label: 'Antrieb',           required: true  },
+  { id: 'engine_aux',       label: 'Sekundärantrieb',   required: false },
+  { id: 'booster',          label: 'Booster',           required: false },
+  { id: 'primary_weapon',   label: 'Primärwaffe',       required: false },
+  { id: 'turret',           label: 'Turret',            required: false },
+  { id: 'armor',            label: 'Panzerung',         required: false },
+  { id: 'shield_hp',        label: 'HP-Schild',         required: false },
+  { id: 'shield_def',       label: 'Def-Schild',        required: false },
+  { id: 'cargo',            label: 'Ladebucht',         required: false },
+  { id: 'mining',           label: 'Bergbau',           required: false },
+  { id: 'scanner_asteroid', label: 'Ast-Scanner',       required: false },
+  { id: 'scanner_npc',      label: 'NPC-Scanner',       required: false },
+  { id: 'extension',        label: 'Erweiterung',       required: false },
 ]
 
 function fmt(n) {
@@ -47,19 +48,31 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
   const { addNotification } = useGameStore()
 
   const getAvailableParts = (category) => {
-    const mkOrder = (id) => {
+    const sortOrder = (id) => {
+      // Größen-Suffix: s=1, m=2, l=3, xl=4, xxl=5
+      if (/_s$/.test(id)) return 1
+      if (/_m$/.test(id)) return 2
+      if (/_l$/.test(id)) return 3
+      if (/_xl$/.test(id)) return 4
+      if (/_xxl$/.test(id)) return 5
+      // Mk-Nummer: _1, _2, _3, _4 (ohne Suffix wie _pvt/_adm)
       const m = id.match(/_(\d+)(_pvt|_adm)?$/)
-      return m ? parseInt(m[1]) : 99
+      if (m) return parseInt(m[1])
+      return 99
     }
+    const classOrder = { A: 1, B: 2, C: 3, D: 4, E: 5 }
+    const turretSort = (p) => (classOrder[p.weapon_class] ?? 9) * 100 + sortOrder(p.id)
+
     return (partDefs ?? []).filter(p => {
       if (p.category !== category) return false
-      // Primärwaffen: weapon_class muss zum Chassis passen
-      // Turrets: dürfen in alle Chassis, kein weapon_class Filter
-      if (category === 'primary_weapon' && p.weapon_class && p.weapon_class !== chassis.class) return false
+      // Alle Waffen dürfen in alle Chassis (weapon_class ist nur Kampfeffektivität)
       if (p.required_profession && p.required_profession !== player?.profession) return false
       if (p.required_tech && !hasTech(p.required_tech)) return false
       return true
-    }).sort((a, b) => mkOrder(a.id) - mkOrder(b.id))
+    }).sort((a, b) => {
+      if (category === 'turret') return turretSort(a) - turretSort(b)
+      return sortOrder(a.id) - sortOrder(b.id)
+    })
   }
 
   const baseStats = {
