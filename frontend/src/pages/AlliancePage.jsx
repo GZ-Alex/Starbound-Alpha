@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, Crown, Shield, User, Search, Plus, X, Send,
-  ChevronLeft, ChevronRight, Swords, Handshake, Flag,
+  ChevronLeft, ChevronRight, Swords, Heart, Flag,
   Upload, CreditCard, FileText, Building2, LogOut, Check, AlertTriangle
 } from 'lucide-react'
 
@@ -39,9 +39,9 @@ const RANK_CONFIG = {
 
 const RELATION_CONFIG = {
   war:             { label: 'Krieg',            color: '#ef4444', icon: Swords    },
-  allied:          { label: 'Verbündet',         color: '#4ade80', icon: Handshake },
+  allied:          { label: 'Verbündet',         color: '#4ade80', icon: Heart },
   nap:             { label: 'Nichtangriffspakt', color: '#22d3ee', icon: Flag      },
-  pending_alliance:{ label: 'Bündnisanfrage',   color: '#fbbf24', icon: Handshake },
+  pending_alliance:{ label: 'Bündnisanfrage',   color: '#fbbf24', icon: Heart },
   pending_nap:     { label: 'NAP-Anfrage',       color: '#fbbf24', icon: Flag      },
 }
 
@@ -822,9 +822,9 @@ function TreasuryTab({ alliance, player, membership, canManage, members, queryCl
               ))}
             </select>
             <input value={payoutAmt} onChange={e => setPayoutAmt(e.target.value)}
-              type="number" placeholder="Betrag" style={{ width: '100px' }}
+              type="number" placeholder="Betrag"
               className="px-3 py-2 rounded text-sm font-mono"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }} />
+              style={{ width: '100px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', outline: 'none' }} />
             <button onClick={handlePayout} disabled={busy}
               className="px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
               style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)', color: '#4ade80' }}>
@@ -1027,7 +1027,7 @@ function DiplomacyTab({ alliance, player, membership }) {
                 <button onClick={() => sendDiplomacy('allied')} disabled={busy}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                   style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80' }}>
-                  <Handshake size={11} /> Bündnisanfrage
+                  <Heart size={11} /> Bündnisanfrage
                 </button>
                 <button onClick={() => sendDiplomacy('nap')} disabled={busy}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
