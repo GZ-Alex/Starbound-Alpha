@@ -604,8 +604,9 @@ async function processCombat(log: string[]) {
   const chassisDefs = await supabase.from('chassis_definitions').select('*').then(r => r.data ?? [])
   if (!chassisDefs.length) return
 
-  // ── 1. Abgelaufene NPC-Kampfflotten löschen ────────────────────────────────
+  // ── 1. Abgelaufene NPC-Kampfflotten + Cooldowns löschen ───────────────────
   await supabase.from('npc_combat_fleets').delete().lt('expires_at', new Date().toISOString())
+  await supabase.from('npc_spawn_cooldowns').delete().lt('blocked_until', new Date().toISOString())
 
   // ── 2. Laufende Kämpfe: je eine Runde simulieren ──────────────────────────
   const { data: activeBattles } = await supabase
@@ -691,6 +692,16 @@ async function processCombat(log: string[]) {
       .limit(1)
       .maybeSingle()
 
+    // Wenn keine persistente NPC-Flotte: Cooldown prüfen
+    if (!npcFleetRow) {
+      const { data: cooldown } = await supabase
+        .from('npc_spawn_cooldowns')
+        .select('blocked_until')
+        .eq('x', fx).eq('y', fy).eq('z', fz)
+        .maybeSingle()
+      if (cooldown) continue // Koordinate noch gesperrt
+    }
+
     // Wenn keine persistente NPC-Flotte: Modulo-Check ob NPC hier sein sollte
     // Gleiche Logik wie get_scan_objects: jeder 10. Gitterpunkt (npc_step=15)
     if (!npcFleetRow) {
@@ -773,6 +784,11 @@ async function finalizeBattle(
   if (battle.npc_fleet_id) {
     if (!npcSurvivors.length) {
       await supabase.from('npc_combat_fleets').delete().eq('id', battle.npc_fleet_id)
+      // Cooldown setzen: 3h kein Respawn an dieser Koordinate
+      await supabase.from('npc_spawn_cooldowns').upsert({
+        x: battle.x, y: battle.y, z: battle.z,
+        blocked_until: new Date(Date.now() + 3 * 3600 * 1000).toISOString(),
+      }, { onConflict: 'x,y,z' })
     } else {
       await supabase.from('npc_combat_fleets').update({ ships: nShips }).eq('id', battle.npc_fleet_id)
     }
