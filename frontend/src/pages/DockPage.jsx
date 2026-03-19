@@ -336,6 +336,9 @@ function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, q
                 if (p.category !== catId) return false
                 if (catId === 'primary_weapon' && p.weapon_class && p.weapon_class !== chassis?.class) return false
                 return true
+              }).sort((a, b) => {
+                const mk = id => { const m = id.match(/_(\d+)(_pvt|_adm)?$/); return m ? parseInt(m[1]) : 99 }
+                return mk(a.id) - mk(b.id)
               })
               if (!available.length) return null
               return (
