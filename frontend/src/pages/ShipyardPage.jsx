@@ -60,8 +60,6 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
       if (m) return parseInt(m[1])
       return 99
     }
-    const classOrder = { A: 1, B: 2, C: 3, D: 4, E: 5 }
-    const turretSort = (p) => (classOrder[p.weapon_class] ?? 9) * 100 + sortOrder(p.id)
 
     return (partDefs ?? []).filter(p => {
       if (p.category !== category) return false
@@ -70,7 +68,12 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
       if (p.required_tech && !hasTech(p.required_tech)) return false
       return true
     }).sort((a, b) => {
-      if (category === 'turret') return turretSort(a) - turretSort(b)
+      const classOrd = { A: 1, B: 2, C: 3, D: 4, E: 5 }
+      if (category === 'turret' || category === 'primary_weapon') {
+        const ta = (classOrd[a.weapon_class] ?? 9) * 100 + sortOrder(a.id)
+        const tb = (classOrd[b.weapon_class] ?? 9) * 100 + sortOrder(b.id)
+        return ta - tb
+      }
       return sortOrder(a.id) - sortOrder(b.id)
     })
   }
