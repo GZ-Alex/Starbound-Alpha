@@ -912,6 +912,110 @@ function FleetShipDetailPopup({ ship, chassisDefs, onClose }) {
   )
 }
 
+// ─── Inline Target Input ──────────────────────────────────────────────────────
+
+function InlineTargetInput({ fleet, ships, initialTarget, onSaved }) {
+  const [tx, setTx] = useState(String(initialTarget?.x ?? fleet.target_x ?? ''))
+  const [ty, setTy] = useState(String(initialTarget?.y ?? fleet.target_y ?? ''))
+  const [tz, setTz] = useState(String(initialTarget?.z ?? fleet.target_z ?? ''))
+  const [saving, setSaving] = useState(false)
+  const queryClient = useQueryClient()
+
+  // Wenn quickTarget sich ändert (Scan → Klick), Felder aktualisieren
+  useEffect(() => {
+    if (initialTarget) {
+      setTx(String(initialTarget.x))
+      setTy(String(initialTarget.y))
+      setTz(String(initialTarget.z))
+    }
+  }, [initialTarget?.x, initialTarget?.y, initialTarget?.z])
+
+  const txN = parseInt(tx), tyN = parseInt(ty), tzN = parseInt(tz)
+  const coordsValid = !isNaN(txN) && !isNaN(tyN) && !isNaN(tzN)
+  const baseSpeed = fleetSpeed(ships)
+  const speedPercent = fleet.speed_percent ?? 100
+  const distance = coordsValid
+    ? calcDistance(fleet.x ?? 0, fleet.y ?? 0, fleet.z ?? 0, txN, tyN, tzN)
+    : 0
+  const isSamePos = coordsValid && distance < 0.001
+  const etaLabel = coordsValid && baseSpeed > 0 && !isSamePos
+    ? formatEtaDuration(distance, baseSpeed, speedPercent)
+    : null
+
+  // Paste: "405 / 150 / 104" oder "405/150/104" oder "405 150 104" → x y z
+  const handlePaste = (e) => {
+    const text = e.clipboardData.getData('text')
+    const parts = text.split(/[\s/,]+/).map(s => s.trim()).filter(Boolean)
+    if (parts.length >= 3 && parts.every(p => !isNaN(parseInt(p)))) {
+      e.preventDefault()
+      setTx(parts[0])
+      setTy(parts[1])
+      setTz(parts[2])
+    }
+  }
+
+  const handleSave = async () => {
+    if (saving || !coordsValid || isSamePos) return
+    setSaving(true)
+    const arriveAt = calcArriveAt(distance, baseSpeed, speedPercent)
+    const { error } = await supabase.from('fleets').update({
+      target_x: txN, target_y: tyN, target_z: tzN,
+      mission: 'move', is_in_transit: true,
+      arrive_at: arriveAt?.toISOString() ?? null,
+    }).eq('id', fleet.id)
+    setSaving(false)
+    if (!error) {
+      queryClient.invalidateQueries(['fleets'])
+      if (onSaved) onSaved()
+    }
+  }
+
+  const inputStyle = {
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    color: '#e2e8f0',
+    outline: 'none',
+    width: '52px',
+    borderRadius: '4px',
+    padding: '2px 4px',
+    fontSize: '12px',
+    fontFamily: 'monospace',
+    textAlign: 'center',
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1" onPaste={handlePaste}>
+        <input value={tx} onChange={e => setTx(e.target.value)} style={inputStyle} placeholder="X" />
+        <span className="text-slate-700 text-xs">/</span>
+        <input value={ty} onChange={e => setTy(e.target.value)} style={inputStyle} placeholder="Y" />
+        <span className="text-slate-700 text-xs">/</span>
+        <input value={tz} onChange={e => setTz(e.target.value)} style={inputStyle} placeholder="Z" />
+        <button
+          onClick={handleSave}
+          disabled={saving || !coordsValid || isSamePos}
+          className="flex-shrink-0 px-2 py-0.5 rounded text-xs font-mono font-semibold transition-all ml-1"
+          style={{
+            background: coordsValid && !isSamePos ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${coordsValid && !isSamePos ? 'rgba(34,211,238,0.35)' : 'rgba(255,255,255,0.06)'}`,
+            color: coordsValid && !isSamePos ? '#22d3ee' : '#334155',
+            cursor: coordsValid && !isSamePos ? 'pointer' : 'default',
+          }}>
+          {saving ? '…' : '→'}
+        </button>
+      </div>
+      {etaLabel && (
+        <p className="text-xs font-mono" style={{ color: '#475569' }}>
+          {distance.toFixed(1)} pc · {etaLabel}
+        </p>
+      )}
+      {isSamePos && (
+        <p className="text-xs font-mono" style={{ color: '#f87171' }}>Gleiche Position</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Flight Mode Modal ────────────────────────────────────────────────────────
 
 const FLIGHT_MODE_OPTIONS = [
@@ -1094,12 +1198,25 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
             <p className="text-sm font-mono text-slate-300">{coords(fleet.x, fleet.y, fleet.z)}</p>
           </div>
 
-          {/* Ziel */}
-          <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          {/* Ziel — inline Eingabe */}
+          <div className="rounded-lg p-3 col-span-1"
+            style={{
+              background: isTransit ? 'rgba(34,211,238,0.04)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${isTransit ? 'rgba(34,211,238,0.2)' : 'rgba(255,255,255,0.06)'}`,
+            }}>
             <p className="text-xs font-mono text-slate-600 mb-1">Ziel</p>
-            <p className="text-sm font-mono" style={{ color: isTransit ? '#22d3ee' : '#475569' }}>
-              {coords(fleet.target_x, fleet.target_y, fleet.target_z)}
-            </p>
+            {isTransit ? (
+              <p className="text-sm font-mono" style={{ color: '#22d3ee' }}>
+                {coords(fleet.target_x, fleet.target_y, fleet.target_z)}
+              </p>
+            ) : (
+              <InlineTargetInput
+                fleet={fleet}
+                ships={ships}
+                initialTarget={quickTarget}
+                onSaved={handleTargetSaved}
+              />
+            )}
           </div>
 
           <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1132,19 +1249,6 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
             <Bookmark size={11} />
             Bookmarks
           </button>
-
-          {!isTransit && (
-            <button onClick={() => setShowSetTarget(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-semibold transition-all"
-              style={{
-                background: 'rgba(34,211,238,0.1)',
-                border: '1px solid rgba(34,211,238,0.25)',
-                color: '#22d3ee',
-              }}>
-              <Send size={11} />
-              Kurs setzen
-            </button>
-          )}
 
           {!isTransit && (
             <button onClick={() => setShowDissolve(true)}
@@ -1361,7 +1465,10 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
           <BookmarkModal
             playerId={playerId}
             onClose={() => setShowBookmarks(false)}
-            onSelect={null}
+            onSelect={(bm) => {
+              setQuickTarget({ x: bm.x, y: bm.y, z: bm.z })
+              setShowBookmarks(false)
+            }}
           />
         )}
         {selectedShip && (
