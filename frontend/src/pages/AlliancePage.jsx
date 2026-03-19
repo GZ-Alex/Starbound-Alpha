@@ -1135,15 +1135,26 @@ function DiplomacyTab({ alliance, player, membership }) {
 
 function HQTab({ alliance }) {
   return (
-    <div className="panel p-8 text-center space-y-3">
-      <Building2 size={32} className="mx-auto" style={{ color: '#334155' }} />
-      <p className="font-mono text-slate-600">Allianz-HQ</p>
-      <p className="text-xs font-mono text-slate-700">
-        {alliance.hq_planet_id
-          ? `Stationiert bei ${alliance.hq_x} / ${alliance.hq_y} / ${alliance.hq_z}`
-          : 'Noch nicht stationiert.'}
-      </p>
-      <p className="text-xs font-mono text-slate-700">⚙ In Entwicklung</p>
+    <div className="panel p-8 text-center space-y-4">
+      <Building2 size={40} className="mx-auto" style={{ color: alliance.hq_founded ? '#22d3ee' : '#334155' }} />
+      <div>
+        <p className="font-mono font-semibold text-slate-200">Allianz-Hauptquartier</p>
+        <p className="text-xs font-mono text-slate-600 mt-1">
+          {alliance.hq_founded
+            ? `Stationiert bei ${alliance.hq_x} / ${alliance.hq_y} / ${alliance.hq_z}`
+            : 'Noch nicht gegründet.'}
+        </p>
+      </div>
+      <a href="#/alliance/hq"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-mono font-semibold transition-all"
+        style={{
+          background: 'rgba(34,211,238,0.1)',
+          border: '1px solid rgba(34,211,238,0.3)',
+          color: '#22d3ee',
+        }}>
+        <Building2 size={14} />
+        {alliance.hq_founded ? 'Zum Allianz-HQ' : 'HQ gründen'}
+      </a>
     </div>
   )
 }
