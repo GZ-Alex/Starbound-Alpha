@@ -99,6 +99,12 @@ Deno.serve(async (req) => {
       // ── 7. Schiffsbau-Queue ───────────────────────────────────────────────
       await processShipBuildQueue(log)
 
+      // ── Reparatur-Queue ───────────────────────────────────────────────────
+      await processRepairQueue(log)
+
+      // ── Umbau-Queue ───────────────────────────────────────────────────────
+      await processRefitQueue(log)
+
       // ── 8. Flotten-Bewegungen ─────────────────────────────────────────────
       await processFleets(log)
 
@@ -393,6 +399,89 @@ async function processFleets(log: string[]) {
   }
 
   if (arrived > 0) log.push(`fleets_arrived=${arrived}`)
+}
+
+// ─── Reparatur-Queue ──────────────────────────────────────────────────────────
+
+async function processRepairQueue(log: string[]) {
+  const { data: doneItems } = await supabase
+    .from('repair_queue')
+    .select('*, ships(id, max_hp)')
+    .lte('finish_at', new Date().toISOString())
+
+  if (!doneItems?.length) return
+
+  let completed = 0
+  for (const item of doneItems) {
+    // Schiff auf volle HP setzen
+    const { error } = await supabase
+      .from('ships')
+      .update({ current_hp: item.max_hp })
+      .eq('id', item.ship_id)
+
+    if (error) { log.push(`repair_err: ${error.message}`); continue }
+
+    await supabase.from('repair_queue').delete().eq('id', item.id)
+
+    await notify(item.player_id, 'ship_built',
+      'Reparatur abgeschlossen',
+      `Dein Schiff wurde erfolgreich repariert.`,
+      { ship_id: item.ship_id, planet_id: item.planet_id }
+    )
+    completed++
+  }
+  if (completed > 0) log.push(`repairs_done=${completed}`)
+}
+
+// ─── Umbau-Queue ──────────────────────────────────────────────────────────────
+
+async function processRefitQueue(log: string[]) {
+  const { data: doneItems } = await supabase
+    .from('refit_queue')
+    .select('*, ships(id, design_id, max_hp, current_hp), ship_part_definitions(id, cells_required, hp_bonus, attack_bonus, defense_bonus, speed_bonus, maneuver_bonus, cargo_bonus, scan_range)')
+    .lte('finish_at', new Date().toISOString())
+
+  if (!doneItems?.length) return
+
+  let completed = 0
+  for (const item of doneItems) {
+    const ship = item.ships
+    if (!ship) { await supabase.from('refit_queue').delete().eq('id', item.id); continue }
+
+    // Ship design laden
+    const { data: design } = await supabase
+      .from('ship_designs')
+      .select('*')
+      .eq('id', ship.design_id)
+      .single()
+
+    if (!design) { await supabase.from('refit_queue').delete().eq('id', item.id); continue }
+
+    const part = item.ship_part_definitions
+    let parts: any[] = Array.isArray(design.installed_parts) ? design.installed_parts : []
+
+    if (item.action === 'install') {
+      // Bauteil hinzufügen
+      parts = [...parts, { part_id: item.part_id }]
+    } else {
+      // Bauteil entfernen (erstes Vorkommen)
+      const idx = parts.findIndex((p: any) => (typeof p === 'string' ? p : p.part_id) === item.part_id)
+      if (idx >= 0) parts.splice(idx, 1)
+    }
+
+    // Stats neu berechnen — vereinfacht: wir triggern ein Update das den recalc in der DB auslöst
+    // Für jetzt: installed_parts aktualisieren, total_* Stats bleiben bis nächster Recalc
+    await supabase.from('ship_designs').update({ installed_parts: parts }).eq('id', design.id)
+    await supabase.from('refit_queue').delete().eq('id', item.id)
+
+    await notify(item.player_id, 'ship_built',
+      'Umbau abgeschlossen',
+      `Der Umbau deines Schiffes wurde abgeschlossen.`,
+      { ship_id: item.ship_id, planet_id: item.planet_id, action: item.action, part_id: item.part_id }
+    )
+    completed++
+  }
+  if (completed > 0) log.push(`refits_done=${completed}`)
 }
 
 async function processAsteroidTick(log: string[]) {
