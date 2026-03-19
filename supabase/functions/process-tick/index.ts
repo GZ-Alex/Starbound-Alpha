@@ -105,6 +105,10 @@ Deno.serve(async (req) => {
       // ── Umbau-Queue ───────────────────────────────────────────────────────
       await processRefitQueue(log)
 
+      // ── HQ-Bau-Queue + Transit ────────────────────────────────────────────
+      await processHQBuildQueue(log)
+      await processHQTransit(log)
+
       // ── 8. Flotten-Bewegungen ─────────────────────────────────────────────
       await processFleets(log)
 
@@ -482,6 +486,105 @@ async function processRefitQueue(log: string[]) {
     completed++
   }
   if (completed > 0) log.push(`refits_done=${completed}`)
+}
+
+// ─── HQ Bonus-Berechnung ─────────────────────────────────────────────────────
+
+async function recalcAllianceBonuses(allianceId: string) {
+  // Alle Modul-Level laden
+  const { data: levels } = await supabase
+    .from('hq_module_levels')
+    .select('module_id, level')
+    .eq('alliance_id', allianceId)
+
+  // Modul-Definitionen laden
+  const { data: modules } = await supabase
+    .from('hq_modules')
+    .select('id, bonus_key, bonus_per_level, bonus_key_2, bonus_per_level_2')
+
+  if (!levels || !modules) return
+
+  // Bonuses berechnen
+  const bonuses: Record<string, number> = {}
+  for (const lvl of levels) {
+    if (!lvl.level) continue
+    const mod = modules.find((m: any) => m.id === lvl.module_id)
+    if (!mod) continue
+    if (mod.bonus_key) {
+      bonuses[mod.bonus_key] = (bonuses[mod.bonus_key] ?? 0) + mod.bonus_per_level * lvl.level
+    }
+    if (mod.bonus_key_2) {
+      bonuses[mod.bonus_key_2] = (bonuses[mod.bonus_key_2] ?? 0) + (mod.bonus_per_level_2 ?? 0) * lvl.level
+    }
+  }
+
+  // Herz der Allianz: member_limit_bonus → member_limit auf alliances updaten
+  const heartLevel = levels.find((l: any) => l.module_id === 'herz')?.level ?? 0
+  await supabase.from('alliances')
+    .update({ member_limit: 10 + heartLevel })
+    .eq('id', allianceId)
+
+  // alliance_bonuses auf alle Mitglieder schreiben
+  const { data: members } = await supabase
+    .from('alliance_members')
+    .select('player_id')
+    .eq('alliance_id', allianceId)
+
+  if (!members) return
+  for (const m of members) {
+    await supabase.from('players')
+      .update({ alliance_bonuses: bonuses })
+      .eq('id', m.player_id)
+  }
+}
+
+// ─── HQ-Bau-Queue ─────────────────────────────────────────────────────────────
+
+async function processHQBuildQueue(log: string[]) {
+  const { data: doneItems } = await supabase
+    .from('hq_build_queue')
+    .select('*')
+    .lte('finish_at', new Date().toISOString())
+
+  if (!doneItems?.length) return
+
+  let completed = 0
+  for (const item of doneItems) {
+    // Modul-Level erhöhen
+    await supabase.from('hq_module_levels').upsert(
+      { alliance_id: item.alliance_id, module_id: item.module_id, level: item.target_level },
+      { onConflict: 'alliance_id,module_id' }
+    )
+    await supabase.from('hq_build_queue').delete().eq('id', item.id)
+
+    // Boni neu berechnen
+    await recalcAllianceBonuses(item.alliance_id)
+    completed++
+  }
+  if (completed > 0) log.push(`hq_builds_done=${completed}`)
+}
+
+// ─── HQ-Transit ───────────────────────────────────────────────────────────────
+
+async function processHQTransit(log: string[]) {
+  const { data: alliances } = await supabase
+    .from('alliances')
+    .select('id, hq_x, hq_y, hq_z, hq_target_x, hq_target_y, hq_target_z, hq_in_transit, hq_arrives_at')
+    .eq('hq_in_transit', true)
+    .not('hq_arrives_at', 'is', null)
+    .lte('hq_arrives_at', new Date().toISOString())
+
+  if (!alliances?.length) return
+
+  for (const a of alliances) {
+    await supabase.from('alliances').update({
+      hq_x: a.hq_target_x, hq_y: a.hq_target_y, hq_z: a.hq_target_z,
+      hq_target_x: null, hq_target_y: null, hq_target_z: null,
+      hq_in_transit: false, hq_arrives_at: null,
+      hq_last_moved: new Date().toISOString(),
+    }).eq('id', a.id)
+    log.push(`hq_arrived(${a.id})`)
+  }
 }
 
 async function processAsteroidTick(log: string[]) {
