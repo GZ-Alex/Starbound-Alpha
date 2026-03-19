@@ -244,7 +244,7 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
 // ─── Cargo Panel ──────────────────────────────────────────────────────────────
 
 function CargoPanel({ alliance, planet, membership, queryClient, player }) {
-  const [transferAmts, setTransferAmts] = {})
+  const [transferAmts, setTransferAmts] = useState({})
   const [busy, setBusy] = useState(false)
 
   const hqCargo = alliance.hq_cargo ?? {}
