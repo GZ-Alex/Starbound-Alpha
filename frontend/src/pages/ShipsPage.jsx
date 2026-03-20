@@ -185,20 +185,41 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
 
 // ─── Flotte zuweisen Modal ─────────────────────────────────────────────────────
 
-function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
+function AssignFleetModal({ ships, fleets, onClose, onAssigned, planet }) {
   const [selectedFleetId, setSelectedFleetId] = useState('')
+  const [newFleetName, setNewFleetName] = useState('')
+  const [creatingNew, setCreatingNew] = useState(false)
   const [busy, setBusy] = useState(false)
-  const { addNotification } = useGameStore()
+  const { player, addNotification } = useGameStore()
 
   const handleAssign = async () => {
-    if (!selectedFleetId) return
+    if (busy) return
     setBusy(true)
     try {
+      let fleetId = selectedFleetId
+
+      // Neue Flotte erstellen wenn gewählt
+      if (creatingNew) {
+        const name = newFleetName.trim() || 'Neue Flotte'
+        const { data: newFleet, error: fleetErr } = await supabase
+          .from('fleets')
+          .insert({
+            player_id: player.id,
+            name,
+            x: planet?.x ?? 0,
+            y: planet?.y ?? 0,
+            z: planet?.z ?? 0,
+            flight_mode: 'neutral',
+            is_in_transit: false,
+          })
+          .select().single()
+        if (fleetErr) throw fleetErr
+        fleetId = newFleet.id
+      }
+
+      if (!fleetId) return
       const ids = ships.map(s => s.id)
-      const { error } = await supabase
-        .from('ships')
-        .update({ fleet_id: selectedFleetId })
-        .in('id', ids)
+      const { error } = await supabase.from('ships').update({ fleet_id: fleetId }).in('id', ids)
       if (error) throw error
       addNotification(`✅ ${ids.length} Schiff${ids.length !== 1 ? 'e' : ''} zugewiesen`, 'success')
       onAssigned()
@@ -214,10 +235,7 @@ function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
     setBusy(true)
     try {
       const ids = ships.map(s => s.id)
-      const { error } = await supabase
-        .from('ships')
-        .update({ fleet_id: null })
-        .in('id', ids)
+      const { error } = await supabase.from('ships').update({ fleet_id: null }).in('id', ids)
       if (error) throw error
       addNotification(`✅ ${ids.length} Schiff${ids.length !== 1 ? 'e' : ''} aus Flotte entfernt`, 'success')
       onAssigned()
@@ -230,6 +248,7 @@ function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
   }
 
   const availableFleets = fleets.filter(f => !f.is_in_transit)
+  const canSubmit = creatingNew ? true : !!selectedFleetId
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -258,19 +277,18 @@ function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
           ))}
         </div>
 
-        {/* Flotte wählen */}
-        {availableFleets.length === 0 ? (
-          <p className="text-xs font-mono text-slate-600">Keine Flotten verfügbar. Erstelle zuerst eine Flotte.</p>
-        ) : (
-          <div className="space-y-1.5">
+        {/* Bestehende Flotten */}
+        {availableFleets.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flotte wählen</p>
             {availableFleets.map(f => (
               <button key={f.id}
-                onClick={() => setSelectedFleetId(f.id)}
+                onClick={() => { setSelectedFleetId(f.id); setCreatingNew(false) }}
                 className="w-full text-left px-3 py-2 rounded text-xs font-mono transition-all"
                 style={{
-                  background: selectedFleetId === f.id ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${selectedFleetId === f.id ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                  color: selectedFleetId === f.id ? '#a78bfa' : '#94a3b8',
+                  background: selectedFleetId === f.id && !creatingNew ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${selectedFleetId === f.id && !creatingNew ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                  color: selectedFleetId === f.id && !creatingNew ? '#a78bfa' : '#94a3b8',
                 }}>
                 <div className="flex justify-between items-center">
                   <span>{f.name ?? 'Flotte'}</span>
@@ -281,8 +299,35 @@ function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
           </div>
         )}
 
+        {/* Neue Flotte erstellen */}
+        <div className="space-y-2">
+          <button
+            onClick={() => { setCreatingNew(v => !v); setSelectedFleetId('') }}
+            className="w-full text-left px-3 py-2 rounded text-xs font-mono transition-all"
+            style={{
+              background: creatingNew ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${creatingNew ? 'rgba(34,211,238,0.35)' : 'rgba(255,255,255,0.08)'}`,
+              color: creatingNew ? '#22d3ee' : '#475569',
+            }}>
+            <div className="flex items-center gap-1.5">
+              <PlusCircle size={11} />
+              Neue Flotte erstellen
+            </div>
+          </button>
+          {creatingNew && (
+            <input
+              value={newFleetName}
+              onChange={e => setNewFleetName(e.target.value)}
+              placeholder="Flottenname..."
+              maxLength={30}
+              autoFocus
+              className="w-full px-3 py-2 rounded text-xs font-mono"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(34,211,238,0.3)', color: '#e2e8f0', outline: 'none' }}
+            />
+          )}
+        </div>
+
         <div className="flex gap-2">
-          {/* Aus Flotte entfernen — nur wenn mind. ein Schiff bereits in einer Flotte */}
           {ships.some(s => s.fleet_id) && (
             <button onClick={handleRemove} disabled={busy}
               className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-mono transition-all"
@@ -291,14 +336,14 @@ function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
             </button>
           )}
           <button onClick={handleAssign}
-            disabled={!selectedFleetId || busy}
+            disabled={!canSubmit || busy}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded text-xs font-mono transition-all"
             style={{
-              background: selectedFleetId ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${selectedFleetId ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
-              color: selectedFleetId ? '#a78bfa' : '#334155',
+              background: canSubmit ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${canSubmit ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
+              color: canSubmit ? '#a78bfa' : '#334155',
             }}>
-            <PlusCircle size={11} /> Zuweisen
+            <PlusCircle size={11} /> {creatingNew ? 'Erstellen & Zuweisen' : 'Zuweisen'}
           </button>
         </div>
       </motion.div>
@@ -577,6 +622,7 @@ export default function ShipsPage() {
           <AssignFleetModal
             ships={assignShips}
             fleets={fleets}
+            planet={planet}
             onClose={() => setAssignShips(null)}
             onAssigned={() => queryClient.invalidateQueries(['ships', player?.id])}
           />
