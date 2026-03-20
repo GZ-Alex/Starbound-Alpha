@@ -288,15 +288,34 @@ export default function BattleAnimation({ report, onClose }) {
   const canvasRef = useRef(null)
   const stateRef  = useRef(null)
   const rafRef    = useRef(null)
+  const [started, setStarted] = useState(false)
   const [paused, setPaused] = useState(false)
   const [currentRound, setCurrentRound] = useState(0)
   const [done, setDone] = useState(false)
   const pausedRef = useRef(false)
+  const [key, setKey] = useState(0)  // key ändern = Animation neu starten
 
   const W = 700, H = 500
 
-  // Initialisierung
+  const handleStart = useCallback(() => {
+    setStarted(true)
+    setPaused(false)
+    pausedRef.current = false
+  }, [])
+
+  const handleRestart = useCallback(() => {
+    // Animation neu initialisieren via key
+    setDone(false)
+    setCurrentRound(0)
+    setPaused(false)
+    pausedRef.current = false
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    setKey(k => k + 1)
+  }, [])
+
+  // Initialisierung — läuft neu wenn key sich ändert
   useEffect(() => {
+    if (!started) return
     const sim = buildSimState(report)
     if (!sim) return
 
@@ -469,7 +488,7 @@ export default function BattleAnimation({ report, onClose }) {
 
     rafRef.current = requestAnimationFrame(frame)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [report])
+  }, [report, started, key])
 
   const togglePause = useCallback(() => {
     pausedRef.current = !pausedRef.current
@@ -485,6 +504,22 @@ export default function BattleAnimation({ report, onClose }) {
         <canvas ref={canvasRef} width={W} height={H}
           style={{ display: 'block', width: '100%', background: '#040d1a' }} />
 
+        {/* Play-Screen (vor Start) */}
+        {!started && (
+          <div className="absolute inset-0 flex items-center justify-center"
+            style={{ background: 'rgba(4,13,26,0.85)', backdropFilter: 'blur(2px)' }}>
+            <button onClick={handleStart}
+              className="flex flex-col items-center gap-3 group transition-transform hover:scale-105">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center transition-all"
+                style={{ background: 'rgba(34,211,238,0.12)', border: '2px solid rgba(34,211,238,0.4)' }}>
+                <Play size={32} style={{ color: '#22d3ee', marginLeft: 4 }} />
+              </div>
+              <span className="text-xs font-mono text-slate-500">Kampf abspielen</span>
+            </button>
+          </div>
+        )}
+
+        {/* Ergebnis-Screen (nach Ende) */}
         {done && (
           <div className="absolute inset-0 flex items-center justify-center"
             style={{ background: 'rgba(4,13,26,0.7)', backdropFilter: 'blur(2px)' }}>
@@ -498,24 +533,24 @@ export default function BattleAnimation({ report, onClose }) {
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-2">
-        <button onClick={togglePause}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
-          style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}>
-          {paused ? <><Play size={11} /> Weiter</> : <><Pause size={11} /> Pause</>}
-        </button>
-        <span className="text-xs font-mono text-slate-600">
-          Runde {Math.min(currentRound + 1, totalRounds)} / {totalRounds}
-        </span>
-        {done && (
-          <button onClick={() => { setDone(false); setCurrentRound(0) }}
+      {/* Controls — nur sichtbar wenn gestartet */}
+      {started && (
+        <div className="flex items-center gap-2">
+          <button onClick={togglePause}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+            style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}>
+            {paused ? <><Play size={11} /> Weiter</> : <><Pause size={11} /> Pause</>}
+          </button>
+          <span className="text-xs font-mono text-slate-600">
+            Runde {Math.min(currentRound + 1, totalRounds)} / {totalRounds}
+          </span>
+          <button onClick={handleRestart}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono ml-auto transition-all"
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#64748b' }}>
             <RotateCcw size={11} /> Nochmal
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
