@@ -39,7 +39,7 @@ const PART_CATEGORY_ICONS = {
 
 function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClose }) {
   const imgSrc = chassis?.image_key
-    ? `/ships/${chassis.image_key}.png`
+    ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
 
   const installedParts = (design?.installed_parts ?? []).map(p => {
@@ -185,7 +185,7 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
 
 function ShipRow({ ship, design, chassis, fleet, planet, partDefs, onDetail, onGoToFleet }) {
   const imgSrc = chassis?.image_key
-    ? `/ships/${chassis.image_key}.png`
+    ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
 
   const hpPct = ship.max_hp > 0 ? (ship.current_hp / ship.max_hp) * 100 : 0
