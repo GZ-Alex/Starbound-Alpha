@@ -78,15 +78,24 @@ function ConfirmDialog({ title, message, onConfirm, onCancel }) {
 
 // ─── Ship Row ─────────────────────────────────────────────────────────────────
 
-function DockShipRow({ ship, selected, onToggle, onRefit, dockLevel, repairQueue, refitQueue }) {
+function DockShipRow({ ship, selected, onToggle, onRefit, dockLevel, repairQueue, refitQueue, queryClient }) {
   const design = ship.ship_designs
   const hpPct = ship.max_hp > 0 ? Math.round((ship.current_hp / ship.max_hp) * 100) : 0
   const hpColor = hpPct >= 100 ? '#4ade80' : hpPct > 60 ? '#fbbf24' : '#f87171'
-  const needsRepair = hpPct < 100
 
   const inRepair = repairQueue.some(r => r.ship_id === ship.id)
   const inRefit  = refitQueue.some(r => r.ship_id === ship.id)
   const isLocked = ship.fleet_id || (ship.cargo_used > 0)
+
+  const [editing, setEditing] = useState(false)
+  const [nameVal, setNameVal] = useState(ship.name ?? design?.name ?? '')
+
+  const handleRename = async () => {
+    if (!nameVal.trim()) return
+    await supabase.from('ships').update({ name: nameVal.trim() }).eq('id', ship.id)
+    queryClient?.invalidateQueries(['dock-ships'])
+    setEditing(false)
+  }
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 rounded-lg transition-all"
@@ -96,7 +105,7 @@ function DockShipRow({ ship, selected, onToggle, onRefit, dockLevel, repairQueue
         cursor: isLocked ? 'default' : 'pointer',
         opacity: isLocked ? 0.5 : 1,
       }}
-      onClick={() => !isLocked && onToggle(ship.id)}>
+      onClick={() => !isLocked && !editing && onToggle(ship.id)}>
 
       {/* Checkbox */}
       <div className="flex-shrink-0" style={{ color: selected ? '#22d3ee' : '#334155' }}>
@@ -104,8 +113,33 @@ function DockShipRow({ ship, selected, onToggle, onRefit, dockLevel, repairQueue
       </div>
 
       {/* Name + Chassis */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-mono font-semibold text-slate-200 truncate">{ship.name ?? design?.name ?? '—'}</p>
+      <div className="flex-1 min-w-0" onClick={e => editing && e.stopPropagation()}>
+        {editing ? (
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <input
+              value={nameVal}
+              onChange={e => setNameVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setEditing(false) }}
+              maxLength={30}
+              autoFocus
+              className="flex-1 px-2 py-0.5 rounded text-sm font-mono"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(34,211,238,0.4)', color: '#e2e8f0', outline: 'none' }}
+            />
+            <button onClick={handleRename} className="text-xs font-mono px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.3)' }}>✓</button>
+            <button onClick={() => setEditing(false)} className="text-xs font-mono px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(255,255,255,0.04)', color: '#64748b', border: '1px solid rgba(255,255,255,0.08)' }}>✕</button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 group">
+            <p className="text-sm font-mono font-semibold text-slate-200 truncate">{ship.name ?? design?.name ?? '—'}</p>
+            <button onClick={e => { e.stopPropagation(); setEditing(true) }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-slate-400 flex-shrink-0"
+              title="Umbenennen">
+              ✎
+            </button>
+          </div>
+        )}
         <p className="text-xs font-mono text-slate-600">{design?.chassis_id ?? '—'}</p>
       </div>
 
@@ -492,6 +526,7 @@ export default function DockPage() {
                 dockLevel={dockLevel}
                 repairQueue={repairQueue}
                 refitQueue={refitQueue}
+                queryClient={queryClient}
               />
             ))}
           </div>
