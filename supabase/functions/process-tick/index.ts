@@ -712,29 +712,97 @@ function buildNpcFleet(npcType: string, chassisDefs: any[]): NpcShip[] {
   return ships
 }
 
+// Waffenklasse → bevorzugte Ziel-Chassisklasse (laut WEAPONS_SYSTEM.md)
+const WEAPON_TARGET_CLASS: Record<string, string> = {
+  A: 'A', B: 'B', C: 'C', D: 'D', E: 'E',
+}
+
+// Waffenart → weaponType string (aus Part-ID erkannt)
+function weaponTypeFromId(id: string): string {
+  if (id.startsWith('laser'))      return 'laser'
+  if (id.startsWith('ion_cannon')) return 'ion'
+  if (id.startsWith('railgun'))    return 'railgun'
+  if (id.startsWith('plasma'))     return 'plasma'
+  if (id.startsWith('torpedo'))    return 'torpedo'
+  if (id.startsWith('laser_turret'))    return 'laser'
+  if (id.startsWith('ion_turret'))      return 'ion'
+  if (id.startsWith('railgun_turret'))  return 'railgun'
+  if (id.startsWith('plasma_turret'))   return 'plasma'
+  if (id.startsWith('torpedo_turret'))  return 'torpedo'
+  return 'laser' // Fallback
+}
+
+interface Weapon {
+  weaponType: string   // laser | ion | railgun | plasma | torpedo
+  weaponClass: string  // A | B | C | D | E
+  attack: number       // Schadenswert dieser Waffe
+  targetClass: string  // Bevorzugte Ziel-Chassisklasse
+  isPrimary: boolean
+}
+
 interface CombatShip {
   id: string; name: string; chassisClass: string
-  hp: number; maxHp: number; attack: number; defense: number
-  speed: number; maneuver: number; shots: number
+  hp: number; maxHp: number; defense: number
+  speed: number; maneuver: number
+  weapons: Weapon[]    // Eine Einheit pro Waffe (inkl. Duplikate)
   autoRetreatAt: number; isPlayer: true
 }
 
-function playerShipToCombat(ship: any, chassisDefs: any[]): CombatShip {
+function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): CombatShip {
   const d = ship.ship_designs
   const chassis = chassisDefs.find((c: any) => c.id === d?.chassis_id)
   const cls = chassis?.class ?? 'B'
-  const parts: string[] = d?.installed_parts ?? []
-  const weaponCount = parts.filter((p: string) =>
-    p.startsWith('laser') || p.startsWith('ion_cannon') || p.startsWith('railgun') || p.startsWith('turret')
-  ).length
+  const baseAtk = chassis?.base_attack ?? 10
+
+  // installed_parts kann Array von strings oder {part_id} sein
+  const rawParts: string[] = (d?.installed_parts ?? []).map((p: any) =>
+    typeof p === 'string' ? p : p?.part_id
+  ).filter(Boolean)
+
+  // Waffen aus Part-Definitionen bauen
+  const weapons: Weapon[] = []
+  for (const partId of rawParts) {
+    const part = partDefs.find((p: any) => p.id === partId)
+    if (!part) continue
+    if (part.category === 'primary_weapon') {
+      const wClass = part.weapon_class ?? 'B'
+      weapons.push({
+        weaponType: weaponTypeFromId(partId),
+        weaponClass: wClass,
+        attack: (part.attack_bonus ?? 0) + baseAtk,
+        targetClass: WEAPON_TARGET_CLASS[wClass] ?? cls,
+        isPrimary: true,
+      })
+    } else if (part.category === 'turret') {
+      const wClass = part.weapon_class ?? 'B'
+      weapons.push({
+        weaponType: weaponTypeFromId(partId),
+        weaponClass: wClass,
+        attack: (part.attack_bonus ?? 0) + Math.floor(baseAtk / 2),
+        targetClass: WEAPON_TARGET_CLASS[wClass] ?? cls,
+        isPrimary: false,
+      })
+    }
+  }
+
+  // Fallback: kein Weapon in DB → 1 generische Waffe auf Basis-Chassis-Angriff
+  if (weapons.length === 0) {
+    weapons.push({
+      weaponType: 'laser',
+      weaponClass: cls,
+      attack: d?.total_attack ?? baseAtk,
+      targetClass: cls,
+      isPrimary: true,
+    })
+  }
+
   return {
     id: ship.id, name: ship.name ?? d?.name ?? 'Schiff', chassisClass: cls,
     hp: ship.current_hp, maxHp: ship.max_hp,
-    attack:   d?.total_attack   ?? chassis?.base_attack   ?? 10,
     defense:  d?.total_defense  ?? chassis?.base_defense  ?? 5,
     speed:    d?.total_speed    ?? chassis?.base_speed    ?? 20,
     maneuver: d?.total_maneuver ?? chassis?.base_maneuver ?? 20,
-    shots: Math.max(1, weaponCount),
+    weapons,
     autoRetreatAt: ship.auto_retreat_at ?? 0,
     isPlayer: true,
   }
@@ -743,11 +811,11 @@ function playerShipToCombat(ship: any, chassisDefs: any[]): CombatShip {
 interface RoundAction {
   attackerId: string; attackerName: string
   targetId: string; targetName: string
+  weaponType: string; weaponClass: string; isPrimary: boolean
   hit: boolean; damage: number; targetHpAfter: number; destroyed: boolean
 }
 
 // Simuliert EINE Runde — mutiert hp in-place
-// NPCs fliehen nie (no autoRetreat for NPCs)
 function simulateOneRound(
   pShips: CombatShip[],
   nShips: NpcShip[]
@@ -765,23 +833,30 @@ function simulateOneRound(
     if (fighter.side === 'player') {
       const attacker = pShips.find(s => s.id === fighter.id)
       if (!attacker || attacker.hp <= 0) continue
-      const targets = nShips.filter(s => s.hp > 0)
-      if (!targets.length) break
-      for (let shot = 0; shot < attacker.shots; shot++) {
+      if (!nShips.filter(s => s.hp > 0).length) break
+
+      // Jede Waffe schießt separat auf ihr bevorzugtes Ziel
+      for (const weapon of attacker.weapons) {
         const alive = nShips.filter(s => s.hp > 0)
         if (!alive.length) break
-        const pref = alive.filter(s => s.chassisClass === attacker.chassisClass)
+        const pref = alive.filter(s => s.chassisClass === weapon.targetClass)
         const target = pref.length ? pref[Math.floor(rand() * pref.length)] : alive[Math.floor(rand() * alive.length)]
         const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
-        const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
+        const damage = hit ? calcDamage(weapon.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
-        actions.push({ attackerId: attacker.id, attackerName: attacker.name, targetId: target.id, targetName: target.name, hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0 })
+        actions.push({
+          attackerId: attacker.id, attackerName: attacker.name,
+          targetId: target.id, targetName: target.name,
+          weaponType: weapon.weaponType, weaponClass: weapon.weaponClass, isPrimary: weapon.isPrimary,
+          hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0,
+        })
       }
     } else {
       const attacker = nShips.find(s => s.id === fighter.id)
       if (!attacker || attacker.hp <= 0 || attacker.isTrader || attacker.shots === 0) continue
       const alive = pShips.filter(s => s.hp > 0)
       if (!alive.length) break
+      const npcWeaponType = ({ A: 'railgun', B: 'laser', C: 'ion', D: 'plasma', E: 'torpedo' } as Record<string,string>)[attacker.chassisClass] ?? 'laser'
       for (let shot = 0; shot < attacker.shots; shot++) {
         const stillAlive = pShips.filter(s => s.hp > 0)
         if (!stillAlive.length) break
@@ -790,7 +865,12 @@ function simulateOneRound(
         const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
         const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
-        actions.push({ attackerId: attacker.id, attackerName: attacker.name, targetId: target.id, targetName: target.name, hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0 })
+        actions.push({
+          attackerId: attacker.id, attackerName: attacker.name,
+          targetId: target.id, targetName: target.name,
+          weaponType: npcWeaponType, weaponClass: attacker.chassisClass, isPrimary: true,
+          hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0,
+        })
       }
     }
   }
@@ -818,6 +898,7 @@ function simulateOneRound(
 async function processCombat(log: string[]) {
   const chassisDefs = await supabase.from('chassis_definitions').select('*').then(r => r.data ?? [])
   if (!chassisDefs.length) return
+  const partDefs = await supabase.from('ship_part_definitions').select('id, category, weapon_class, attack_bonus').then(r => r.data ?? [])
 
   // ── 1. Abgelaufene NPC-Kampfflotten + Cooldowns löschen ───────────────────
   await supabase.from('npc_combat_fleets').delete().lt('expires_at', new Date().toISOString())
@@ -951,7 +1032,7 @@ async function processCombat(log: string[]) {
     if (!aliveNpcs.length) continue // NPC-Flotte bereits zerstört
 
     // Neuen Kampf starten
-    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs))
+    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs, partDefs))
     await supabase.from('active_battles').insert({
       player_id: fleet.player_id, fleet_id: fleet.id,
       npc_fleet_id: npcFleetRow.id, x: fx, y: fy, z: fz,
