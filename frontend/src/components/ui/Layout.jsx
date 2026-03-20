@@ -1,4 +1,4 @@
-// src/components/ui/Layout.jsx
+// src/components/ui/Layout.jsx — v1.1
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
@@ -145,7 +145,20 @@ function TopBar({ player, planet }) {
     staleTime: 60000,
   })
 
-  const hasAnything = buildQueue.length > 0 || researchQueue.length > 0 || fleetQueue.length > 0
+  const { data: shipBuildQueue = [] } = useQuery({
+    queryKey: ['sbq-bar', planet?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('ship_build_queue')
+        .select('*, ship_designs(name)')
+        .eq('planet_id', planet.id)
+        .order('finish_at')
+      return data ?? []
+    },
+    enabled: !!planet,
+    refetchInterval: 5000,
+  })
+
+  const hasAnything = buildQueue.length > 0 || researchQueue.length > 0 || fleetQueue.length > 0 || shipBuildQueue.length > 0
 
   return (
     <div className="flex-shrink-0 flex items-center gap-3 px-4 flex-wrap"
@@ -186,6 +199,14 @@ function TopBar({ player, planet }) {
       {fleetQueue.map(fleet => (
         <FleetQueuePill key={fleet.id} fleet={fleet} />
       ))}
+
+      {(fleetQueue.length > 0 || researchQueue.length > 0 || buildQueue.length > 0) && shipBuildQueue.length > 0 && (
+        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+      )}
+
+      {shipBuildQueue.map(item => (
+        <ShipBuildQueuePill key={item.id} item={item} />
+      ))}
     </div>
   )
 }
@@ -203,6 +224,18 @@ function ResearchQueuePill({ item, name }) {
   return (
     <QueuePill icon={FlaskConical} color="#22d3ee"
       name={name} level={item.target_level} countdown={countdown} />
+  )
+}
+
+function ShipBuildQueuePill({ item }) {
+  const countdown = useCountdown(item.finish_at)
+  const name = item.ship_designs?.name ?? 'Schiff'
+  const qty = item.quantity ?? 1
+  return (
+    <QueuePill icon={Rocket} color="#f472b6"
+      name={qty > 1 ? `${qty}× ${name}` : name}
+      level={null}
+      countdown={countdown} />
   )
 }
 
