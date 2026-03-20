@@ -986,7 +986,7 @@ function FleetDetail({ fleet, ships, chassisDefs, playerId, onBack, onDissolved 
               const chassis = chassisDefs.find(c => c.id === ship.ship_designs?.chassis_id)
               const hpPct = ship.max_hp > 0 ? Math.round((ship.current_hp / ship.max_hp) * 100) : 0
               const hpCol = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
-              const imgSrc = chassis?.image_key ? `/ships/${chassis.image_key}.png` : null
+              const imgSrc = chassis?.image_key ? `/Starbound-Alpha/ships/${chassis.image_key}.png` : null
               return (
                 <div key={ship.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
                   style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
