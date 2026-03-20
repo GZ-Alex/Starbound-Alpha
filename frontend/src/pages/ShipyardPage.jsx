@@ -165,7 +165,10 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
   // Waffen/Turrets können mehrfach eingebaut werden → Array mit Duplikaten
   // Antriebe: immer nur 1 (tauscht aus)
   // Alles andere: erstes Klick = hinzufügen, zweites Klick = entfernen (letztes Vorkommen)
-  const togglePart = (pid) => {
+  // Stackbare Kategorien: können mehrfach eingebaut werden
+  const isStackable = (cat) => cat === 'primary_weapon' || cat === 'turret'
+
+  const addPart = (pid) => {
     const part = (partDefs ?? []).find(d => d.id === pid)
     if (!part) return
     setSelectedParts(prev => {
@@ -173,35 +176,36 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
       if (part.category === 'engine') {
         return [...prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category !== 'engine'), pid]
       }
-      // Primärwaffe: hinzufügen bis max, dann entfernen
+      // Primärwaffe: max-Check
       if (part.category === 'primary_weapon') {
-        const currentCount = prev.filter(p => p === pid).length
         const totalPrimary = prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category === 'primary_weapon').length
-        if (currentCount > 0) {
-          // Entferne letztes Vorkommen
-          const idx = [...prev].reverse().findIndex(p => p === pid)
-          const result = [...prev]
-          result.splice(prev.length - 1 - idx, 1)
-          return result
-        }
         if (totalPrimary >= maxPrimary) return prev
         return [...prev, pid]
       }
-      // Turret: klick fügt hinzu, weiterer Klick entfernt letztes Vorkommen
-      if (part.category === 'turret') {
-        const idx = [...prev].reverse().findIndex(p => p === pid)
-        if (idx >= 0) {
-          // Entferne letztes Vorkommen wenn Zellen knapp oder 2. Klick
-          const count = prev.filter(p => p === pid).length
-          if (count > 0 && (totalCells + (part.cells_required || 0)) > chassis.total_cells) {
-            const result = [...prev]
-            result.splice(prev.length - 1 - idx, 1)
-            return result
-          }
-        }
-        return [...prev, pid]
+      // Turret + alles andere: einfach hinzufügen (Zellen-Check läuft über canBuild)
+      return [...prev, pid]
+    })
+  }
+
+  const removePart = (pid) => {
+    setSelectedParts(prev => {
+      // Letztes Vorkommen entfernen
+      const lastIdx = prev.lastIndexOf(pid)
+      if (lastIdx === -1) return prev
+      const result = [...prev]
+      result.splice(lastIdx, 1)
+      return result
+    })
+  }
+
+  const togglePart = (pid) => {
+    const part = (partDefs ?? []).find(d => d.id === pid)
+    if (!part) return
+    if (isStackable(part.category)) return  // stackbare Parts nur via +/-
+    setSelectedParts(prev => {
+      if (part.category === 'engine') {
+        return [...prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category !== 'engine'), pid]
       }
-      // Alle anderen: toggle (ein-/ausbauen)
       const isSelected = prev.includes(pid)
       if (isSelected) return prev.filter(p => p !== pid)
       return [...prev, pid]
@@ -437,31 +441,70 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
                     {parts.map(part => {
                       const count = selectedParts.filter(p => p === part.id).length
                       const sel   = count > 0
-                      const canStack = part.category === 'primary_weapon' || part.category === 'turret'
+                      const canStack = isStackable(part.category)
                       const wouldExceed = (totalCells + (part.cells_required || 0)) > chassis.total_cells
-                      const primaryFull = part.category === 'primary_weapon' && primaryCount >= maxPrimary && count === 0
-                      const full  = wouldExceed || primaryFull
+                      const primaryFull = part.category === 'primary_weapon' && primaryCount >= maxPrimary
+                      const cantAdd = wouldExceed || primaryFull
+
+                      if (canStack) {
+                        // Stackbare Parts: Zeile mit +/- Buttons
+                        return (
+                          <div key={part.id} className="flex items-center gap-1 px-2 py-1.5 rounded text-xs"
+                            style={{
+                              background: sel ? 'rgba(34,211,238,0.08)' : 'rgba(255,255,255,0.03)',
+                              border: sel ? '1px solid rgba(34,211,238,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                            }}>
+                            <span className="flex-1 truncate" style={{ color: sel ? '#22d3ee' : '#94a3b8' }}>
+                              {part.name}
+                            </span>
+                            <span className="text-slate-700 mr-1 flex-shrink-0">{part.cells_required}Z</span>
+                            {/* − Button */}
+                            <button
+                              onClick={() => removePart(part.id)}
+                              disabled={count === 0}
+                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all font-bold text-sm leading-none"
+                              style={{
+                                background: count > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                                border: `1px solid ${count > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                color: count > 0 ? '#f87171' : '#1e293b',
+                                cursor: count === 0 ? 'not-allowed' : 'pointer',
+                              }}>
+                              −
+                            </button>
+                            {/* Count */}
+                            <span className="w-5 text-center font-mono font-bold text-xs flex-shrink-0"
+                              style={{ color: count > 0 ? '#22d3ee' : '#334155' }}>
+                              {count}
+                            </span>
+                            {/* + Button */}
+                            <button
+                              onClick={() => addPart(part.id)}
+                              disabled={cantAdd}
+                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all font-bold text-sm leading-none"
+                              style={{
+                                background: !cantAdd ? 'rgba(34,211,238,0.15)' : 'rgba(255,255,255,0.03)',
+                                border: `1px solid ${!cantAdd ? 'rgba(34,211,238,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                color: !cantAdd ? '#22d3ee' : '#1e293b',
+                                cursor: cantAdd ? 'not-allowed' : 'pointer',
+                              }}>
+                              +
+                            </button>
+                          </div>
+                        )
+                      }
+
+                      // Nicht-stackbare Parts: normaler Toggle-Button
                       return (
-                        <button key={part.id} onClick={() => !full && togglePart(part.id)}
-                          disabled={full && count === 0}
+                        <button key={part.id} onClick={() => togglePart(part.id)}
                           className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
                           style={{
                             background: sel ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
                             border: sel ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                            color: sel ? '#22d3ee' : full ? '#1e293b' : '#94a3b8',
-                            cursor: (full && count === 0) ? 'not-allowed' : 'pointer',
+                            color: sel ? '#22d3ee' : '#94a3b8',
                           }}>
                           <div className="flex justify-between items-center">
                             <span className="truncate">{part.name}</span>
-                            <div className="flex items-center gap-1.5 ml-1 flex-shrink-0">
-                              {canStack && count > 0 && (
-                                <span className="px-1 rounded text-xs font-bold"
-                                  style={{ background: 'rgba(34,211,238,0.2)', color: '#22d3ee' }}>
-                                  ×{count}
-                                </span>
-                              )}
-                              <span className="text-slate-600">{part.cells_required}Z</span>
-                            </div>
+                            <span className="text-slate-600 ml-1 flex-shrink-0">{part.cells_required}Z</span>
                           </div>
                         </button>
                       )
