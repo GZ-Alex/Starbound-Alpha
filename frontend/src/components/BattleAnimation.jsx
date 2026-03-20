@@ -39,7 +39,7 @@ function loadSprite(chassisId) {
   const img = new Image()
   img.onload  = () => { spriteCache[chassisId] = img }
   img.onerror = () => { spriteCache[chassisId] = false }  // false = kein Sprite
-  img.src = `/Starbound-Alpha/ships/${chassisId}.png`
+  img.src = `/Starbound-Alpha/sprites/${chassisId}_sprite.png`
   return null
 }
 
