@@ -326,10 +326,10 @@ export default function Layout() {
   const { player, planet, logout } = useGameStore()
   const navigate = useNavigate()
 
-  // Rassen-Bild: /races/{race_id}.png, Fallback auf Platzhalter
+  // Rassen-Bild: /Starbound-Alpha/races/{race_id}.png, Fallback auf Platzhalter
   const raceImg = player?.race_id
-    ? `/races/${player.race_id}.png`
-    : `/races/placeholder.png`
+    ? `/Starbound-Alpha/races/${player.race_id}.png`
+    : `/Starbound-Alpha/races/placeholder.png`
 
   return (
     <div className="scanlines flex h-screen overflow-hidden star-bg">
