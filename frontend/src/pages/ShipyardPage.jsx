@@ -102,18 +102,33 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
     speed: chassis.base_speed, maneuver: chassis.base_maneuver, cargo: chassis.base_cargo,
   }
 
+  // Angriff: Basisangriff des Chassis wird zu jeder Waffe addiert
+  // Primärwaffe: +100% Basisangriff, Turret: +50% Basisangriff
+  const baseAtk = chassis.base_attack ?? 0
+  const weaponAttackBonus = (part) => {
+    if (!part) return 0
+    if (part.category === 'primary_weapon') return (part.attack_bonus || 0) + baseAtk
+    if (part.category === 'turret') return (part.attack_bonus || 0) + Math.floor(baseAtk / 2)
+    return 0
+  }
+
+  // Stats: Angriff kommt NUR aus Waffen (Chassis-Basisangriff steckt im Waffen-Bonus)
+  // Ohne Waffe: attack = 0 (Basis wird nicht direkt angezeigt)
   const stats = selectedParts.reduce((acc, pid) => {
     const p = (partDefs ?? []).find(d => d.id === pid)
     if (!p) return acc
+    const atkContrib = (p.category === 'primary_weapon' || p.category === 'turret')
+      ? weaponAttackBonus(p)
+      : (p.attack_bonus || 0) - (p.attack_malus || 0)
     return {
       hp:       acc.hp       + (p.hp_bonus       || 0),
-      attack:   acc.attack   + (p.attack_bonus    || 0) - (p.attack_malus   || 0),
+      attack:   acc.attack   + atkContrib,
       defense:  acc.defense  + (p.defense_bonus   || 0),
       speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
       maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
       cargo:    acc.cargo    + (p.cargo_bonus     || 0),
     }
-  }, { ...baseStats })
+  }, { ...baseStats, attack: 0 })  // attack startet bei 0, wird nur durch Waffen gefüllt
 
   const totalCells = selectedParts.reduce((sum, pid) => {
     const p = (partDefs ?? []).find(d => d.id === pid)
@@ -133,13 +148,11 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
 
   const canAfford = Object.entries(costs).every(([res, amt]) => (planet?.[res] ?? 0) >= amt)
 
-  // Antrieb: genau 1 Hauptantrieb erforderlich
   const engineCount = selectedParts.filter(pid =>
     (partDefs ?? []).find(d => d.id === pid)?.category === 'engine'
   ).length
   const hasEngine  = engineCount === 1
 
-  // Primärwaffen: max chassis.max_primary_weapons (default 1)
   const primaryCount = selectedParts.filter(pid =>
     (partDefs ?? []).find(d => d.id === pid)?.category === 'primary_weapon'
   ).length
@@ -149,31 +162,62 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
   const cellsOk  = totalCells <= chassis.total_cells
   const canBuild = hasEngine && cellsOk && canAfford && primaryOk
 
+  // Waffen/Turrets können mehrfach eingebaut werden → Array mit Duplikaten
+  // Antriebe: immer nur 1 (tauscht aus)
+  // Alles andere: erstes Klick = hinzufügen, zweites Klick = entfernen (letztes Vorkommen)
   const togglePart = (pid) => {
     const part = (partDefs ?? []).find(d => d.id === pid)
     if (!part) return
     setSelectedParts(prev => {
+      // Antrieb: ersetze bestehenden
+      if (part.category === 'engine') {
+        return [...prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category !== 'engine'), pid]
+      }
+      // Primärwaffe: hinzufügen bis max, dann entfernen
+      if (part.category === 'primary_weapon') {
+        const currentCount = prev.filter(p => p === pid).length
+        const totalPrimary = prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category === 'primary_weapon').length
+        if (currentCount > 0) {
+          // Entferne letztes Vorkommen
+          const idx = [...prev].reverse().findIndex(p => p === pid)
+          const result = [...prev]
+          result.splice(prev.length - 1 - idx, 1)
+          return result
+        }
+        if (totalPrimary >= maxPrimary) return prev
+        return [...prev, pid]
+      }
+      // Turret: klick fügt hinzu, weiterer Klick entfernt letztes Vorkommen
+      if (part.category === 'turret') {
+        const idx = [...prev].reverse().findIndex(p => p === pid)
+        if (idx >= 0) {
+          // Entferne letztes Vorkommen wenn Zellen knapp oder 2. Klick
+          const count = prev.filter(p => p === pid).length
+          if (count > 0 && (totalCells + (part.cells_required || 0)) > chassis.total_cells) {
+            const result = [...prev]
+            result.splice(prev.length - 1 - idx, 1)
+            return result
+          }
+        }
+        return [...prev, pid]
+      }
+      // Alle anderen: toggle (ein-/ausbauen)
       const isSelected = prev.includes(pid)
       if (isSelected) return prev.filter(p => p !== pid)
-
-      // Antrieb: nur 1 erlaubt — ersetze bestehenden
-      if (part.category === 'engine') {
-        const withoutEngines = prev.filter(p => {
-          const existing = (partDefs ?? []).find(d => d.id === p)
-          return existing?.category !== 'engine'
-        })
-        return [...withoutEngines, pid]
-      }
-      // Primärwaffe: max-Check
-      if (part.category === 'primary_weapon') {
-        const currentPrimary = prev.filter(p =>
-          (partDefs ?? []).find(d => d.id === p)?.category === 'primary_weapon'
-        ).length
-        if (currentPrimary >= maxPrimary) return prev // kein weiterer Slot
-      }
       return [...prev, pid]
     })
   }
+
+  // Waffenliste für Anzeige (installierte Waffen mit Angriffswert)
+  const installedWeapons = selectedParts
+    .map(pid => (partDefs ?? []).find(d => d.id === pid))
+    .filter(p => p?.category === 'primary_weapon' || p?.category === 'turret')
+    .map(p => ({
+      name: p.name,
+      type: p.category === 'primary_weapon' ? 'Primär' : 'Sekundär',
+      weaponClass: p.weapon_class ?? '—',
+      attack: weaponAttackBonus(p),
+    }))
 
   // Original-Parts für Refit-Modus (zum Delta-Vergleich)
   const originalParts = refitMode && ship?.ship_designs?.installed_parts
@@ -186,15 +230,18 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
   const originalStats = originalParts.reduce((acc, pid) => {
     const p = (partDefs ?? []).find(d => d.id === pid)
     if (!p) return acc
+    const atkContrib = (p.category === 'primary_weapon' || p.category === 'turret')
+      ? weaponAttackBonus(p)
+      : (p.attack_bonus || 0) - (p.attack_malus || 0)
     return {
       hp:       acc.hp       + (p.hp_bonus       || 0),
-      attack:   acc.attack   + (p.attack_bonus    || 0) - (p.attack_malus   || 0),
+      attack:   acc.attack   + atkContrib,
       defense:  acc.defense  + (p.defense_bonus   || 0),
       speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
       maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
       cargo:    acc.cargo    + (p.cargo_bonus     || 0),
     }
-  }, { ...baseStats })
+  }, { ...baseStats, attack: 0 })
 
   const handleBuild = async () => {
     if (!canBuild || busy) return
@@ -388,21 +435,33 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
                   </p>
                   <div className="space-y-0.5">
                     {parts.map(part => {
-                      const sel  = selectedParts.includes(part.id)
-                      const full = !sel && (totalCells + (part.cells_required || 0)) > chassis.total_cells
+                      const count = selectedParts.filter(p => p === part.id).length
+                      const sel   = count > 0
+                      const canStack = part.category === 'primary_weapon' || part.category === 'turret'
+                      const wouldExceed = (totalCells + (part.cells_required || 0)) > chassis.total_cells
+                      const primaryFull = part.category === 'primary_weapon' && primaryCount >= maxPrimary && count === 0
+                      const full  = wouldExceed || primaryFull
                       return (
                         <button key={part.id} onClick={() => !full && togglePart(part.id)}
-                          disabled={full && !sel}
+                          disabled={full && count === 0}
                           className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
                           style={{
                             background: sel ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
                             border: sel ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
                             color: sel ? '#22d3ee' : full ? '#1e293b' : '#94a3b8',
-                            cursor: full && !sel ? 'not-allowed' : 'pointer',
+                            cursor: (full && count === 0) ? 'not-allowed' : 'pointer',
                           }}>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center">
                             <span className="truncate">{part.name}</span>
-                            <span className="text-slate-600 ml-1 flex-shrink-0">{part.cells_required}Z</span>
+                            <div className="flex items-center gap-1.5 ml-1 flex-shrink-0">
+                              {canStack && count > 0 && (
+                                <span className="px-1 rounded text-xs font-bold"
+                                  style={{ background: 'rgba(34,211,238,0.2)', color: '#22d3ee' }}>
+                                  ×{count}
+                                </span>
+                              )}
+                              <span className="text-slate-600">{part.cells_required}Z</span>
+                            </div>
                           </div>
                         </button>
                       )
@@ -467,6 +526,26 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
                 })}
               </div>
             </div>
+
+            {/* Waffenliste */}
+            {installedWeapons.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-widest font-mono mb-2">Bewaffnung</p>
+                <div className="space-y-1">
+                  {installedWeapons.map((w, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-1.5 rounded text-xs font-mono"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span className="text-slate-300">{w.name}</span>
+                      <span className="text-slate-500 flex items-center gap-2">
+                        <span style={{ color: w.type === 'Primär' ? '#22d3ee' : '#a78bfa' }}>{w.type}</span>
+                        <span>Klasse {w.weaponClass}</span>
+                        <span className="font-semibold" style={{ color: '#f59e0b' }}>{w.attack} Atk</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {engineCount === 0 && (
               <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
@@ -645,7 +724,8 @@ export default function ShipyardPage() {
   const freeCapacity = shipyardCapacity - usedCapacity
 
   const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
-  const classes   = ['all', ...new Set(available.map(c => c.class))]
+  const CLASS_ORDER = ['Z', 'A', 'B', 'C', 'D', 'E']
+  const classes   = ['all', ...CLASS_ORDER.filter(cls => available.some(c => c.class === cls))]
   const filtered  = available.filter(c => classFilter === 'all' || c.class === classFilter)
 
   if (shipyardLevel < 1) return (
