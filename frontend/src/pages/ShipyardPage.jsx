@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Rocket, X, ChevronRight, Hammer, AlertTriangle } from 'lucide-react'
+import { Rocket, X, ChevronRight, Hammer, AlertTriangle, Settings } from 'lucide-react'
 
 const CLASS_LABELS  = { Z: 'Klasse Z', A: 'Klasse A', B: 'Klasse B', C: 'Klasse C', D: 'Klasse D', E: 'Klasse E' }
 const CLASS_COLORS  = { Z: '#94a3b8', A: '#34d399', B: '#38bdf8', C: '#a78bfa', D: '#fb923c', E: '#f472b6' }
@@ -42,9 +42,18 @@ function fmt(n) {
 
 // ─── Ship Designer Modal ───────────────────────────────────────────────────────
 
-function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onBuilt }) {
-  const [selectedParts, setSelectedParts] = useState([])
-  const [building, setBuilding] = useState(false)
+export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onBuilt,
+  // Refit-Modus: ship + onRefit statt onBuilt
+  refitMode = false, ship = null, onRefit = null, queryClient = null, dockLevel = 0
+}) {
+  const [selectedParts, setSelectedParts] = useState(() =>
+    refitMode && ship?.ship_designs?.installed_parts
+      ? (Array.isArray(ship.ship_designs.installed_parts)
+          ? ship.ship_designs.installed_parts.map(p => typeof p === 'string' ? p : p?.part_id).filter(Boolean)
+          : [])
+      : []
+  )
+  const [busy, setBuilding] = useState(false)
   const { addNotification } = useGameStore()
 
   const getAvailableParts = (category) => {
@@ -166,9 +175,107 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
     })
   }
 
+  // Original-Parts für Refit-Modus (zum Delta-Vergleich)
+  const originalParts = refitMode && ship?.ship_designs?.installed_parts
+    ? (Array.isArray(ship.ship_designs.installed_parts)
+        ? ship.ship_designs.installed_parts.map(p => typeof p === 'string' ? p : p?.part_id).filter(Boolean)
+        : [])
+    : []
+
+  // Stats der Original-Konfiguration (für Delta-Anzeige)
+  const originalStats = originalParts.reduce((acc, pid) => {
+    const p = (partDefs ?? []).find(d => d.id === pid)
+    if (!p) return acc
+    return {
+      hp:       acc.hp       + (p.hp_bonus       || 0),
+      attack:   acc.attack   + (p.attack_bonus    || 0) - (p.attack_malus   || 0),
+      defense:  acc.defense  + (p.defense_bonus   || 0),
+      speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
+      maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
+      cargo:    acc.cargo    + (p.cargo_bonus     || 0),
+    }
+  }, { ...baseStats })
+
   const handleBuild = async () => {
-    if (!canBuild || building) return
+    if (!canBuild || busy) return
     setBuilding(true)
+
+    if (refitMode) {
+      // ── Umbau-Modus ──────────────────────────────────────────────────────
+      try {
+        const COST_KEYS_R = ['titan','silizium','aluminium','uran','plutonium']
+        const toRemove  = originalParts.filter(id => !selectedParts.includes(id))
+        const toInstall = selectedParts.filter(id => !originalParts.includes(id))
+
+        // Netto-Kosten berechnen
+        const netCosts = {}
+        for (const pid of toInstall) {
+          const p = (partDefs ?? []).find(d => d.id === pid)
+          if (!p) continue
+          for (const k of COST_KEYS_R) {
+            netCosts[k] = (netCosts[k] ?? 0) + (p[`cost_${k}`] ?? 0)
+          }
+        }
+        for (const pid of toRemove) {
+          const p = (partDefs ?? []).find(d => d.id === pid)
+          if (!p) continue
+          for (const k of COST_KEYS_R) {
+            netCosts[k] = (netCosts[k] ?? 0) - Math.floor((p[`cost_${k}`] ?? 0) * 0.75)
+          }
+        }
+
+        // Ressourcen abbuchen/erstatten
+        const updates = {}
+        for (const [k, net] of Object.entries(netCosts)) {
+          if (net !== 0) updates[k] = (planet[k] ?? 0) - net
+        }
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('planets').update(updates).eq('id', planet.id)
+        }
+
+        // Queue-Einträge sequenziell
+        const applyDockBonus = (base, type) => {
+          if (type === 'time') return base * Math.max(0.1, 1 - dockLevel * 0.015)
+          return base
+        }
+        let offset = 0
+        for (const pid of toRemove) {
+          const p = (partDefs ?? []).find(d => d.id === pid)
+          const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
+          const min = applyDockBonus(base * 0.2, 'time')
+          const finishAt = new Date(Date.now() + (offset + min) * 60 * 1000).toISOString()
+          await supabase.from('refit_queue').insert({
+            ship_id: ship.id, planet_id: planet.id, player_id: player.id,
+            action: 'remove', part_id: pid, finish_at: finishAt,
+          })
+          offset += min
+        }
+        for (const pid of toInstall) {
+          const p = (partDefs ?? []).find(d => d.id === pid)
+          const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
+          const min = applyDockBonus(base, 'time')
+          const finishAt = new Date(Date.now() + (offset + min) * 60 * 1000).toISOString()
+          await supabase.from('refit_queue').insert({
+            ship_id: ship.id, planet_id: planet.id, player_id: player.id,
+            action: 'install', part_id: pid, finish_at: finishAt,
+          })
+          offset += min
+        }
+
+        queryClient?.invalidateQueries(['dock-ships'])
+        queryClient?.invalidateQueries(['refit-queue', ship.id])
+        queryClient?.invalidateQueries(['planet', player.id])
+        onRefit?.()
+        onClose()
+      } catch (err) {
+        addNotification('Fehler: ' + err.message, 'error')
+      } finally {
+        setBuilding(false)
+      }
+      return
+    }
+
+    // ── Bau-Modus ──────────────────────────────────────────────────────────
     try {
       const updates = {}
       for (const [res, amt] of Object.entries(costs)) updates[res] = (planet[res] || 0) - amt
@@ -322,20 +429,42 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
                   ['Geschw.', stats.speed, baseStats.speed],
                   ['Manöver', stats.maneuver, baseStats.maneuver],
                   ['Laderaum', stats.cargo, baseStats.cargo],
-                ].map(([l, v, b]) => (
-                  <div key={l} className="px-3 py-2 rounded"
-                    style={{ background: 'rgba(7,20,40,0.6)', border: '1px solid rgba(34,211,238,0.08)' }}>
-                    <div className="text-xs text-slate-500 font-mono">{l}</div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-mono font-bold text-slate-200">{v}</span>
-                      {v - b !== 0 && (
-                        <span className={`text-xs font-mono ${v > b ? 'text-green-400' : 'text-red-400'}`}>
-                          {v > b ? `+${v - b}` : v - b}
-                        </span>
-                      )}
+                ].map(([l, v, b]) => {
+                  const origV = refitMode ? originalStats[{
+                    HP: 'hp', Angriff: 'attack', Verteidigung: 'defense',
+                    'Geschw.': 'speed', Manöver: 'maneuver', Laderaum: 'cargo'
+                  }[l]] ?? v : b
+                  const delta = v - origV
+                  return (
+                    <div key={l} className="px-3 py-2 rounded"
+                      style={{ background: 'rgba(7,20,40,0.6)', border: '1px solid rgba(34,211,238,0.08)' }}>
+                      <div className="text-xs text-slate-500 font-mono">{l}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {refitMode && delta !== 0 ? (
+                          <>
+                            <span className="text-sm font-mono text-slate-500 line-through">{origV}</span>
+                            <span className="text-xs text-slate-600">→</span>
+                            <span className="text-base font-mono font-bold"
+                              style={{ color: delta > 0 ? '#4ade80' : '#f87171' }}>{v}</span>
+                            <span className="text-xs font-mono font-semibold"
+                              style={{ color: delta > 0 ? '#4ade80' : '#f87171' }}>
+                              ({delta > 0 ? '+' : ''}{delta})
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-base font-mono font-bold text-slate-200">{v}</span>
+                            {!refitMode && v - b !== 0 && (
+                              <span className={`text-xs font-mono ${v > b ? 'text-green-400' : 'text-red-400'}`}>
+                                {v > b ? `+${v - b}` : v - b}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
@@ -384,11 +513,14 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
 
         <div className="flex items-center justify-between p-4 border-t border-cyan-500/15">
           <button onClick={onClose} className="btn-ghost text-sm">Abbrechen</button>
-          <button onClick={handleBuild} disabled={!canBuild || building}
+          <button onClick={handleBuild} disabled={!canBuild || busy}
             className={`btn-primary py-2 px-6 text-sm flex items-center gap-2 ${!canBuild ? 'opacity-40' : ''}`}>
-            {building
-              ? <><Hammer size={14} className="animate-pulse" /> Wird gebaut...</>
-              : <><Rocket size={14} /> {chassis.name} bauen</>}
+            {busy
+              ? <><Hammer size={14} className="animate-pulse" /> {refitMode ? 'Wird umgebaut...' : 'Wird gebaut...'}</>
+              : refitMode
+                ? <><Settings size={14} /> Umbau bestätigen</>
+                : <><Rocket size={14} /> {chassis.name} bauen</>
+            }
           </button>
         </div>
       </motion.div>
