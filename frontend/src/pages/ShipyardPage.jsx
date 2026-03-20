@@ -1,4 +1,4 @@
-// src/pages/ShipyardPage.jsx
+// src/pages/ShipyardPage.jsx — v2.1
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
@@ -864,26 +864,6 @@ export default function ShipyardPage() {
           </p>
         </div>
       </div>
-
-      {/* Build Queue */}
-      {buildQueue.length > 0 && (
-        <div className="panel p-3 space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-slate-500">In Bau</p>
-          {buildQueue.map(q => {
-            const finishMs  = q.finish_at ? new Date(q.finish_at).getTime() : 0
-            const remaining = Math.max(0, Math.floor((finishMs - Date.now()) / 1000))
-            const mins = Math.floor(remaining / 60)
-            const secs = remaining % 60
-            return (
-              <div key={q.id} className="flex items-center gap-3 text-sm font-mono">
-                <Hammer size={13} className="text-amber-400 animate-pulse flex-shrink-0" />
-                <span className="text-slate-300 flex-1">{q.ship_designs?.name ?? 'Schiff'}</span>
-                <span className="text-amber-400">{mins}m {secs}s</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {/* Class Filter */}
       <div className="flex gap-1.5 flex-wrap">
