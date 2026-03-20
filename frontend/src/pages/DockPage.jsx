@@ -341,8 +341,16 @@ function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, q
                 if (/_l$/.test(id)) return 3
                 if (/_xl$/.test(id)) return 4
                 if (/_xxl$/.test(id)) return 5
-                const m = id.match(/_(\d+)(_pvt|_adm)?$/)
+                if (/_\d+_(pvt|adm)$/.test(id)) return 5
+                const m = id.match(/_(\d+)$/)
                 return m ? parseInt(m[1]) : 99
+              }
+              const engineTypeOrder = (id) => {
+                if (id.startsWith('engine_chem'))   return 100
+                if (id.startsWith('engine_aux'))    return 200
+                if (id.startsWith('engine_ion'))    return 300
+                if (id.startsWith('engine_fusion')) return 400
+                return 500
               }
               const classOrd = { A:1, B:2, C:3, D:4, E:5 }
               const available = partDefs.filter(p => {
@@ -353,6 +361,9 @@ function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, q
                 if (catId === 'turret' || catId === 'primary_weapon') {
                   return ((classOrd[a.weapon_class]??9)*100 + sortOrder(a.id)) -
                          ((classOrd[b.weapon_class]??9)*100 + sortOrder(b.id))
+                }
+                if (catId === 'engine' || catId === 'engine_aux') {
+                  return (engineTypeOrder(a.id) + sortOrder(a.id)) - (engineTypeOrder(b.id) + sortOrder(b.id))
                 }
                 return sortOrder(a.id) - sortOrder(b.id)
               })
