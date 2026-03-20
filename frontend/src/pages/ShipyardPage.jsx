@@ -1,4 +1,4 @@
-// src/pages/ShipyardPage.jsx — v2.1
+// src/pages/ShipyardPage.jsx
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
@@ -123,14 +123,16 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
       ? weaponAttackBonus(p)
       : (p.attack_bonus || 0) - (p.attack_malus || 0)
     return {
-      hp:       acc.hp       + (p.hp_bonus       || 0),
-      attack:   acc.attack   + atkContrib,
-      defense:  acc.defense  + (p.defense_bonus   || 0),
-      speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
-      maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
-      cargo:    acc.cargo    + (p.cargo_bonus     || 0),
+      hp:            acc.hp            + (p.hp_bonus       || 0),
+      attack:        acc.attack        + atkContrib,
+      defense:       acc.defense       + (p.defense_bonus  || 0),
+      speed:         acc.speed         + (p.speed_bonus    || 0) - (p.speed_malus    || 0),
+      maneuver:      acc.maneuver      + (p.maneuver_bonus || 0) - (p.maneuver_malus || 0),
+      cargo:         acc.cargo         + (p.cargo_bonus    || 0),
+      ast_scan_range: acc.ast_scan_range + (p.category === 'scanner_asteroid' ? (p.scan_range || 0) : 0),
+      npc_scan_range: acc.npc_scan_range + (p.category === 'scanner_npc'      ? (p.scan_range || 0) : 0),
     }
-  }, { ...baseStats, attack: 0 })  // attack startet bei 0, wird nur durch Waffen gefüllt
+  }, { ...baseStats, attack: 0, ast_scan_range: 0, npc_scan_range: 0 })
 
   const totalCells = selectedParts.reduce((sum, pid) => {
     const p = (partDefs ?? []).find(d => d.id === pid)
@@ -244,14 +246,16 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
       ? weaponAttackBonus(p)
       : (p.attack_bonus || 0) - (p.attack_malus || 0)
     return {
-      hp:       acc.hp       + (p.hp_bonus       || 0),
-      attack:   acc.attack   + atkContrib,
-      defense:  acc.defense  + (p.defense_bonus   || 0),
-      speed:    acc.speed    + (p.speed_bonus     || 0) - (p.speed_malus    || 0),
-      maneuver: acc.maneuver + (p.maneuver_bonus  || 0) - (p.maneuver_malus || 0),
-      cargo:    acc.cargo    + (p.cargo_bonus     || 0),
+      hp:            acc.hp            + (p.hp_bonus       || 0),
+      attack:        acc.attack        + atkContrib,
+      defense:       acc.defense       + (p.defense_bonus  || 0),
+      speed:         acc.speed         + (p.speed_bonus    || 0) - (p.speed_malus    || 0),
+      maneuver:      acc.maneuver      + (p.maneuver_bonus || 0) - (p.maneuver_malus || 0),
+      cargo:         acc.cargo         + (p.cargo_bonus    || 0),
+      ast_scan_range: acc.ast_scan_range + (p.category === 'scanner_asteroid' ? (p.scan_range || 0) : 0),
+      npc_scan_range: acc.npc_scan_range + (p.category === 'scanner_npc'      ? (p.scan_range || 0) : 0),
     }
-  }, { ...baseStats, attack: 0 })
+  }, { ...baseStats, attack: 0, ast_scan_range: 0, npc_scan_range: 0 })
 
   const handleBuild = async () => {
     if (!canBuild || busy) return
@@ -364,6 +368,8 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
           total_maneuver:  stats.maneuver,
           total_cargo:     stats.cargo,
           total_cells_used: totalCells,
+          ast_scan_range:  stats.ast_scan_range ?? 0,
+          npc_scan_range:  stats.npc_scan_range ?? 0,
           shipyard_space:  chassis.shipyard_space ?? 100,
           build_minutes:   buildMinutes,
           cost_titan:      costs.titan ?? 0,
@@ -864,6 +870,26 @@ export default function ShipyardPage() {
           </p>
         </div>
       </div>
+
+      {/* Build Queue */}
+      {buildQueue.length > 0 && (
+        <div className="panel p-3 space-y-2">
+          <p className="text-xs font-mono uppercase tracking-widest text-slate-500">In Bau</p>
+          {buildQueue.map(q => {
+            const finishMs  = q.finish_at ? new Date(q.finish_at).getTime() : 0
+            const remaining = Math.max(0, Math.floor((finishMs - Date.now()) / 1000))
+            const mins = Math.floor(remaining / 60)
+            const secs = remaining % 60
+            return (
+              <div key={q.id} className="flex items-center gap-3 text-sm font-mono">
+                <Hammer size={13} className="text-amber-400 animate-pulse flex-shrink-0" />
+                <span className="text-slate-300 flex-1">{q.ship_designs?.name ?? 'Schiff'}</span>
+                <span className="text-amber-400">{mins}m {secs}s</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Class Filter */}
       <div className="flex gap-1.5 flex-wrap">
