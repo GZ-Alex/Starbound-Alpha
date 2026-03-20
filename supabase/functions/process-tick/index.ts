@@ -785,8 +785,9 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
     }
   }
 
-  // Fallback: kein Weapon in DB → 1 generische Waffe auf Basis-Chassis-Angriff
-  if (weapons.length === 0) {
+  // Fallback: kein Weapon in DB → generische Waffe NUR wenn Chassis Waffen erlaubt
+  const maxWeapons = chassis?.max_primary_weapons ?? 1
+  if (weapons.length === 0 && maxWeapons > 0) {
     weapons.push({
       weaponType: 'laser',
       weaponClass: cls,
@@ -832,7 +833,7 @@ function simulateOneRound(
   for (const fighter of order) {
     if (fighter.side === 'player') {
       const attacker = pShips.find(s => s.id === fighter.id)
-      if (!attacker || attacker.hp <= 0) continue
+      if (!attacker || attacker.hp <= 0 || attacker.weapons.length === 0) continue
       if (!nShips.filter(s => s.hp > 0).length) break
 
       // Jede Waffe schießt separat auf ihr bevorzugtes Ziel
