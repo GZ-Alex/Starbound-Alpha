@@ -49,16 +49,23 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
 
   const getAvailableParts = (category) => {
     const sortOrder = (id) => {
-      // Größen-Suffix: s=1, m=2, l=3, xl=4, xxl=5
       if (/_s$/.test(id)) return 1
       if (/_m$/.test(id)) return 2
       if (/_l$/.test(id)) return 3
       if (/_xl$/.test(id)) return 4
       if (/_xxl$/.test(id)) return 5
-      // Mk-Nummer: _1, _2, _3, _4 (ohne Suffix wie _pvt/_adm)
-      const m = id.match(/_(\d+)(_pvt|_adm)?$/)
-      if (m) return parseInt(m[1])
-      return 99
+      // Berufswaffen (_pvt/_adm) = Mk V (nach Mk IV)
+      if (/_\d+_(pvt|adm)$/.test(id)) return 5
+      const m = id.match(/_(\d+)$/)
+      return m ? parseInt(m[1]) : 99
+    }
+
+    const engineTypeOrder = (id) => {
+      if (id.startsWith('engine_chem')) return 100
+      if (id.startsWith('engine_aux'))  return 200
+      if (id.startsWith('engine_ion'))  return 300
+      if (id.startsWith('engine_fusion')) return 400
+      return 500
     }
 
     return (partDefs ?? []).filter(p => {
@@ -73,6 +80,9 @@ function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onB
         const ta = (classOrd[a.weapon_class] ?? 9) * 100 + sortOrder(a.id)
         const tb = (classOrd[b.weapon_class] ?? 9) * 100 + sortOrder(b.id)
         return ta - tb
+      }
+      if (category === 'engine' || category === 'engine_aux') {
+        return (engineTypeOrder(a.id) + sortOrder(a.id)) - (engineTypeOrder(b.id) + sortOrder(b.id))
       }
       return sortOrder(a.id) - sortOrder(b.id)
     })
