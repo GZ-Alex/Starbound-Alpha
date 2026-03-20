@@ -477,7 +477,7 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
             <div className="flex gap-4">
               <div className="flex-shrink-0 w-44 h-44 rounded overflow-hidden"
                 style={{ border: '1px solid rgba(34,211,238,0.15)' }}>
-                <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name}
+                <img src={`/ships/${chassis.id}.png`} alt={chassis.name}
                   className="w-full h-full object-cover" />
               </div>
               <div className="flex-1 grid grid-cols-2 gap-2">
@@ -620,7 +620,7 @@ function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
       whileHover={!disabled ? { borderColor: `${color}50` } : {}}
       onClick={() => !disabled && onSelect(chassis)}>
       <div className="relative overflow-hidden" style={{ height: 300 }}>
-        <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name}
+        <img src={`/ships/${chassis.id}.png`} alt={chassis.name}
           className="w-full h-full object-cover"
           style={{ filter: disabled ? 'grayscale(80%) brightness(0.5)' : 'brightness(0.9)' }} />
         <div className="absolute inset-0"
