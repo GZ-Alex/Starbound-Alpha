@@ -515,17 +515,17 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
 
                       // Nicht-stackbare Parts: normaler Toggle-Button
                       const isSelected = selectedParts.includes(part.id)
-                      const wouldExceed = !isSelected && (totalCells + (part.cells_required || 0)) > chassis.total_cells
+                      const cellsFull = !isSelected && (totalCells + (part.cells_required || 0)) > chassis.total_cells
                       return (
                         <button key={part.id}
-                          onClick={() => !wouldExceed && togglePart(part.id)}
-                          disabled={wouldExceed && !isSelected}
+                          onClick={() => !cellsFull && togglePart(part.id)}
+                          disabled={cellsFull && !isSelected}
                           className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
                           style={{
                             background: isSelected ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
                             border: isSelected ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                            color: isSelected ? '#22d3ee' : wouldExceed ? '#1e293b' : '#94a3b8',
-                            cursor: wouldExceed && !isSelected ? 'not-allowed' : 'pointer',
+                            color: isSelected ? '#22d3ee' : cellsFull ? '#1e293b' : '#94a3b8',
+                            cursor: cellsFull && !isSelected ? 'not-allowed' : 'pointer',
                           }}>
                           <div className="flex justify-between items-center">
                             <span className="truncate">{part.name}</span>
