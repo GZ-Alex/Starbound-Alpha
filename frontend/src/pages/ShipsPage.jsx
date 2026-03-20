@@ -1,10 +1,10 @@
-// src/pages/ShipsPage.jsx — v1.0
+// src/pages/ShipsPage.jsx — v1.1
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Info, X, Navigation, Package, Zap, Shield, Crosshair, Cpu } from 'lucide-react'
+import { Info, X, Navigation, Package, Zap, Shield, Crosshair, Cpu, PlusCircle, LogOut } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -183,7 +183,130 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
 
 // ─── Ship Row ─────────────────────────────────────────────────────────────────
 
-function ShipRow({ ship, design, chassis, fleet, planet, partDefs, onDetail, onGoToFleet }) {
+// ─── Flotte zuweisen Modal ─────────────────────────────────────────────────────
+
+function AssignFleetModal({ ships, fleets, onClose, onAssigned }) {
+  const [selectedFleetId, setSelectedFleetId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const { addNotification } = useGameStore()
+
+  const handleAssign = async () => {
+    if (!selectedFleetId) return
+    setBusy(true)
+    try {
+      const ids = ships.map(s => s.id)
+      const { error } = await supabase
+        .from('ships')
+        .update({ fleet_id: selectedFleetId })
+        .in('id', ids)
+      if (error) throw error
+      addNotification(`✅ ${ids.length} Schiff${ids.length !== 1 ? 'e' : ''} zugewiesen`, 'success')
+      onAssigned()
+      onClose()
+    } catch (err) {
+      addNotification('Fehler: ' + err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRemove = async () => {
+    setBusy(true)
+    try {
+      const ids = ships.map(s => s.id)
+      const { error } = await supabase
+        .from('ships')
+        .update({ fleet_id: null })
+        .in('id', ids)
+      if (error) throw error
+      addNotification(`✅ ${ids.length} Schiff${ids.length !== 1 ? 'e' : ''} aus Flotte entfernt`, 'success')
+      onAssigned()
+      onClose()
+    } catch (err) {
+      addNotification('Fehler: ' + err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const availableFleets = fleets.filter(f => !f.is_in_transit)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.8)' }}
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="panel p-5 w-full max-w-sm space-y-4"
+        onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-mono font-semibold text-slate-200">
+            {ships.length} Schiff{ships.length !== 1 ? 'e' : ''} zuweisen
+          </p>
+          <button onClick={onClose} style={{ color: '#475569' }}><X size={14} /></button>
+        </div>
+
+        {/* Schiffsnamen */}
+        <div className="space-y-1">
+          {ships.map(s => (
+            <p key={s.id} className="text-xs font-mono text-slate-400">
+              · {s.name ?? s.ship_designs?.name ?? '—'}
+            </p>
+          ))}
+        </div>
+
+        {/* Flotte wählen */}
+        {availableFleets.length === 0 ? (
+          <p className="text-xs font-mono text-slate-600">Keine Flotten verfügbar. Erstelle zuerst eine Flotte.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {availableFleets.map(f => (
+              <button key={f.id}
+                onClick={() => setSelectedFleetId(f.id)}
+                className="w-full text-left px-3 py-2 rounded text-xs font-mono transition-all"
+                style={{
+                  background: selectedFleetId === f.id ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${selectedFleetId === f.id ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                  color: selectedFleetId === f.id ? '#a78bfa' : '#94a3b8',
+                }}>
+                <div className="flex justify-between items-center">
+                  <span>{f.name ?? 'Flotte'}</span>
+                  <span className="text-slate-600">{f.x} / {f.y} / {f.z}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {/* Aus Flotte entfernen — nur wenn mind. ein Schiff bereits in einer Flotte */}
+          {ships.some(s => s.fleet_id) && (
+            <button onClick={handleRemove} disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-mono transition-all"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+              <LogOut size={11} /> Aus Flotte
+            </button>
+          )}
+          <button onClick={handleAssign}
+            disabled={!selectedFleetId || busy}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded text-xs font-mono transition-all"
+            style={{
+              background: selectedFleetId ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${selectedFleetId ? 'rgba(168,85,247,0.35)' : 'rgba(255,255,255,0.08)'}`,
+              color: selectedFleetId ? '#a78bfa' : '#334155',
+            }}>
+            <PlusCircle size={11} /> Zuweisen
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function ShipRow({ ship, design, chassis, fleet, planet, partDefs, onDetail, onGoToFleet, onAssign }) {
   const imgSrc = chassis?.image_key
     ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
@@ -216,7 +339,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, onDetail, onG
         <p className="text-xs font-mono text-slate-600 truncate">{chassis?.name ?? '—'}</p>
       </div>
 
-      {/* Zur Flotte Button */}
+      {/* Flotte / Zuweisen */}
       <div className="w-28 flex-shrink-0">
         {fleet ? (
           <button onClick={() => onGoToFleet(fleet.id)}
@@ -230,7 +353,16 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, onDetail, onG
             {fleet.name ?? 'Flotte'}
           </button>
         ) : (
-          <span className="text-xs font-mono text-slate-700">Im Dock</span>
+          <button onClick={() => onAssign([ship])}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono transition-all"
+            style={{
+              background: 'rgba(34,211,238,0.06)',
+              border: '1px solid rgba(34,211,238,0.15)',
+              color: '#475569',
+            }}>
+            <PlusCircle size={10} />
+            Zuweisen
+          </button>
         )}
       </div>
 
@@ -290,7 +422,9 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, onDetail, onG
 
 export default function ShipsPage() {
   const { player, planet } = useGameStore()
+  const queryClient = useQueryClient()
   const [selectedShip, setSelectedShip] = useState(null)
+  const [assignShips, setAssignShips] = useState(null) // Array von Schiffen für Modal
 
   // Schiffe laden mit Design
   const { data: ships = [], isLoading } = useQuery({
@@ -413,8 +547,8 @@ export default function ShipsPage() {
               planet={planet}
               partDefs={partDefs}
               onDetail={setSelectedShip}
+              onAssign={setAssignShips}
               onGoToFleet={(fleetId) => {
-                // Navigation zu Flotten-Seite — wird bei FleetPage implementiert
                 window.location.href = `/fleet?highlight=${fleetId}`
               }}
             />
@@ -433,6 +567,18 @@ export default function ShipsPage() {
             fleet={selectedFleet}
             planet={planet}
             onClose={() => setSelectedShip(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Flotte zuweisen Modal */}
+      <AnimatePresence>
+        {assignShips && (
+          <AssignFleetModal
+            ships={assignShips}
+            fleets={fleets}
+            onClose={() => setAssignShips(null)}
+            onAssigned={() => queryClient.invalidateQueries(['ships', player?.id])}
           />
         )}
       </AnimatePresence>
