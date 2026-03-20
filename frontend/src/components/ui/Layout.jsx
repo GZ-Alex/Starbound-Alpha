@@ -10,26 +10,23 @@ import NotificationStack from '@/components/ui/NotificationStack'
 import {
   Building2, Hammer, Rocket, FlaskConical, Anchor,
   Shield, Crosshair, Radio, Navigation, Radar,
-  LogOut, Settings, Clock, Ship, LayoutDashboard, Swords, Users
+  LogOut, Settings, Clock, Ship
 } from 'lucide-react'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { to: '/overview',  icon: LayoutDashboard, label: 'Übersicht'           },
-  { to: '/planet',    icon: Building2,       label: 'Gebäude'             },
-  { to: '/mines',     icon: Hammer,          label: 'Minen'               },
-  { to: '/shipyard',  icon: Rocket,          label: 'Werft'               },
-  { to: '/research',  icon: FlaskConical,    label: 'Forschungszentrum'   },
-  { to: '/dock',      icon: Anchor,          label: 'Dock'                },
-  { to: '/bunker',    icon: Shield,          label: 'Bunker'              },
-  { to: '/defense',   icon: Crosshair,       label: 'Verteidigung'        },
-  { to: '/comms',     icon: Radio,           label: 'Komm'                },
-  { to: '/alliance',  icon: Users,           label: 'Allianz'             },
-  { to: '/ships',     icon: Ship,            label: 'Schiffe'             },
-  { to: '/fleet',     icon: Navigation,      label: 'Flotten'             },
-  { to: '/scan',      icon: Radar,           label: 'Scan'                },
-  { to: '/battle-reports', icon: Swords,     label: 'Kampfberichte'       },
+  { to: '/planet',    icon: Building2,   label: 'Gebäude'          },
+  { to: '/mines',     icon: Hammer,      label: 'Minen'            },
+  { to: '/shipyard',  icon: Rocket,      label: 'Werft'            },
+  { to: '/research',  icon: FlaskConical, label: 'Forschungszentrum'},
+  { to: '/dock',      icon: Anchor,      label: 'Dock'             },
+  { to: '/bunker',    icon: Shield,      label: 'Bunker'           },
+  { to: '/defense',   icon: Crosshair,   label: 'Verteidigung'     },
+  { to: '/comms',     icon: Radio,       label: 'Komm'             },
+  { to: '/ships',     icon: Ship,        label: 'Schiffe'          },
+  { to: '/fleet',     icon: Navigation,  label: 'Flotten'          },
+  { to: '/scan',      icon: Radar,       label: 'Scan'             },
 ]
 
 // ─── Resources ────────────────────────────────────────────────────────────────
@@ -329,24 +326,10 @@ export default function Layout() {
   const { player, planet, logout } = useGameStore()
   const navigate = useNavigate()
 
-  // Ungelesene Notifications für Badge
-  const { data: unreadCount = 0 } = useQuery({
-    queryKey: ['notif-unread', player?.id],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('player_notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('player_id', player.id)
-        .eq('is_read', false)
-      return count ?? 0
-    },
-    enabled: !!player,
-    refetchInterval: 15000,
-  })
-
+  // Rassen-Bild: /races/{race_id}.png, Fallback auf Platzhalter
   const raceImg = player?.race_id
-    ? `/Starbound-Alpha/races/${player.race_id}.png`
-    : `/Starbound-Alpha/races/placeholder.png`
+    ? `/races/${player.race_id}.png`
+    : `/races/placeholder.png`
 
   return (
     <div className="scanlines flex h-screen overflow-hidden star-bg">
@@ -399,13 +382,7 @@ export default function Layout() {
             <NavLink key={to} to={to}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Icon size={14} />
-              <span className="text-sm flex-1">{label}</span>
-              {to === '/overview' && unreadCount > 0 && (
-                <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-xs font-mono font-bold"
-                  style={{ background: 'rgba(34,211,238,0.2)', color: '#22d3ee', minWidth: '20px', textAlign: 'center' }}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
+              <span className="text-sm">{label}</span>
             </NavLink>
           ))}
 
