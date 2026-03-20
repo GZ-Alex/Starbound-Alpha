@@ -4,9 +4,9 @@ import { useGameStore } from '@/store/gameStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ShipDesigner } from './ShipyardPage'
 import {
-  Wrench, Trash2, Settings, ChevronDown, ChevronUp,
-  CheckSquare, Square, AlertTriangle, Plus, Minus, Lock, X
+  Wrench, Trash2, Settings, CheckSquare, Square, AlertTriangle
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,376 +70,6 @@ function ConfirmDialog({ title, message, onConfirm, onCancel }) {
             style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171' }}>
             Ja, verschrotten
           </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-function RefitPanel({ ship, partDefs, chassisDefs, dockLevel, planet, onClose, queryClient, player }) {
-  const design  = ship.ship_designs
-  const chassis = chassisDefs.find(c => c.id === design?.chassis_id)
-  const originalIds = getInstalledPartIds(design?.installed_parts ?? [])
-
-  // Neue Konfiguration — startet mit aktuell installierten Parts
-  const [newParts, setNewParts] = useState([...originalIds])
-  const [busy, setBusy] = useState(false)
-
-  const { data: refitQueue = [] } = useQuery({
-    queryKey: ['refit-queue', ship.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('refit_queue').select('*').eq('ship_id', ship.id)
-      return data ?? []
-    },
-  })
-  const isInRefit = refitQueue.length > 0
-
-  const maxCells  = chassis?.total_cells ?? 0
-  const maxPrimary = chassis?.max_primary_weapons ?? 1
-
-  const totalCells = newParts.reduce((s, pid) => {
-    const p = partDefs.find(d => d.id === pid)
-    return s + (p?.cells_required ?? 0)
-  }, 0)
-
-  const engineCount  = newParts.filter(pid => partDefs.find(d => d.id === pid)?.category === 'engine').length
-  const primaryCount = newParts.filter(pid => partDefs.find(d => d.id === pid)?.category === 'primary_weapon').length
-
-  // Diff berechnen
-  const toRemove = originalIds.filter(id => !newParts.includes(id))
-  const toInstall = newParts.filter(id => !originalIds.includes(id))
-  const hasChanges = toRemove.length > 0 || toInstall.length > 0
-
-  // Gesamtkosten und -erstattung
-  const netCosts = {}
-  for (const pid of toInstall) {
-    const p = partDefs.find(d => d.id === pid)
-    if (!p) continue
-    for (const k of COST_KEYS) {
-      const v = p[`cost_${k}`] ?? 0
-      if (v > 0) netCosts[k] = (netCosts[k] ?? 0) + v
-    }
-  }
-  for (const pid of toRemove) {
-    const p = partDefs.find(d => d.id === pid)
-    if (!p) continue
-    for (const k of COST_KEYS) {
-      const refund = Math.floor((p[`cost_${k}`] ?? 0) * 0.75)
-      if (refund > 0) netCosts[k] = (netCosts[k] ?? 0) - refund
-    }
-  }
-
-  // Gesamtumbauzeit: Summe aller Einzelzeiten
-  const totalMinutes = [
-    ...toInstall.map(pid => {
-      const p = partDefs.find(d => d.id === pid)
-      const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
-      return applyDockBonus(base, dockLevel, 'time')
-    }),
-    ...toRemove.map(pid => {
-      const p = partDefs.find(d => d.id === pid)
-      const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
-      return applyDockBonus(base * 0.2, dockLevel, 'time')
-    }),
-  ].reduce((a, b) => a + b, 0)
-
-  const canAfford = COST_KEYS.every(k => (netCosts[k] ?? 0) <= (planet?.[k] ?? 0))
-  const isValid = engineCount === 1 && primaryCount <= maxPrimary && totalCells <= maxCells
-
-  const togglePart = (pid) => {
-    const part = partDefs.find(d => d.id === pid)
-    if (!part) return
-    setNewParts(prev => {
-      const isSelected = prev.includes(pid)
-      if (isSelected) return prev.filter(p => p !== pid)
-      // Antrieb: ersetze bestehenden
-      if (part.category === 'engine') {
-        return [...prev.filter(p => partDefs.find(d => d.id === p)?.category !== 'engine'), pid]
-      }
-      // Primärwaffe: max-Check
-      if (part.category === 'primary_weapon') {
-        const current = prev.filter(p => partDefs.find(d => d.id === p)?.category === 'primary_weapon').length
-        if (current >= maxPrimary) return prev
-      }
-      return [...prev, pid]
-    })
-  }
-
-  const handleConfirm = async () => {
-    if (busy || !hasChanges || !isValid || !canAfford) return
-    setBusy(true)
-
-    // Ressourcen abziehen (Installationen) und erstatten (Ausbauten) sofort
-    const updates = {}
-    for (const [k, net] of Object.entries(netCosts)) {
-      if (net !== 0) updates[k] = (planet[k] ?? 0) - net
-    }
-    if (Object.keys(updates).length > 0) {
-      await supabase.from('planets').update(updates).eq('id', planet.id)
-    }
-
-    // Queue-Einträge erstellen
-    let offset = 0
-    for (const pid of toRemove) {
-      const p = partDefs.find(d => d.id === pid)
-      const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
-      const min = applyDockBonus(base * 0.2, dockLevel, 'time')
-      const finishAt = new Date(Date.now() + (offset + min) * 60 * 1000).toISOString()
-      await supabase.from('refit_queue').insert({
-        ship_id: ship.id, planet_id: planet.id, player_id: player.id,
-        action: 'remove', part_id: pid, finish_at: finishAt,
-      })
-      offset += min
-    }
-    for (const pid of toInstall) {
-      const p = partDefs.find(d => d.id === pid)
-      const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
-      const min = applyDockBonus(base, dockLevel, 'time')
-      const finishAt = new Date(Date.now() + (offset + min) * 60 * 1000).toISOString()
-      await supabase.from('refit_queue').insert({
-        ship_id: ship.id, planet_id: planet.id, player_id: player.id,
-        action: 'install', part_id: pid, finish_at: finishAt,
-      })
-      offset += min
-    }
-
-    queryClient.invalidateQueries(['dock-ships'])
-    queryClient.invalidateQueries(['refit-queue', ship.id])
-    queryClient.invalidateQueries(['planet', player.id])
-    setBusy(false)
-    onClose()
-  }
-
-  // Alle verfügbaren Parts nach Kategorie
-  const CATEGORIES = [
-    { id: 'engine',         label: 'Antrieb' },
-    { id: 'engine_aux',     label: 'Sekundärantrieb' },
-    { id: 'booster',        label: 'Booster' },
-    { id: 'primary_weapon', label: 'Primärwaffe' },
-    { id: 'turret',         label: 'Turret' },
-    { id: 'armor',          label: 'Panzerung' },
-    { id: 'shield_hp',      label: 'HP-Schild' },
-    { id: 'shield_def',     label: 'Def-Schild' },
-    { id: 'cargo',          label: 'Ladebucht' },
-    { id: 'mining',         label: 'Bergbau' },
-    { id: 'scanner_asteroid', label: 'Ast-Scanner' },
-    { id: 'scanner_npc',    label: 'NPC-Scanner' },
-    { id: 'extension',      label: 'Erweiterung' },
-  ]
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.85)' }}
-      onClick={onClose}>
-      <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-        onClick={e => e.stopPropagation()}
-        className="w-full max-w-5xl rounded-xl overflow-hidden flex flex-col"
-        style={{
-          background: '#040d1a',
-          border: '1px solid rgba(34,211,238,0.2)',
-          maxHeight: '90vh',
-        }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid rgba(34,211,238,0.1)' }}>
-          <div>
-            <h3 className="font-display font-bold text-lg text-cyan-400">
-              Umbau: {ship.name ?? design?.name}
-            </h3>
-            <p className="text-xs font-mono text-slate-500">{chassis?.name} · Klasse {chassis?.class}</p>
-          </div>
-          <button onClick={onClose} style={{ color: '#475569' }}><X size={16} /></button>
-        </div>
-
-        {isInRefit && (
-          <div className="mx-5 mt-4 px-3 py-2 rounded text-xs font-mono"
-            style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24' }}>
-            ⚙ Umbau läuft — warte bis der aktuelle Umbau abgeschlossen ist
-          </div>
-        )}
-
-        <div className="flex flex-1 overflow-hidden">
-          {/* Linke Spalte: Status */}
-          <div className="w-52 flex-shrink-0 p-4 space-y-3 overflow-y-auto"
-            style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}>
-
-            {/* Zellen */}
-            <div>
-              <div className="flex justify-between text-xs font-mono text-slate-500 mb-1">
-                <span>Zellen</span>
-                <span style={{ color: totalCells > maxCells ? '#f87171' : '#22d3ee' }}>
-                  {totalCells} / {maxCells}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <div className="h-1.5 rounded-full transition-all"
-                  style={{ width: `${Math.min(totalCells/maxCells*100,100)}%`, background: totalCells > maxCells ? '#ef4444' : '#22d3ee' }} />
-              </div>
-            </div>
-
-            <div className="flex justify-between text-xs font-mono text-slate-500">
-              <span>Antrieb</span>
-              <span style={{ color: engineCount === 1 ? '#4ade80' : '#f87171' }}>
-                {engineCount === 0 ? 'Fehlt' : engineCount === 1 ? '✓' : `${engineCount}x`}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs font-mono text-slate-500">
-              <span>Primärwaffen</span>
-              <span style={{ color: primaryCount > maxPrimary ? '#f87171' : '#94a3b8' }}>
-                {primaryCount} / {maxPrimary}
-              </span>
-            </div>
-
-            {/* Änderungen */}
-            {hasChanges && (
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2">Änderungen</p>
-                {toRemove.map(pid => {
-                  const p = partDefs.find(d => d.id === pid)
-                  return <p key={pid} className="text-xs font-mono" style={{ color: '#f87171' }}>− {p?.name}</p>
-                })}
-                {toInstall.map(pid => {
-                  const p = partDefs.find(d => d.id === pid)
-                  return <p key={pid} className="text-xs font-mono" style={{ color: '#4ade80' }}>+ {p?.name}</p>
-                })}
-              </div>
-            )}
-
-            {/* Kosten */}
-            {hasChanges && (
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2">Kosten (netto)</p>
-                {COST_KEYS.map(k => {
-                  const net = netCosts[k] ?? 0
-                  if (!net) return null
-                  const ok = net <= (planet?.[k] ?? 0)
-                  return (
-                    <div key={k} className="flex justify-between text-xs font-mono">
-                      <span className="text-slate-500 capitalize">{k}</span>
-                      <span style={{ color: net > 0 ? (ok ? '#94a3b8' : '#f87171') : '#34d399' }}>
-                        {net > 0 ? `-${fmt(net)}` : `+${fmt(Math.abs(net))}`}
-                      </span>
-                    </div>
-                  )
-                })}
-                <div className="flex justify-between text-xs font-mono mt-1" style={{ color: '#64748b' }}>
-                  <span>Zeit</span>
-                  <span>{fmtTime(totalMinutes)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Rechte Spalte: Bauteile */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {CATEGORIES.map(({ id: catId, label }) => {
-              const sortOrder = (id) => {
-                if (/_s$/.test(id)) return 1
-                if (/_m$/.test(id)) return 2
-                if (/_l$/.test(id)) return 3
-                if (/_xl$/.test(id)) return 4
-                if (/_xxl$/.test(id)) return 5
-                if (/_\d+_(pvt|adm)$/.test(id)) return 5
-                const m = id.match(/_(\d+)$/)
-                return m ? parseInt(m[1]) : 99
-              }
-              const engineTypeOrder = (id) => {
-                if (id.startsWith('engine_chem'))   return 100
-                if (id.startsWith('engine_aux'))    return 200
-                if (id.startsWith('engine_ion'))    return 300
-                if (id.startsWith('engine_fusion')) return 400
-                return 500
-              }
-              const classOrd = { A:1, B:2, C:3, D:4, E:5 }
-              const available = partDefs.filter(p => {
-                if (p.category !== catId) return false
-                if (p.required_profession && p.required_profession !== player?.profession) return false
-                return true
-              }).sort((a, b) => {
-                if (catId === 'turret' || catId === 'primary_weapon') {
-                  return ((classOrd[a.weapon_class]??9)*100 + sortOrder(a.id)) -
-                         ((classOrd[b.weapon_class]??9)*100 + sortOrder(b.id))
-                }
-                if (catId === 'engine' || catId === 'engine_aux') {
-                  return (engineTypeOrder(a.id) + sortOrder(a.id)) - (engineTypeOrder(b.id) + sortOrder(b.id))
-                }
-                return sortOrder(a.id) - sortOrder(b.id)
-              })
-              if (!available.length) return null
-              return (
-                <div key={catId}>
-                  <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2">{label}</p>
-                  <div className="space-y-1">
-                    {available.map(part => {
-                      const isSelected = newParts.includes(part.id)
-                      const wasInstalled = originalIds.includes(part.id)
-                      const wouldExceed = !isSelected && totalCells + (part.cells_required ?? 0) > maxCells
-                      const isAdded = isSelected && !wasInstalled
-                      const isRemoved = !isSelected && wasInstalled
-
-                      let borderColor = 'rgba(255,255,255,0.06)'
-                      let bgColor = 'rgba(255,255,255,0.02)'
-                      let textColor = '#64748b'
-                      if (isSelected && wasInstalled) { borderColor = 'rgba(34,211,238,0.3)'; bgColor = 'rgba(34,211,238,0.08)'; textColor = '#22d3ee' }
-                      else if (isAdded) { borderColor = 'rgba(74,222,128,0.4)'; bgColor = 'rgba(74,222,128,0.1)'; textColor = '#4ade80' }
-                      else if (isRemoved) { borderColor = 'rgba(239,68,68,0.25)'; bgColor = 'rgba(239,68,68,0.06)'; textColor = '#475569' }
-                      else if (wouldExceed) { textColor = '#2d3f52' }
-                      else if (!isSelected) { textColor = '#94a3b8' }
-
-                      return (
-                        <button key={part.id}
-                          onClick={() => !isInRefit && !wouldExceed && togglePart(part.id)}
-                          disabled={isInRefit || (wouldExceed && !isSelected)}
-                          className="w-full text-left px-3 py-2 rounded transition-all"
-                          style={{ background: bgColor, border: `1px solid ${borderColor}`, opacity: wouldExceed && !isSelected ? 0.4 : 1 }}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {isAdded && <Plus size={10} style={{ color: '#4ade80', flexShrink: 0 }} />}
-                              {isRemoved && <Minus size={10} style={{ color: '#f87171', flexShrink: 0 }} />}
-                              <span className="text-sm font-mono" style={{ color: textColor }}>{part.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs font-mono text-slate-600">
-                              {wouldExceed && !isSelected && <Lock size={9} />}
-                              <span>{part.cells_required}Z</span>
-                            </div>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={() => setNewParts([...originalIds])}
-            className="text-xs font-mono px-3 py-1.5 rounded transition-all"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#475569' }}>
-            Zurücksetzen
-          </button>
-          <div className="flex items-center gap-3">
-            <button onClick={onClose}
-              className="text-xs font-mono px-3 py-1.5 rounded transition-all"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#475569' }}>
-              Abbrechen
-            </button>
-            <button onClick={handleConfirm}
-              disabled={busy || !hasChanges || !isValid || !canAfford || isInRefit}
-              className="flex items-center gap-2 px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
-              style={{
-                background: hasChanges && isValid && canAfford && !isInRefit ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${hasChanges && isValid && canAfford && !isInRefit ? 'rgba(34,211,238,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                color: hasChanges && isValid && canAfford && !isInRefit ? '#22d3ee' : '#334155',
-              }}>
-              {busy ? '...' : `Umbau bestätigen${hasChanges ? ` (${fmtTime(totalMinutes)})` : ''}`}
-            </button>
-          </div>
         </div>
       </motion.div>
     </motion.div>
@@ -735,18 +365,30 @@ export default function DockPage() {
 
       {/* Umbau Modal */}
       <AnimatePresence>
-        {refitShip && (
-          <RefitPanel
-            ship={refitShip}
-            partDefs={partDefs}
-            chassisDefs={chassisDefs}
-            dockLevel={dockLevel}
-            planet={planet}
-            player={player}
-            queryClient={queryClient}
-            onClose={() => setRefitShip(null)}
-          />
-        )}
+        {refitShip && (() => {
+          const design  = refitShip.ship_designs
+          const chassis = chassisDefs.find(c => c.id === design?.chassis_id)
+          if (!chassis) return null
+          return (
+            <ShipDesigner
+              chassis={chassis}
+              planet={planet}
+              player={player}
+              partDefs={partDefs}
+              hasTech={() => true}
+              onClose={() => setRefitShip(null)}
+              refitMode={true}
+              ship={refitShip}
+              onRefit={() => {
+                queryClient.invalidateQueries(['dock-ships'])
+                queryClient.invalidateQueries(['planet', player?.id])
+                setRefitShip(null)
+              }}
+              queryClient={queryClient}
+              dockLevel={dockLevel}
+            />
+          )
+        })()}
       </AnimatePresence>
 
       {/* Schiffsliste */}
