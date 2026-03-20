@@ -1,10 +1,11 @@
-// src/pages/BattleReportsPage.jsx — v1.0
+// src/pages/BattleReportsPage.jsx — v1.1
 import { useState, useEffect } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Swords, ChevronLeft, ChevronDown, ChevronUp, Shield, Crosshair, Package, Trophy, Skull, Minus } from 'lucide-react'
+import BattleAnimation from '@/components/BattleAnimation'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -267,13 +268,8 @@ function BattleCard({ report, isOpen, onToggle }) {
                 </div>
               )}
 
-              {/* Video-Kampf Platzhalter */}
-              <div className="flex items-center justify-center px-4 py-3 rounded-lg"
-                style={{ background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.12)' }}>
-                <span className="text-xs font-mono" style={{ color: '#475569' }}>
-                  ⚙ Animierter Kampf — In Entwicklung
-                </span>
-              </div>
+              {/* Kampfanimation */}
+              <BattleAnimation report={report} />
             </div>
           </motion.div>
         )}
