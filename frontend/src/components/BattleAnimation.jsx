@@ -22,16 +22,33 @@ const WEAPON_STYLE = {
 
 const CLASS_SHAPES = {
   Z: { shape: 'circle',   size: 10, color: '#94a3b8' },
-  A: { shape: 'rect',     size: 18, color: '#34d399' },  // Frachter: breites Rechteck
-  B: { shape: 'triangle', size: 12, color: '#38bdf8' },  // Scout/Jäger: spitzer Pfeil
-  C: { shape: 'triangle', size: 15, color: '#a78bfa' },  // Mittlerer Jäger
-  D: { shape: 'diamond',  size: 17, color: '#fb923c' },  // Kreuzer: Raute
-  E: { shape: 'hexagon',  size: 20, color: '#f472b6' },  // Zerstörer/Schlachtschiff
+  A: { shape: 'rect',     size: 18, color: '#34d399' },
+  B: { shape: 'triangle', size: 12, color: '#38bdf8' },
+  C: { shape: 'triangle', size: 15, color: '#a78bfa' },
+  D: { shape: 'diamond',  size: 17, color: '#fb923c' },
+  E: { shape: 'hexagon',  size: 20, color: '#f472b6' },
 }
 
-// ─── Canvas-Zeichenfunktionen ──────────────────────────────────────────────────
+// Sprite-Pfade — lädt aus public/Starbound-Alpha/ships/{chassisId}.png
+// Fallback auf geometrische Form wenn nicht vorhanden
+const spriteCache = {}
 
-function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label) {
+function loadSprite(chassisId) {
+  if (spriteCache[chassisId] !== undefined) return spriteCache[chassisId]
+  spriteCache[chassisId] = null  // loading sentinel
+  const img = new Image()
+  img.onload  = () => { spriteCache[chassisId] = img }
+  img.onerror = () => { spriteCache[chassisId] = false }  // false = kein Sprite
+  img.src = `/Starbound-Alpha/ships/${chassisId}.png`
+  return null
+}
+
+// Sprite-Orientierung: Sprites zeigen nach OBEN (nördlich = 0°)
+// Spieler: 0° (zeigt nach oben zur gegnerischen Seite)
+// Feinde: Math.PI (zeigt nach unten)
+// Beim Schießen: Winkel zum Ziel
+
+function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chassisId, aimAngle) {
   const cfg = CLASS_SHAPES[cls] ?? CLASS_SHAPES.B
   const alpha = isDestroyed ? 0.15 : 1.0
   ctx.globalAlpha = alpha
@@ -42,192 +59,83 @@ function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label) {
     : hpPct > 0.25 ? '#fbbf24'
     : '#ef4444'
 
+  // Rotationswinkel: Ruheposition + evtl. Ziel-Winkel beim Schießen
+  // Sprite zeigt nach unten (Süd = π) — Spieler zeigen nach oben = rotate(0), Feinde nach unten = rotate(π)
+  // aimAngle: null = Ruheposition, number = Winkel zum Ziel
+  const baseAngle = isPlayer ? 0 : Math.PI
+  const finalAngle = aimAngle !== null && aimAngle !== undefined ? aimAngle : baseAngle
+
   ctx.save()
   ctx.translate(x, y)
-  if (!isPlayer) ctx.rotate(Math.PI)  // Feinde zeigen nach unten
+  ctx.rotate(finalAngle)
 
-  // Schiff zeichnen
-  ctx.fillStyle = shipColor
-  ctx.strokeStyle = isDestroyed ? '#1e293b' : '#ffffff22'
-  ctx.lineWidth = 1
-
+  // Sprite versuchen
+  const sprite = chassisId ? loadSprite(chassisId) : false
   const s = cfg.size
-  ctx.beginPath()
-  if (cfg.shape === 'triangle') {
-    ctx.moveTo(0, -s)
-    ctx.lineTo(-s * 0.65, s * 0.6)
-    ctx.lineTo(s * 0.65, s * 0.6)
-    ctx.closePath()
-  } else if (cfg.shape === 'diamond') {
-    ctx.moveTo(0, -s)
-    ctx.lineTo(s * 0.7, 0)
-    ctx.lineTo(0, s)
-    ctx.lineTo(-s * 0.7, 0)
-    ctx.closePath()
-  } else if (cfg.shape === 'hexagon') {
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 6
-      if (i === 0) ctx.moveTo(Math.cos(a) * s, Math.sin(a) * s)
-      else ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s)
-    }
-    ctx.closePath()
-  } else if (cfg.shape === 'rect') {
-    ctx.rect(-s * 0.8, -s * 0.4, s * 1.6, s * 0.8)
-  } else {
-    ctx.arc(0, 0, s * 0.7, 0, Math.PI * 2)
-  }
-  ctx.fill()
-  ctx.stroke()
 
-  // HP-Balken
-  ctx.rotate(isPlayer ? 0 : Math.PI)  // Balken immer gleich ausrichten
+  if (sprite && sprite !== false) {
+    // Sprite zeichnen — zentriert, skaliert auf cfg.size * 3
+    const sw = s * 3, sh = s * 3
+    ctx.drawImage(sprite, -sw/2, -sh/2, sw, sh)
+  } else {
+    // Geometrische Fallback-Form
+    ctx.fillStyle = shipColor
+    ctx.strokeStyle = isDestroyed ? '#1e293b' : '#ffffff22'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    if (cfg.shape === 'triangle') {
+      ctx.moveTo(0, -s)
+      ctx.lineTo(-s * 0.65, s * 0.6)
+      ctx.lineTo(s * 0.65, s * 0.6)
+      ctx.closePath()
+    } else if (cfg.shape === 'diamond') {
+      ctx.moveTo(0, -s)
+      ctx.lineTo(s * 0.7, 0)
+      ctx.lineTo(0, s)
+      ctx.lineTo(-s * 0.7, 0)
+      ctx.closePath()
+    } else if (cfg.shape === 'hexagon') {
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6
+        if (i === 0) ctx.moveTo(Math.cos(a) * s, Math.sin(a) * s)
+        else ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s)
+      }
+      ctx.closePath()
+    } else if (cfg.shape === 'rect') {
+      ctx.rect(-s * 0.8, -s * 0.4, s * 1.6, s * 0.8)
+    } else {
+      ctx.arc(0, 0, s * 0.7, 0, Math.PI * 2)
+    }
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  ctx.restore()
+
+  // HP-Balken (immer horizontal, unabhängig von Rotation)
   if (!isDestroyed) {
-    const bw = s * 1.8, bh = 3
-    const bx = -bw / 2, by = s + 4
+    const bw = s * 2, bh = 3
+    const bx = x - bw/2
+    const by = y + s * 1.6
     ctx.fillStyle = '#1e293b'
     ctx.fillRect(bx, by, bw, bh)
     ctx.fillStyle = hpPct > 0.6 ? '#4ade80' : hpPct > 0.25 ? '#fbbf24' : '#ef4444'
     ctx.fillRect(bx, by, bw * Math.max(0, hpPct), bh)
   }
 
-  ctx.restore()
   ctx.globalAlpha = 1.0
 
   // Label
   if (label && !isDestroyed) {
-    ctx.fillStyle = '#64748b'
+    ctx.fillStyle = '#475569'
     ctx.font = '9px monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(label, x, y + cfg.size + 16)
+    const cfg2 = CLASS_SHAPES[cls] ?? CLASS_SHAPES.B
+    ctx.fillText(label, x, y + cfg2.size * 1.6 + 14)
   }
 }
 
-function drawBeam(ctx, x1, y1, x2, y2, color, glow, progress) {
-  // Strahl von (x1,y1) zu (x2,y2), progress 0→1 steuert Sichtbarkeit
-  const alpha = progress < 0.3 ? progress / 0.3 : progress > 0.7 ? (1 - progress) / 0.3 : 1.0
-  ctx.globalAlpha = alpha * 0.9
-
-  // Glow
-  ctx.shadowColor = glow
-  ctx.shadowBlur = 8
-  ctx.strokeStyle = glow
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.stroke()
-
-  // Kern
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.stroke()
-
-  ctx.shadowBlur = 0
-  ctx.globalAlpha = 1.0
-}
-
-function drawProjectile(ctx, x1, y1, x2, y2, color, glow, progress, size = 4) {
-  const px = x1 + (x2 - x1) * progress
-  const py = y1 + (y2 - y1) * progress
-
-  // Trail
-  const trailLen = 0.15
-  const tx = x1 + (x2 - x1) * Math.max(0, progress - trailLen)
-  const ty = y1 + (y2 - y1) * Math.max(0, progress - trailLen)
-
-  ctx.globalAlpha = 0.5
-  ctx.shadowColor = glow
-  ctx.shadowBlur = 6
-  const grad = ctx.createLinearGradient(tx, ty, px, py)
-  grad.addColorStop(0, 'transparent')
-  grad.addColorStop(1, color)
-  ctx.strokeStyle = grad
-  ctx.lineWidth = size * 0.6
-  ctx.beginPath()
-  ctx.moveTo(tx, ty)
-  ctx.lineTo(px, py)
-  ctx.stroke()
-
-  // Kern
-  ctx.globalAlpha = 1.0
-  ctx.fillStyle = '#ffffff'
-  ctx.shadowColor = glow
-  ctx.shadowBlur = 10
-  ctx.beginPath()
-  ctx.arc(px, py, size * 0.5, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.shadowBlur = 0
-}
-
-function drawMissile(ctx, x1, y1, x2, y2, color, glow, progress) {
-  // Rakete: leicht kurvenförmig
-  const px = x1 + (x2 - x1) * progress
-  const py = y1 + (y2 - y1) * progress
-  const wobble = Math.sin(progress * Math.PI * 3) * 8 * (1 - progress)
-  const mx = px + wobble
-
-  // Rauch-Trail
-  ctx.globalAlpha = 0.3
-  ctx.fillStyle = '#94a3b8'
-  for (let i = 0; i < 3; i++) {
-    const tp = Math.max(0, progress - i * 0.04)
-    const tx = x1 + (x2 - x1) * tp + Math.sin(tp * Math.PI * 3) * 8 * (1 - tp)
-    const ty = y1 + (y2 - y1) * tp
-    ctx.beginPath()
-    ctx.arc(tx, ty, 2 - i * 0.5, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // Rakete
-  ctx.globalAlpha = 1.0
-  ctx.fillStyle = color
-  ctx.shadowColor = glow
-  ctx.shadowBlur = 8
-  ctx.beginPath()
-  ctx.arc(mx, py, 3, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Flamme
-  ctx.fillStyle = '#fbbf24'
-  ctx.beginPath()
-  ctx.arc(mx, py + 5, 2, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.shadowBlur = 0
-  ctx.globalAlpha = 1.0
-}
-
-function drawExplosion(ctx, x, y, progress) {
-  // Progress 0→1: explodiert und verblasst
-  const r = progress * 30
-  const alpha = 1 - progress
-  ctx.globalAlpha = alpha
-  const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
-  grad.addColorStop(0, '#ffffff')
-  grad.addColorStop(0.3, '#fbbf24')
-  grad.addColorStop(0.7, '#ef4444')
-  grad.addColorStop(1, 'transparent')
-  ctx.fillStyle = grad
-  ctx.beginPath()
-  ctx.arc(x, y, r, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Funken
-  for (let i = 0; i < 6; i++) {
-    const a = (Math.PI * 2 / 6) * i + progress * 2
-    const sr = r * 1.2
-    ctx.fillStyle = '#fbbf24'
-    ctx.globalAlpha = alpha * 0.8
-    ctx.beginPath()
-    ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr, 2, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  ctx.globalAlpha = 1.0
-}
+// ─── Simulation-State aufbauen ────────────────────────────────────────────────
 
 // ─── Simulation-State aufbauen ────────────────────────────────────────────────
 
@@ -238,6 +146,7 @@ function buildSimState(report) {
     id: s.id ?? s.design_id ?? Math.random().toString(),
     name: s.name ?? 'Schiff',
     chassisClass: s.chassisClass ?? s.ship_designs?.chassis_id?.split('_')[0]?.toUpperCase() ?? 'B',
+    chassisId: s.ship_designs?.chassis_id ?? s.chassisId ?? null,
     hp: s.hp ?? s.maxHp ?? s.max_hp ?? 100,
     maxHp: s.maxHp ?? s.max_hp ?? 100,
   }))
@@ -246,6 +155,7 @@ function buildSimState(report) {
     id: s.id ?? Math.random().toString(),
     name: s.name ?? 'NPC',
     chassisClass: s.chassisClass ?? 'B',
+    chassisId: s.chassisId ?? null,
     hp: s.hp ?? s.maxHp ?? 100,
     maxHp: s.maxHp ?? 100,
   }))
@@ -324,16 +234,18 @@ export default function BattleAnimation({ report, onClose }) {
     const nHp = Object.fromEntries(sim.npcShips.map(s => [s.id, s.hp]))
     const pDead = new Set()
     const nDead = new Set()
-    const explosions = []  // [{x, y, startTime}]
-    let activeProjectiles = []  // [{x1,y1,x2,y2,color,glow,style,startTime,duration,targetId,damage}]
+    const explosions = []
+    let activeProjectiles = []
+    // Rotationswinkel pro Schiff: null = Ruheposition
+    const aimAngles = {}
     let roundIdx = 0
     let roundStartTime = null
     let actionIdx = 0
     let lastTime = null
-    const ACTION_INTERVAL = 180  // ms zwischen Aktionen in einer Runde
-    const ROUND_PAUSE = 800      // ms Pause zwischen Runden
+    const ACTION_INTERVAL = 180
+    const ROUND_PAUSE = 800
 
-    stateRef.current = { pHp, nHp, pDead, nDead, explosions, activeProjectiles, roundIdx, roundStartTime, actionIdx, lastTime }
+    stateRef.current = { pHp, nHp, pDead, nDead, explosions, activeProjectiles, aimAngles, roundIdx, roundStartTime, actionIdx, lastTime }
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -379,12 +291,12 @@ export default function BattleAnimation({ report, onClose }) {
       for (const s of sim.playerShips) {
         const pos = pPositions[s.id]
         if (!pos) continue
-        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.pHp[s.id] ?? 0, s.maxHp, true, st.pDead.has(s.id), s.name?.split(' ')[0])
+        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.pHp[s.id] ?? 0, s.maxHp, true, st.pDead.has(s.id), s.name?.split(' ')[0], s.chassisId, st.aimAngles[s.id])
       }
       for (const s of sim.npcShips) {
         const pos = nPositions[s.id]
         if (!pos) continue
-        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.nHp[s.id] ?? 0, s.maxHp, false, st.nDead.has(s.id), s.name?.split(' ')[0])
+        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.nHp[s.id] ?? 0, s.maxHp, false, st.nDead.has(s.id), s.name?.split(' ')[0], s.chassisId, st.aimAngles[s.id])
       }
 
       // ── Projektile ────────────────────────────────────────────────────────────
@@ -406,7 +318,14 @@ export default function BattleAnimation({ report, onClose }) {
           p.exploded = true
           if (p.hit) st.explosions.push({ x: p.x2, y: p.y2, startTime: now })
         }
-        return progress < 1
+        // Winkel zurücksetzen wenn Projektil weg
+        if (progress >= 1) {
+          // Nur zurücksetzen wenn kein anderes Projektil dieses Schiffs noch fliegt
+          const stillAiming = st.activeProjectiles.some(other => other !== p && other.attackerId === p.attackerId && (now - other.startTime) / other.duration < 1)
+          if (!stillAiming) delete st.aimAngles[p.attackerId]
+          return false
+        }
+        return true
       })
 
       // ── Explosionen ──────────────────────────────────────────────────────────
@@ -433,12 +352,20 @@ export default function BattleAnimation({ report, onClose }) {
           const style   = WEAPON_STYLE[action.weaponType] ?? 'beam'
           const dur     = PROJECTILE_DURATION[style] ?? 400
 
+          // Winkel vom Angreifer zum Ziel berechnen
+          // atan2 gibt Winkel von (fromPos) zu (toPos), +π/2 weil Sprites nach oben zeigen (Norden=0)
+          const dx = toPos.x - fromPos.x
+          const dy = toPos.y - fromPos.y
+          const aimAngle = Math.atan2(dy, dx) + Math.PI / 2
+          st.aimAngles[action.attackerId] = aimAngle
+
           st.activeProjectiles.push({
             x1: fromPos.x, y1: fromPos.y,
             x2: toPos.x,   y2: toPos.y,
             weaponType: action.weaponType ?? 'laser',
             style, duration: dur, startTime: now,
             hit: action.hit, exploded: false,
+            attackerId: action.attackerId,
           })
 
           // HP nach Treffer sofort aktualisieren
