@@ -54,6 +54,8 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
       : []
   )
   const [busy, setBuilding] = useState(false)
+  const [shipName, setShipName] = useState('')
+  const [quantity, setQuantity] = useState(1)
   const { addNotification } = useGameStore()
 
   const getAvailableParts = (category) => {
@@ -212,10 +214,14 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
     })
   }
 
-  // Waffenliste für Anzeige (installierte Waffen mit Angriffswert)
+  // Waffenliste: erst Primär, dann Sekundär
   const installedWeapons = selectedParts
     .map(pid => (partDefs ?? []).find(d => d.id === pid))
     .filter(p => p?.category === 'primary_weapon' || p?.category === 'turret')
+    .sort((a, b) => {
+      if (a.category === b.category) return 0
+      return a.category === 'primary_weapon' ? -1 : 1
+    })
     .map(p => ({
       name: p.name,
       type: p.category === 'primary_weapon' ? 'Primär' : 'Sekundär',
@@ -328,47 +334,61 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
 
     // ── Bau-Modus ──────────────────────────────────────────────────────────
     try {
-      const updates = {}
-      for (const [res, amt] of Object.entries(costs)) updates[res] = (planet[res] || 0) - amt
-      await supabase.from('planets').update(updates).eq('id', planet.id)
+      const name = shipName.trim() || chassis.name
+      const qty  = Math.max(1, Math.min(99, quantity))
+
+      // Kosten für alle Schiffe zusammen abziehen
+      const totalCostUpdates = {}
+      for (const [res, amt] of Object.entries(costs)) {
+        totalCostUpdates[res] = (planet[res] || 0) - amt * qty
+      }
+      await supabase.from('planets').update(totalCostUpdates).eq('id', planet.id)
 
       const buildMinutes = Math.max(2, Math.floor((chassis.shipyard_space ?? 100) / 50))
 
-      const { data: design, error: designErr } = await supabase.from('ship_designs').insert({
-        player_id:       player.id,
-        name:            chassis.name,
-        chassis_id:      chassis.id,
-        installed_parts: selectedParts,
-        total_hp:        stats.hp,
-        total_defense:   stats.defense,
-        total_attack:    stats.attack,
-        total_speed:     stats.speed,
-        total_maneuver:  stats.maneuver,
-        total_cargo:     stats.cargo,
-        total_cells_used: totalCells,
-        shipyard_space:  chassis.shipyard_space ?? 100,
-        build_minutes:   buildMinutes,
-        cost_titan:      costs.titan ?? 0,
-        cost_silizium:   costs.silizium ?? 0,
-        cost_aluminium:  costs.aluminium ?? 0,
-        cost_uran:       costs.uran ?? 0,
-        cost_plutonium:  costs.plutonium ?? 0,
-        is_valid:        true,
-      }).select().single()
+      // Für jedes Schiff einzeln ein Design + Queue-Eintrag erstellen
+      for (let i = 0; i < qty; i++) {
+        const shipNameFinal = qty > 1
+          ? `${name} ${String(i + 1).padStart(2, '0')}`
+          : name
 
-      if (designErr) throw designErr
+        const { data: design, error: designErr } = await supabase.from('ship_designs').insert({
+          player_id:       player.id,
+          name:            shipNameFinal,
+          chassis_id:      chassis.id,
+          installed_parts: selectedParts,
+          total_hp:        stats.hp,
+          total_defense:   stats.defense,
+          total_attack:    stats.attack,
+          total_speed:     stats.speed,
+          total_maneuver:  stats.maneuver,
+          total_cargo:     stats.cargo,
+          total_cells_used: totalCells,
+          shipyard_space:  chassis.shipyard_space ?? 100,
+          build_minutes:   buildMinutes,
+          cost_titan:      costs.titan ?? 0,
+          cost_silizium:   costs.silizium ?? 0,
+          cost_aluminium:  costs.aluminium ?? 0,
+          cost_uran:       costs.uran ?? 0,
+          cost_plutonium:  costs.plutonium ?? 0,
+          is_valid:        true,
+        }).select().single()
 
-      const finishAt = new Date(Date.now() + buildMinutes * 60000).toISOString()
-      const { error: queueErr } = await supabase.from('ship_build_queue').insert({
-        planet_id:         planet.id,
-        design_id:         design.id,
-        quantity:          1,
-        minutes_remaining: buildMinutes,
-        finish_at:         finishAt,
-      })
-      if (queueErr) throw queueErr
+        if (designErr) throw designErr
 
-      addNotification(`🚀 ${chassis.name} in Bau (${buildMinutes} Min.)`, 'success')
+        // Jedes Schiff sequenziell in die Queue — finish_at gestaffelt
+        const finishAt = new Date(Date.now() + buildMinutes * 60000 * (i + 1)).toISOString()
+        const { error: queueErr } = await supabase.from('ship_build_queue').insert({
+          planet_id:         planet.id,
+          design_id:         design.id,
+          quantity:          1,
+          minutes_remaining: buildMinutes,
+          finish_at:         finishAt,
+        })
+        if (queueErr) throw queueErr
+      }
+
+      addNotification(`🚀 ${qty}× ${name} in Bau (${buildMinutes} Min.)`, 'success')
       onBuilt?.()
       onClose()
     } catch (err) {
@@ -494,13 +514,18 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
                       }
 
                       // Nicht-stackbare Parts: normaler Toggle-Button
+                      const isSelected = selectedParts.includes(part.id)
+                      const wouldExceed = !isSelected && (totalCells + (part.cells_required || 0)) > chassis.total_cells
                       return (
-                        <button key={part.id} onClick={() => togglePart(part.id)}
+                        <button key={part.id}
+                          onClick={() => !wouldExceed && togglePart(part.id)}
+                          disabled={wouldExceed && !isSelected}
                           className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
                           style={{
-                            background: sel ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
-                            border: sel ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                            color: sel ? '#22d3ee' : '#94a3b8',
+                            background: isSelected ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
+                            border: isSelected ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                            color: isSelected ? '#22d3ee' : wouldExceed ? '#1e293b' : '#94a3b8',
+                            cursor: wouldExceed && !isSelected ? 'not-allowed' : 'pointer',
                           }}>
                           <div className="flex justify-between items-center">
                             <span className="truncate">{part.name}</span>
@@ -633,15 +658,45 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-4 border-t border-cyan-500/15">
+        <div className="flex items-center gap-2 p-4 border-t border-cyan-500/15 flex-wrap">
           <button onClick={onClose} className="btn-ghost text-sm">Abbrechen</button>
-          <button onClick={handleBuild} disabled={!canBuild || busy}
-            className={`btn-primary py-2 px-6 text-sm flex items-center gap-2 ${!canBuild ? 'opacity-40' : ''}`}>
+
+          {!refitMode && (
+            <>
+              {/* Schiffsname */}
+              <input
+                value={shipName}
+                onChange={e => setShipName(e.target.value)}
+                placeholder={`z.B. ${chassis.name} Alpha`}
+                maxLength={30}
+                className="flex-1 min-w-32 px-3 py-2 rounded text-sm font-mono"
+                style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${!shipName.trim() ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.15)'}`, color: '#e2e8f0', outline: 'none' }}
+              />
+
+              {/* Anzahl */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                  className="w-7 h-8 rounded text-sm font-mono font-bold transition-all"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
+                  −
+                </button>
+                <span className="w-7 text-center text-sm font-mono font-bold text-slate-200">{quantity}</span>
+                <button onClick={() => setQuantity(q => Math.min(99, q + 1))}
+                  className="w-7 h-8 rounded text-sm font-mono font-bold transition-all"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
+                  +
+                </button>
+              </div>
+            </>
+          )}
+
+          <button onClick={handleBuild} disabled={!canBuild || busy || (!refitMode && !shipName.trim())}
+            className={`btn-primary py-2 px-6 text-sm flex items-center gap-2 ${(!canBuild || (!refitMode && !shipName.trim())) ? 'opacity-40' : ''}`}>
             {busy
               ? <><Hammer size={14} className="animate-pulse" /> {refitMode ? 'Wird umgebaut...' : 'Wird gebaut...'}</>
               : refitMode
                 ? <><Settings size={14} /> Umbau bestätigen</>
-                : <><Rocket size={14} /> {chassis.name} bauen</>
+                : <><Rocket size={14} /> {quantity > 1 ? `${quantity}× ` : ''}{chassis.name} bauen</>
             }
           </button>
         </div>
@@ -724,7 +779,7 @@ export default function ShipyardPage() {
       const { data } = await supabase.from('chassis_definitions').select('*').order('class')
       return data ?? []
     },
-    staleTime: Infinity,
+    staleTime: 300000,
   })
 
   const { data: partDefs } = useQuery({
@@ -733,7 +788,7 @@ export default function ShipyardPage() {
       const { data } = await supabase.from('ship_part_definitions').select('*')
       return data ?? []
     },
-    staleTime: Infinity,
+    staleTime: 300000,
   })
 
   const { data: myShips, refetch: refetchShips } = useQuery({
