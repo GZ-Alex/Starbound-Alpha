@@ -1,5 +1,6 @@
-// src/pages/ScanPage.jsx — v1.1
+// src/pages/ScanPage.jsx — v1.2
 
+import { useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -59,6 +60,16 @@ export default function ScanPage() {
   const komm = (buildings ?? []).find(b => b.building_id === 'communications_network')?.level ?? 0
   const px = planet?.x ?? 0, py = planet?.y ?? 0, pz = planet?.z ?? 0
 
+  const [visibleTypes, setVisibleTypes] = useState(new Set(['planet', 'station', 'asteroid', 'npc', 'fleet']))
+
+  function toggleType(type) {
+    setVisibleTypes(prev => {
+      const next = new Set(prev)
+      next.has(type) ? next.delete(type) : next.add(type)
+      return next
+    })
+  }
+
   const { data: objects = [], isLoading, error: scanError } = useQuery({
     queryKey: ['scan-objects', planet?.id, ranges.npc, ranges.asteroid],
     queryFn: async () => {
@@ -83,6 +94,16 @@ export default function ScanPage() {
 
   const allEntries = [...planets, ...stations, ...asteroids, ...npcs, ...fleets]
     .sort((a, b) => a.distance - b.distance)
+
+  const filteredEntries = allEntries.filter(o => visibleTypes.has(o.obj_type))
+
+  const filterButtons = [
+    { type: 'planet',   label: 'Planeten',   count: planets.length,   color: '#38bdf8' },
+    { type: 'station',  label: 'Stationen',  count: stations.length,  color: '#34d399' },
+    { type: 'asteroid', label: 'Asteroiden', count: asteroids.length, color: '#fbbf24' },
+    { type: 'npc',      label: 'NPC',        count: npcs.length,      color: '#f87171' },
+    { type: 'fleet',    label: 'Flotten',    count: fleets.length,    color: '#a78bfa' },
+  ]
 
   if (!planet) return <div className="flex items-center justify-center h-64 text-slate-500 font-mono text-sm">Kein Planet...</div>
 
@@ -126,18 +147,23 @@ export default function ScanPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {[
-          { label: `Planeten (${planets.length})`,     color: '#38bdf8' },
-          { label: `Stationen (${stations.length})`,   color: '#34d399' },
-          { label: `Asteroiden (${asteroids.length})`, color: '#fbbf24' },
-          { label: `NPC (${npcs.length})`,             color: '#f87171' },
-          { label: `Flotten (${fleets.length})`,       color: '#a78bfa' },
-        ].map(l => (
-          <span key={l.label} className="text-xs font-mono px-2 py-1 rounded"
-            style={{ background: `${l.color}10`, border: `1px solid ${l.color}20`, color: l.color }}>
-            {l.label}
-          </span>
-        ))}
+        {filterButtons.map(({ type, label, count, color }) => {
+          const active = visibleTypes.has(type)
+          return (
+            <button
+              key={type}
+              onClick={() => toggleType(type)}
+              className="text-xs font-mono px-2 py-1 rounded transition-all"
+              style={{
+                background: active ? `${color}18` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${active ? `${color}40` : 'rgba(255,255,255,0.08)'}`,
+                color: active ? color : '#475569',
+              }}
+            >
+              {label} ({count})
+            </button>
+          )
+        })}
       </div>
 
       {isLoading && <div className="text-center py-8 text-slate-600 font-mono text-sm">Scanne...</div>}
@@ -159,7 +185,7 @@ export default function ScanPage() {
 
       {!isLoading && allEntries.length > 0 && (
         <div className="space-y-2">
-          {allEntries.map(entry => {
+          {filteredEntries.map(entry => {
             const d = entry.data ?? {}
             if (entry.obj_type === 'planet') return (
               <ScanEntry key={entry.obj_id} icon={Globe} iconColor="#38bdf8"
@@ -207,6 +233,11 @@ export default function ScanPage() {
             )
             return null
           })}
+          {filteredEntries.length === 0 && (
+            <div className="text-center py-6 text-slate-600 font-mono text-sm">
+              Alle Filter ausgeblendet
+            </div>
+          )}
         </div>
       )}
     </div>
