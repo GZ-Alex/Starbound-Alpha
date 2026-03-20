@@ -117,14 +117,36 @@ function RoundLog({ rounds }) {
 
 // ─── Kampfbericht Karte ───────────────────────────────────────────────────────
 
-function BattleCard({ report, isOpen, onToggle }) {
+function BattleCard({ report, isOpen, onToggle, playerName }) {
   const winCfg = WINNER_CONFIG[report.winner] ?? WINNER_CONFIG.draw
   const WinIcon = winCfg.icon
-  const npcType = report.defender_fleet?.npc_type ?? 'unbekannt'
-  const npcLabel = NPC_LABELS[npcType] ?? npcType
   const res = report.result ?? {}
   const loot = report.loot ?? {}
   const hasLoot = Object.keys(loot).length > 0
+
+  // Angreifer-Namen: eigener Spieler + eventuelle Verbündete
+  const attackerNames = (() => {
+    const ships = report.attacker_fleet?.ships ?? []
+    if (ships.length > 0 && ships[0]?.name) {
+      return playerName ?? 'Du'
+    }
+    return playerName ?? 'Du'
+  })()
+
+  // Verteidiger-Namen: NPC-Flottenname oder Spielername
+  const defenderNames = (() => {
+    const npcType = report.defender_fleet?.npc_type
+    if (npcType) return NPC_LABELS[npcType] ?? npcType
+    const defName = report.defender_fleet?.player_name ?? report.defender_fleet?.name
+    if (defName) return defName
+    // Schiffsnamen aus der Flotte
+    const ships = report.defender_fleet?.ships ?? []
+    if (ships.length > 0) {
+      const names = [...new Set(ships.map(s => s.name?.split(' ')[0]).filter(Boolean))]
+      return names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '')
+    }
+    return 'Unbekannt'
+  })()
 
   return (
     <div className="panel overflow-hidden">
@@ -142,8 +164,12 @@ function BattleCard({ report, isOpen, onToggle }) {
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-mono font-semibold text-slate-200">
-              vs. {npcLabel}
+            <span className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>
+              {attackerNames}
+            </span>
+            <span className="text-xs font-mono text-slate-600">vs.</span>
+            <span className="text-sm font-mono font-semibold text-slate-300">
+              {defenderNames}
             </span>
             <span className="text-xs font-mono px-2 py-0.5 rounded"
               style={{ background: `${winCfg.color}15`, color: winCfg.color }}>
@@ -341,6 +367,7 @@ export default function BattleReportsPage() {
               report={report}
               isOpen={openId === report.id}
               onToggle={() => setOpenId(openId === report.id ? null : report.id)}
+              playerName={player?.username}
             />
           ))}
         </div>
