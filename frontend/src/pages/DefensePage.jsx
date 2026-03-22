@@ -394,7 +394,7 @@ export default function DefensePage() {
   const { data: playerTechs = [] } = useQuery({
     queryKey: ['player-techs', player?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('player_techs')
+      const { data } = await supabase.from('player_technologies')
         .select('tech_id').eq('player_id', player.id)
       return data?.map(t => t.tech_id) ?? []
     },
