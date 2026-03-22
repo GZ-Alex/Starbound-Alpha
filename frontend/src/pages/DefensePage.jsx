@@ -165,7 +165,7 @@ function TowerCard({ def, planet, defenseLevel, onBuild, hasTech, inQueue }) {
       <div className="px-4 pb-2 flex items-center gap-3 flex-shrink-0">
         <div className="flex items-center gap-1 text-xs font-mono text-slate-600">
           <Clock size={10} />
-          {formatTime(def.build_seconds)}
+          {def.build_ticks} Ticks
         </div>
         <div className="flex items-center gap-1 text-xs font-mono text-slate-600">
           <Crosshair size={10} style={{ color }} />
@@ -370,7 +370,7 @@ export default function DefensePage() {
   const { data: installed = [] } = useQuery({
     queryKey: ['planet-defense', planet?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('planet_defense')
+      const { data } = await supabase.from('planet_defense_towers')
         .select('*').eq('planet_id', planet.id)
       return data ?? []
     },
@@ -429,8 +429,8 @@ export default function DefensePage() {
       }
       await supabase.from('planets').update(updates).eq('id', planet.id)
 
-      // Build-Queue Eintrag
-      const buildTicks = Math.ceil((def.build_seconds * qty) / 30)
+      // Build-Queue Eintrag (build_ticks = Ticks pro Stück × Anzahl)
+      const buildTicks = def.build_ticks * qty
       await supabase.from('defense_build_queue').insert({
         planet_id: planet.id,
         tower_id: def.id,
