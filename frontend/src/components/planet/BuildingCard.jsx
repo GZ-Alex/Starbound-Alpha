@@ -21,13 +21,13 @@ const BUILDING_IMAGES = {
 
 // Which route to open when clicking the building image
 const BUILDING_ROUTES = {
-  hq:           '/planet/mines',
+  hq:           '/mines',
   power_plant:  null,
   shipyard:     '/shipyard',
-  ship_dock:    null,
+  ship_dock:    '/dock',
   research_lab: '/research',
   university:   null,
-  bunker:       '/planet/bunker',
+  bunker:       '/bunker',
   defense_base: null,
   gov_center:   '/government',
   comm_network: '/scan',
