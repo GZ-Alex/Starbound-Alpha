@@ -29,7 +29,7 @@ const BUILDING_ROUTES = {
   university:   null,
   bunker:       '/planet/bunker',
   defense_base: null,
-  gov_center:   null,
+  gov_center:   '/government',
   comm_network: '/scan',
 }
 
@@ -48,7 +48,7 @@ const BUILDING_EFFECTS = {
   university:   (lvl) => `${lvl * 2} Forscher-Kapazität`,
   bunker:       (lvl) => `${(500 + lvl * 400).toLocaleString()} Schutz`,
   defense_base: (lvl) => `${lvl * 500} Turmkapazität`,
-  gov_center:   (lvl) => `+${lvl * 5} Credits/h`,
+  gov_center:   (lvl) => `+${(lvl * 1000).toLocaleString('de-DE')} Credits/h`,
   comm_network: (lvl) => `${10 + Math.floor(lvl / 2)}pc Radar`,
 }
 
