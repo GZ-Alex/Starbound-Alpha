@@ -300,10 +300,59 @@ function SidebarResources({ planet: initialPlanet }) {
     return () => clearTimeout(timer)
   }, [initialPlanet?.id])
 
+  const bunkerLevel = buildings.find(b => b.building_id === 'bunker')?.level ?? 0
+  const bunkerCapacity = bunkerLevel * 15000
+
+  // Bunker-Einstellungen für Füllstand laden
+  const { data: bunkerSettings } = useQuery({
+    queryKey: ['bunker-settings-sidebar', initialPlanet?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('bunker_settings')
+        .select('*').eq('planet_id', initialPlanet.id).maybeSingle()
+      return data
+    },
+    enabled: !!initialPlanet?.id && bunkerLevel > 0,
+    staleTime: 30000,
+  })
+
+  const bunkerUsed = bunkerSettings
+    ? ['titan','silizium','helium','nahrung','wasser','bauxit','aluminium','uran','plutonium','wasserstoff']
+        .reduce((sum, k) => sum + (bunkerSettings[`protect_${k}`] ?? 0), 0)
+    : 0
+  const bunkerFill = bunkerCapacity > 0 ? Math.min(100, (bunkerUsed / bunkerCapacity) * 100) : 0
+
   if (!planet) return null
 
   return (
     <div className="px-2 py-3 border-t border-cyan-500/10">
+      {/* Bunker-Füllstand */}
+      {bunkerLevel > 0 && (
+        <div className="px-1 mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-slate-600 uppercase tracking-widest font-mono flex items-center gap-1.5">
+              🛡️ Bunker
+            </span>
+            <span className="text-xs font-mono tabular-nums"
+              style={{ color: bunkerFill > 90 ? '#f87171' : bunkerFill > 70 ? '#fbbf24' : '#818cf8' }}>
+              {bunkerFill.toFixed(0)}%
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${bunkerFill}%`,
+                background: bunkerFill > 90
+                  ? 'linear-gradient(90deg,#f87171,#ef4444)'
+                  : bunkerFill > 70
+                    ? 'linear-gradient(90deg,#fbbf24,#f59e0b)'
+                    : 'linear-gradient(90deg,#818cf8,#6366f1)',
+              }}
+            />
+          </div>
+        </div>
+      )}
       <p className="text-xs text-slate-600 uppercase tracking-widest font-mono px-1 mb-2">Ressourcen</p>
       <div className="space-y-0.5">
         {RESOURCES.map(({ key, label, icon, color, isImg }) => {
