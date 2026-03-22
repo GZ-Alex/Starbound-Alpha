@@ -872,7 +872,7 @@ export default function GovernmentPage() {
   const [tab, setTab] = useState('gesetze')
 
   // Get government building level
-  const govLevel = buildings?.find(b => b.building_id === 'government')?.level ?? 0
+  const govLevel = buildings?.find(b => b.building_id === 'gov_center')?.level ?? 0
   const creditsPerHour = govLevel * 1000
 
   if (govLevel === 0) {
