@@ -19,6 +19,7 @@ import DockPage from '@/pages/DockPage.jsx'
 import AlliancePage from '@/pages/AlliancePage'
 import AllianceHQPage from '@/pages/AllianceHQPage'
 import GovernmentPage from '@/pages/GovernmentPage'
+import BunkerPage from '@/pages/BunkerPage'
 import AdminPage from '@/pages/AdminPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 
@@ -61,7 +62,7 @@ export default function App() {
             <Route path="/shipyard"  element={<ShipyardPage />} />
             <Route path="/research"  element={<ResearchPage />} />
             <Route path="/dock"      element={<DockPage />} />
-            <Route path="/bunker"    element={<PlaceholderPage title="Bunker" />} />
+            <Route path="/bunker"    element={<BunkerPage />} />
             <Route path="/defense"   element={<PlaceholderPage title="Planetenverteidigung" />} />
             <Route path="/comms"     element={<PlaceholderPage title="Kommunikationsnetzwerk" />} />
             <Route path="/government" element={<GovernmentPage />} />
