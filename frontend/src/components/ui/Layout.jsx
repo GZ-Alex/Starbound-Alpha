@@ -10,7 +10,7 @@ import NotificationStack from '@/components/ui/NotificationStack'
 import {
   Building2, Hammer, Rocket, FlaskConical, Anchor,
   Shield, Crosshair, Radio, Navigation, Radar,
-  LogOut, Settings, Clock, Ship, Scale
+  LogOut, Settings, Clock, Ship
 } from 'lucide-react'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -24,7 +24,6 @@ const NAV_ITEMS = [
   { to: '/bunker',    icon: Shield,      label: 'Bunker'           },
   { to: '/defense',   icon: Crosshair,   label: 'Verteidigung'     },
   { to: '/comms',     icon: Radio,       label: 'Komm'             },
-  { to: '/government', icon: Scale,      label: 'Regierungssitz'   },
   { to: '/ships',     icon: Ship,        label: 'Schiffe'          },
   { to: '/fleet',     icon: Navigation,  label: 'Flotten'          },
   { to: '/scan',      icon: Radar,       label: 'Scan'             },
@@ -256,6 +255,9 @@ function SidebarResources({ planet: initialPlanet }) {
   const [planet, setPlanet] = useState(initialPlanet)
   const { buildings, mineProductionBonus } = useGameStore()
 
+  const govLevel = buildings.find(b => b.building_id === 'gov_center')?.level ?? 0
+  const liveCreditsPerHour = govLevel * 1000
+
   const { data: buildingDefsEnergy = [] } = useQuery({
     queryKey: ['building-defs-energy-only'],
     queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,energy_per_level'); return data ?? [] },
@@ -309,12 +311,14 @@ function SidebarResources({ planet: initialPlanet }) {
           // Produktion live berechnen: minen * 50 * bonus
           const mines = planet?.mine_distribution?.[key] ?? 0
           const isMineable = !['energie','credits'].includes(key)
+          const isCredits = key === 'credits'
           const prod = isMineable
             ? Math.round(mines * 50 * (mineProductionBonus ?? 1.0))
-            : (planet[`prod_${key}`] ?? 0)
+            : isCredits
+              ? liveCreditsPerHour
+              : (planet[`prod_${key}`] ?? 0)
           const prodStr = fmtProd(prod)
           const isEnergie = key === 'energie'
-          const isCredits = key === 'credits'
 
           // Energie: saldo = produktion - verbrauch
           const energieFrei = energieProduktion - energieVerbrauch
