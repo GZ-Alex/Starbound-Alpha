@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Users, Crown, Shield, User, Search, Plus, X, Send,
+  Users, Crown, Shield, User, Search, Plus, X, Send, Scale,
   ChevronLeft, ChevronRight, Swords, Heart, Flag,
   Upload, CreditCard, FileText, Building2, LogOut, Check, AlertTriangle
 } from 'lucide-react'
@@ -32,9 +32,10 @@ function timeAgo(dateStr) {
 }
 
 const RANK_CONFIG = {
-  founder: { label: 'Gründer', icon: Crown,  color: '#f59e0b' },
-  admin:   { label: 'Admin',   icon: Shield, color: '#38bdf8' },
-  member:  { label: 'Mitglied', icon: User,  color: '#64748b' },
+  founder:   { label: 'Gründer',   icon: Crown,  color: '#f59e0b' },
+  admin:     { label: 'Admin',     icon: Shield, color: '#38bdf8' },
+  konziliar: { label: 'Konziliar', icon: Scale,  color: '#a78bfa' },
+  member:    { label: 'Mitglied',  icon: User,   color: '#64748b' },
 }
 
 const RELATION_CONFIG = {
