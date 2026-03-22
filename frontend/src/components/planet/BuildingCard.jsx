@@ -28,7 +28,7 @@ const BUILDING_ROUTES = {
   research_lab: '/research',
   university:   null,
   bunker:       '/bunker',
-  defense_base: null,
+  defense_base: '/defense',
   gov_center:   '/government',
   comm_network: '/scan',
 }
