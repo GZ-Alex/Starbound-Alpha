@@ -104,14 +104,14 @@ function canAfford(planet, costs) {
 
 // ─── TowerCard ────────────────────────────────────────────────────────────────
 
-function TowerCard({ def, planet, defenseLevel, onBuild, hasTech, inQueue }) {
+function TowerCard({ def, planet, defenseLevel, onBuild, hasTech, inQueue, playerProfession }) {
   const [qty, setQty] = useState(1)
   const capacity = defenseLevel * CAPACITY_PER_LEVEL
   const costs = calcCost(def, qty)
   const affordable = canAfford(planet, costs)
   const color = CLASS_COLORS[def.tower_class] ?? '#64748b'
   const profileColor = PROFILE_COLORS[def.profile] ?? '#64748b'
-  const locked = !hasTech && def.required_tech
+  const locked = (!hasTech && def.required_tech) || (def.required_profession && def.required_profession !== playerProfession)
 
   return (
     <motion.div
@@ -134,6 +134,12 @@ function TowerCard({ def, planet, defenseLevel, onBuild, hasTech, inQueue }) {
           </span>
         </div>
         {locked && <Lock size={13} style={{ color: '#475569' }} />}
+          {def.required_profession && def.required_profession !== playerProfession && (
+            <span className="text-xs font-mono px-2 py-0.5 rounded ml-auto"
+              style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
+              Nur Händler
+            </span>
+          )}
       </div>
 
       {/* Name */}
@@ -256,7 +262,11 @@ function TowerCard({ def, planet, defenseLevel, onBuild, hasTech, inQueue }) {
               color: (!locked && affordable && qty * def.capacity_cost <= capacity)
                 ? color : '#334155',
             }}>
-            {locked ? <><Lock size={12} /> Technologie fehlt</>
+            {locked ? (
+              def.required_profession && def.required_profession !== playerProfession
+                ? <><Lock size={12} /> Nur für Händler</>
+                : <><Lock size={12} /> Technologie fehlt</>
+            )
               : !affordable ? '✗ Ressourcen fehlen'
               : qty * def.capacity_cost > capacity ? '✗ Kapazität überschritten'
               : <><Hammer size={13} /> {qty}× bauen</>}
@@ -623,6 +633,7 @@ export default function DefensePage() {
               onBuild={handleBuild}
               hasTech={hasTech(def.required_tech)}
               inQueue={buildQueue.some(q => q.tower_id === def.id)}
+              playerProfession={player?.profession}
             />
           ))}
         </motion.div>
