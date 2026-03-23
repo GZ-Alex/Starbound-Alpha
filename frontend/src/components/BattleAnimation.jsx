@@ -32,6 +32,16 @@ const CLASS_SHAPES = {
 // Sprite-Pfade — lädt aus public/Starbound-Alpha/ships/{chassisId}.png
 // Fallback auf geometrische Form wenn nicht vorhanden
 const spriteCache = {}
+let bgImage = null
+let bgLoaded = false
+
+// Hintergrundbild vorladen
+;(function() {
+  const img = new Image()
+  img.onload  = () => { bgImage = img; bgLoaded = true }
+  img.onerror = () => { bgLoaded = true }  // Fallback auf Farbe
+  img.src = '/Starbound-Alpha/battle_background.png'
+})()
 
 function loadSprite(chassisId) {
   if (spriteCache[chassisId] !== undefined) return spriteCache[chassisId]
@@ -373,6 +383,11 @@ export default function BattleAnimation({ report, onClose }) {
       // ── Canvas leeren ────────────────────────────────────────────────────────
       ctx.fillStyle = '#040d1a'
       ctx.fillRect(0, 0, W, H)
+      if (bgImage) {
+        ctx.globalAlpha = 0.55
+        ctx.drawImage(bgImage, 0, 0, W, H)
+        ctx.globalAlpha = 1.0
+      }
 
       // ── Trennlinie ────────────────────────────────────────────────────────────
       ctx.strokeStyle = 'rgba(34,211,238,0.08)'
