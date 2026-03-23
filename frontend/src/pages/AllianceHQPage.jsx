@@ -234,50 +234,56 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
         </div>
       )}
 
-      {/* Name */}
-      <div className="panel-header flex-shrink-0 flex items-center justify-between">
-        <span className="text-sm font-semibold truncate">{mod.name}</span>
-        {currentLevel > 0 && (
-          <span className="text-xs font-mono text-slate-500 flex-shrink-0 ml-2">Level {currentLevel}</span>
-        )}
+      {/* Name + Level — feste Höhe */}
+      <div className="panel-header flex-shrink-0 flex items-center justify-between" style={{ minHeight: 44 }}>
+        <span className="text-sm font-semibold">{mod.name}</span>
+        <span className="text-xs font-mono text-slate-500 flex-shrink-0 ml-2">
+          {currentLevel > 0 ? `Level ${currentLevel}` : ''}
+        </span>
       </div>
 
-      <div className="p-3 flex flex-col flex-1 gap-2">
-        {/* Flavor */}
-        <p className="text-xs font-mono text-slate-600 italic leading-relaxed">„{mod.flavor}"</p>
+      <div className="p-3 flex flex-col flex-1">
+        {/* Flavor — feste Mindesthöhe */}
+        <div style={{ minHeight: 38 }}>
+          <p className="text-xs font-mono text-slate-600 italic leading-relaxed">„{mod.flavor}"</p>
+        </div>
 
-        {/* Aktueller Bonus */}
-        {currentLevel > 0 && currentBonus && (
-          <div className="px-2 py-2 rounded space-y-1"
-            style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.12)' }}>
-            <p className="text-slate-600 uppercase tracking-widest" style={{ fontSize: 9 }}>Aktiver Bonus</p>
-            <p className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>{currentBonus}</p>
-            {currentBonus2 && (
-              <p className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>{currentBonus2}</p>
-            )}
-          </div>
-        )}
+        {/* Aktiver Bonus — feste Mindesthöhe */}
+        <div style={{ minHeight: 68 }} className="mt-2">
+          {currentLevel > 0 && currentBonus && (
+            <div className="px-2 py-2 rounded space-y-1"
+              style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.12)' }}>
+              <p className="text-slate-600 uppercase tracking-widest" style={{ fontSize: 9 }}>Aktiver Bonus</p>
+              <p className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>{currentBonus}</p>
+              {currentBonus2 && (
+                <p className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>{currentBonus2}</p>
+              )}
+            </div>
+          )}
+        </div>
 
-        {/* Nächstes Level Bonus */}
-        {nextBonus && (
-          <div className="space-y-0.5">
-            <p className="text-xs font-mono text-slate-600">→ Lvl {nextLevel}</p>
-            <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{nextBonus}</p>
-            {nextBonus2 && (
-              <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{nextBonus2}</p>
-            )}
-          </div>
-        )}
+        {/* Nächstes Level — feste Mindesthöhe */}
+        <div style={{ minHeight: 56 }} className="mt-2">
+          {nextBonus && (
+            <div className="space-y-0.5">
+              <p className="text-xs font-mono text-slate-600">→ Lvl {nextLevel}</p>
+              <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{nextBonus}</p>
+              {nextBonus2 && (
+                <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{nextBonus2}</p>
+              )}
+            </div>
+          )}
+        </div>
 
-        {/* Bauzeit */}
-        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500">
+        {/* Bauzeit — feste Höhe */}
+        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 mt-2" style={{ height: 22 }}>
           <Clock size={11} />{fmtTime(buildMinutes)}
         </div>
 
-        {/* Kosten */}
-        <div className="rounded overflow-hidden text-xs" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* Kosten — feste Spaltenbreiten mit tabular-nums */}
+        <div className="rounded overflow-hidden text-xs mt-2" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="grid font-mono px-2 py-1 text-slate-600"
-            style={{ gridTemplateColumns: '1fr 52px 64px', background: 'rgba(0,0,0,0.3)' }}>
+            style={{ gridTemplateColumns: '88px 52px 60px', background: 'rgba(0,0,0,0.3)' }}>
             <span>Ressource</span>
             <span className="text-right">Kost.</span>
             <span className="text-right">HQ</span>
@@ -291,10 +297,10 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
             const ok = available >= amt
             return (
               <div key={k} className="grid font-mono px-2 py-0.5"
-                style={{ gridTemplateColumns: '1fr 52px 64px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                style={{ gridTemplateColumns: '88px 52px 60px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
                 <span className="text-slate-400">{COST_LABELS[k]}</span>
-                <span className="text-right text-slate-300">{fmt(amt)}</span>
-                <span className={`text-right font-bold ${ok ? 'text-slate-500' : 'text-red-400'}`}>
+                <span className="text-right text-slate-300 tabular-nums">{fmt(amt)}</span>
+                <span className={`text-right font-bold tabular-nums ${ok ? 'text-slate-500' : 'text-red-400'}`}>
                   {ok ? fmt(available - amt) : `−${fmt(amt - available)}`}
                 </span>
               </div>
