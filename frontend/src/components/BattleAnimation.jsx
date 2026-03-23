@@ -135,7 +135,112 @@ function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chass
   }
 }
 
-// ─── Simulation-State aufbauen ────────────────────────────────────────────────
+
+// ─── Canvas-Zeichenfunktionen ─────────────────────────────────────────────────
+
+function drawBeam(ctx, x1, y1, x2, y2, color, glow, progress) {
+  const alpha = progress < 0.3 ? progress / 0.3 : progress > 0.7 ? (1 - progress) / 0.3 : 1.0
+  ctx.globalAlpha = alpha * 0.9
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 8
+  ctx.strokeStyle = glow
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  ctx.shadowBlur = 0
+  ctx.globalAlpha = 1.0
+}
+
+function drawProjectile(ctx, x1, y1, x2, y2, color, glow, progress, size = 4) {
+  const px = x1 + (x2 - x1) * progress
+  const py = y1 + (y2 - y1) * progress
+  const trailLen = 0.15
+  const tx = x1 + (x2 - x1) * Math.max(0, progress - trailLen)
+  const ty = y1 + (y2 - y1) * Math.max(0, progress - trailLen)
+  ctx.globalAlpha = 0.5
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 6
+  const grad = ctx.createLinearGradient(tx, ty, px, py)
+  grad.addColorStop(0, 'transparent')
+  grad.addColorStop(1, color)
+  ctx.strokeStyle = grad
+  ctx.lineWidth = size * 0.6
+  ctx.beginPath()
+  ctx.moveTo(tx, ty)
+  ctx.lineTo(px, py)
+  ctx.stroke()
+  ctx.globalAlpha = 1.0
+  ctx.fillStyle = '#ffffff'
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 10
+  ctx.beginPath()
+  ctx.arc(px, py, size * 0.5, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.shadowBlur = 0
+}
+
+function drawMissile(ctx, x1, y1, x2, y2, color, glow, progress) {
+  const px = x1 + (x2 - x1) * progress
+  const py = y1 + (y2 - y1) * progress
+  const wobble = Math.sin(progress * Math.PI * 3) * 8 * (1 - progress)
+  const mx = px + wobble
+  ctx.globalAlpha = 0.3
+  ctx.fillStyle = '#94a3b8'
+  for (let i = 0; i < 3; i++) {
+    const tp = Math.max(0, progress - i * 0.04)
+    const tx2 = x1 + (x2 - x1) * tp + Math.sin(tp * Math.PI * 3) * 8 * (1 - tp)
+    const ty2 = y1 + (y2 - y1) * tp
+    ctx.beginPath()
+    ctx.arc(tx2, ty2, 2 - i * 0.5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1.0
+  ctx.fillStyle = color
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 8
+  ctx.beginPath()
+  ctx.arc(mx, py, 3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#fbbf24'
+  ctx.beginPath()
+  ctx.arc(mx, py + 5, 2, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.shadowBlur = 0
+  ctx.globalAlpha = 1.0
+}
+
+function drawExplosion(ctx, x, y, progress) {
+  const r = progress * 30
+  const alpha = 1 - progress
+  ctx.globalAlpha = alpha
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+  grad.addColorStop(0, '#ffffff')
+  grad.addColorStop(0.3, '#fbbf24')
+  grad.addColorStop(0.7, '#ef4444')
+  grad.addColorStop(1, 'transparent')
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI * 2 / 6) * i + progress * 2
+    const sr = r * 1.2
+    ctx.fillStyle = '#fbbf24'
+    ctx.globalAlpha = alpha * 0.8
+    ctx.beginPath()
+    ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr, 2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1.0
+}
 
 // ─── Simulation-State aufbauen ────────────────────────────────────────────────
 
@@ -245,7 +350,7 @@ export default function BattleAnimation({ report, onClose }) {
     const ACTION_INTERVAL = 180
     const ROUND_PAUSE = 800
 
-    stateRef.current = { pHp, nHp, pDead, nDead, explosions, activeProjectiles, aimAngles, roundIdx, roundStartTime, actionIdx, lastTime }
+    stateRef.current = { pHp, nHp, pDead, nDead, explosions, activeProjectiles, aimAngles, roundIdx, roundStartTime, actionIdx, lastTime, isDone: false }
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -394,8 +499,9 @@ export default function BattleAnimation({ report, onClose }) {
             setCurrentRound(st.roundIdx)
           }
         }
-      } else if (st.activeProjectiles.length === 0 && st.explosions.length === 0) {
-        // Alle Runden fertig
+      } else if (st.activeProjectiles.length === 0 && st.explosions.length === 0 && !st.isDone) {
+        // Alle Runden fertig — nur einmal setDone aufrufen
+        st.isDone = true
         setDone(true)
       }
 
