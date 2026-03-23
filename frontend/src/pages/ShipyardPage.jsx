@@ -844,7 +844,7 @@ export default function ShipyardPage() {
 
   const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
   const CLASS_ORDER = ['Z', 'A', 'B', 'C', 'D', 'E']
-  const CHASSIS_SORT: Record<string, number> = {
+  const CHASSIS_SORT = {
     // Klasse Z — explizite Reihenfolge
     probe_s: 1, probe_m: 2, probe_l: 3,
     freighter_s: 4, freighter_m: 5,
