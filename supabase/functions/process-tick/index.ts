@@ -712,9 +712,37 @@ function buildNpcFleet(npcType: string, chassisDefs: any[]): NpcShip[] {
   return ships
 }
 
-// Waffenklasse → bevorzugte Ziel-Chassisklasse (laut WEAPONS_SYSTEM.md)
-const WEAPON_TARGET_CLASS: Record<string, string> = {
-  A: 'A', B: 'B', C: 'C', D: 'D', E: 'E',
+// Ziel-Prioritätskette je Angreifer-Klasse (Z immer letzter Fallback)
+const TARGET_PRIORITY: Record<string, string[][]> = {
+  A: [['A'], ['E','B'], ['C','D']],
+  B: [['B'], ['A','C'], ['D','E']],
+  C: [['C'], ['B','D'], ['A','E']],
+  D: [['D'], ['C','E'], ['B','A']],
+  E: [['E'], ['D','A'], ['B','C']],
+}
+
+// Wählt das beste Ziel basierend auf Prioritätskette + Bedrohung (avg attack)
+function pickTarget(attackerClass: string, candidates: NpcShip[] | CombatShip[]): any {
+  const priority = TARGET_PRIORITY[attackerClass] ?? [['B'],['C','A'],['D','E']]
+  const alive = (candidates as any[]).filter(s => s.hp > 0)
+  if (!alive.length) return null
+
+  for (const group of priority) {
+    const pool = alive.filter(s => group.includes(s.chassisClass))
+    if (!pool.length) continue
+    if (pool.length === 1) return pool[0]
+    // Bedrohung: höchster attack-Wert zuerst
+    // Bei NpcShip: attack direkt; bei CombatShip: total_attack aus ship_designs
+    pool.sort((a: any, b: any) => (b.attack ?? b.total_attack ?? 0) - (a.attack ?? a.total_attack ?? 0))
+    // Leichte Zufallskomponente: Top 2 gleichwertige Ziele tauschen gelegentlich
+    if (pool.length >= 2 && Math.abs((pool[0].attack ?? 0) - (pool[1].attack ?? 0)) < 20 && rand() < 0.3) {
+      return pool[1]
+    }
+    return pool[0]
+  }
+
+  // Letzter Fallback: Z oder was auch immer noch lebt
+  return alive[Math.floor(rand() * alive.length)]
 }
 
 // Waffenart → weaponType string (aus Part-ID erkannt)
@@ -770,7 +798,7 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
         weaponType: weaponTypeFromId(partId),
         weaponClass: wClass,
         attack: (part.attack_bonus ?? 0) + baseAtk,
-        targetClass: WEAPON_TARGET_CLASS[wClass] ?? cls,
+        targetClass: wClass,
         isPrimary: true,
       })
     } else if (part.category === 'turret') {
@@ -779,7 +807,7 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
         weaponType: weaponTypeFromId(partId),
         weaponClass: wClass,
         attack: (part.attack_bonus ?? 0) + Math.floor(baseAtk / 2),
-        targetClass: WEAPON_TARGET_CLASS[wClass] ?? cls,
+        targetClass: wClass,
         isPrimary: false,
       })
     }
@@ -836,12 +864,12 @@ function simulateOneRound(
       if (!attacker || attacker.hp <= 0 || attacker.weapons.length === 0) continue
       if (!nShips.filter(s => s.hp > 0).length) break
 
-      // Jede Waffe schießt separat auf ihr bevorzugtes Ziel
+      // Jede Waffe schießt separat — Ziel nach Prioritätskette + Bedrohung
       for (const weapon of attacker.weapons) {
         const alive = nShips.filter(s => s.hp > 0)
         if (!alive.length) break
-        const pref = alive.filter(s => s.chassisClass === weapon.targetClass)
-        const target = pref.length ? pref[Math.floor(rand() * pref.length)] : alive[Math.floor(rand() * alive.length)]
+        const target = pickTarget(attacker.chassisClass, alive)
+        if (!target) break
         const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
         const damage = hit ? calcDamage(weapon.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
@@ -861,8 +889,8 @@ function simulateOneRound(
       for (let shot = 0; shot < attacker.shots; shot++) {
         const stillAlive = pShips.filter(s => s.hp > 0)
         if (!stillAlive.length) break
-        const pref = stillAlive.filter(s => s.chassisClass === attacker.targetClass)
-        const target = pref.length ? pref[Math.floor(rand() * pref.length)] : stillAlive[Math.floor(rand() * stillAlive.length)]
+        const target = pickTarget(attacker.chassisClass, stillAlive)
+        if (!target) break
         const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
         const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
