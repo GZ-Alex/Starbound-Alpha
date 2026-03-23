@@ -178,7 +178,7 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
 
       {/* Bild */}
       {image && (
-        <div className="relative overflow-hidden flex-shrink-0" style={{ height: 200 }}>
+        <div className="relative overflow-hidden flex-shrink-0" style={{ height: 300 }}>
           <img src={image} alt={mod.name} className="w-full h-full object-cover"
             style={{ filter: currentLevel === 0 ? 'grayscale(60%) brightness(0.55)' : 'brightness(0.85)' }} />
           <div className="absolute inset-0"
@@ -208,8 +208,11 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
       )}
 
       {/* Name */}
-      <div className="panel-header flex-shrink-0">
+      <div className="panel-header flex-shrink-0 flex items-center justify-between">
         <span className="text-sm font-semibold truncate">{mod.name}</span>
+        {currentLevel > 0 && (
+          <span className="text-xs font-mono text-slate-500 flex-shrink-0 ml-2">Level {currentLevel}</span>
+        )}
       </div>
 
       <div className="p-3 flex flex-col flex-1 gap-2">
@@ -218,19 +221,25 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
 
         {/* Aktueller Bonus */}
         {currentLevel > 0 && currentBonus && (
-          <div className="px-2 py-1.5 rounded text-xs font-mono space-y-0.5"
+          <div className="px-2 py-2 rounded space-y-1"
             style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.12)' }}>
-            <p className="text-slate-600 uppercase tracking-widest" style={{ fontSize: 9 }}>Aktiv</p>
-            <p style={{ color: '#22d3ee' }}>{currentBonus}</p>
-            {currentBonus2 && <p style={{ color: '#22d3ee' }}>{currentBonus2}</p>}
+            <p className="text-slate-600 uppercase tracking-widest" style={{ fontSize: 9 }}>Aktiver Bonus</p>
+            <p className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>{currentBonus}</p>
+            {currentBonus2 && (
+              <p className="text-sm font-mono font-semibold" style={{ color: '#22d3ee' }}>{currentBonus2}</p>
+            )}
           </div>
         )}
 
         {/* Nächstes Level Bonus */}
         {nextBonus && (
-          <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>
-            → Lvl {nextLevel}: {nextBonus}{nextBonus2 ? ` · ${nextBonus2}` : ''}
-          </p>
+          <div className="space-y-0.5">
+            <p className="text-xs font-mono text-slate-600">→ Lvl {nextLevel}</p>
+            <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{nextBonus}</p>
+            {nextBonus2 && (
+              <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{nextBonus2}</p>
+            )}
+          </div>
         )}
 
         {/* Bauzeit */}
