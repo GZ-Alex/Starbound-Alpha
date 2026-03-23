@@ -16,7 +16,7 @@ const COST_KEYS = ['titan','silizium','helium','aluminium','uran','plutonium','w
 const COST_LABELS = {
   titan: 'Titan', silizium: 'Silizium', helium: 'Helium',
   aluminium: 'Aluminium', uran: 'Uran', plutonium: 'Plutonium',
-  wasserstoff: 'Wasserstoff', credits: 'Credits'
+  wasserstoff: 'H₂', credits: 'Credits'
 }
 const RESOURCES = ['titan','silizium','helium','nahrung','wasser','bauxit','aluminium','uran','plutonium','wasserstoff']
 
@@ -165,7 +165,7 @@ const BONUS_LABELS = {
 }
 
 function formatBonus(key, valuePerLevel, level) {
-  if (!key) return null
+  if (!key || !valuePerLevel || level <= 0) return null
   const label = BONUS_LABELS[key] ?? key
   if (key === 'member_limit_bonus') return `+${valuePerLevel * level} ${label}`
   const pct = (valuePerLevel * level * 100).toFixed(1)
@@ -283,7 +283,7 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
         {/* Kosten — feste Spaltenbreiten mit tabular-nums */}
         <div className="rounded overflow-hidden text-xs mt-2" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="grid font-mono px-2 py-1 text-slate-600"
-            style={{ gridTemplateColumns: '88px 52px 60px', background: 'rgba(0,0,0,0.3)' }}>
+            style={{ gridTemplateColumns: '96px 56px 64px', background: 'rgba(0,0,0,0.3)' }}>
             <span>Ressource</span>
             <span className="text-right">Kost.</span>
             <span className="text-right">HQ</span>
@@ -297,7 +297,7 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
             const ok = available >= amt
             return (
               <div key={k} className="grid font-mono px-2 py-0.5"
-                style={{ gridTemplateColumns: '88px 52px 60px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                style={{ gridTemplateColumns: '96px 56px 64px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
                 <span className="text-slate-400">{COST_LABELS[k]}</span>
                 <span className="text-right text-slate-300 tabular-nums">{fmt(amt)}</span>
                 <span className={`text-right font-bold tabular-nums ${ok ? 'text-slate-500' : 'text-red-400'}`}>
@@ -858,7 +858,7 @@ export default function AllianceHQPage() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.15 }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
                 {moduleDefs.map((mod) => (
                   <ModuleCard
                     key={mod.id}
