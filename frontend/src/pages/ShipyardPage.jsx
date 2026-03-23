@@ -350,6 +350,17 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
 
       const buildMinutes = Math.max(2, Math.floor((chassis.shipyard_space ?? 100) / 50))
 
+      // Letztes finish_at aus bestehender Queue als Ausgangspunkt
+      const { data: existingQueue } = await supabase.from('ship_build_queue')
+        .select('finish_at')
+        .eq('planet_id', planet.id)
+        .order('finish_at', { ascending: false })
+        .limit(1)
+      const lastFinish = existingQueue?.[0]?.finish_at
+        ? new Date(existingQueue[0].finish_at).getTime()
+        : Date.now()
+      const queueBase = Math.max(lastFinish, Date.now())
+
       // Für jedes Schiff einzeln ein Design + Queue-Eintrag erstellen
       for (let i = 0; i < qty; i++) {
         const shipNameFinal = qty > 1
@@ -382,8 +393,8 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
 
         if (designErr) throw designErr
 
-        // Jedes Schiff sequenziell in die Queue — finish_at gestaffelt
-        const finishAt = new Date(Date.now() + buildMinutes * 60000 * (i + 1)).toISOString()
+        // Jedes Schiff hängt sich ans Ende der Queue
+        const finishAt = new Date(queueBase + buildMinutes * 60000 * (i + 1)).toISOString()
         const { error: queueErr } = await supabase.from('ship_build_queue').insert({
           planet_id:         planet.id,
           design_id:         design.id,
@@ -396,7 +407,7 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
 
       addNotification(`🚀 ${qty}× ${name} in Bau (${buildMinutes} Min.)`, 'success')
       onBuilt?.()
-      onClose()
+      // Fenster bleibt offen — Spieler kann weitere Schiffe konfigurieren
     } catch (err) {
       addNotification('Fehler: ' + err.message, 'error')
     } finally {
@@ -760,6 +771,10 @@ function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
             </div>
           ))}
         </div>
+        <div className="flex items-center justify-between text-xs font-mono px-0.5">
+          <span className="text-slate-600">Werftplatz</span>
+          <span style={{ color }}>{chassis.shipyard_space ?? '—'}</span>
+        </div>
         {wrongProf && (
           <p className="text-xs text-red-400/60 font-mono">
             Nur für {PROFESSION_LABELS[chassis.required_profession]}
@@ -829,8 +844,25 @@ export default function ShipyardPage() {
 
   const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
   const CLASS_ORDER = ['Z', 'A', 'B', 'C', 'D', 'E']
+  const CHASSIS_SORT: Record<string, number> = {
+    // Klasse Z — explizite Reihenfolge
+    probe_s: 1, probe_m: 2, probe_l: 3,
+    freighter_s: 4, freighter_m: 5,
+    trade_station: 6, battle_station: 7,
+  }
   const classes   = ['all', ...CLASS_ORDER.filter(cls => available.some(c => c.class === cls))]
-  const filtered  = available.filter(c => classFilter === 'all' || c.class === classFilter)
+  const filtered  = available
+    .filter(c => classFilter === 'all' || c.class === classFilter)
+    .sort((a, b) => {
+      // Erst nach Klassen-Reihenfolge
+      const clsA = CLASS_ORDER.indexOf(a.class)
+      const clsB = CLASS_ORDER.indexOf(b.class)
+      if (clsA !== clsB) return clsA - clsB
+      // Innerhalb Z: explizite Reihenfolge
+      const sA = CHASSIS_SORT[a.id] ?? 99
+      const sB = CHASSIS_SORT[b.id] ?? 99
+      return sA - sB
+    })
 
   if (shipyardLevel < 1) return (
     <div className="max-w-2xl mx-auto">
