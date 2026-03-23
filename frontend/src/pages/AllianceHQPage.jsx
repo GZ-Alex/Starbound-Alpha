@@ -1,4 +1,4 @@
-// src/pages/AllianceHQPage.jsx — v1.0
+// src/pages/AllianceHQPage.jsx — v1.1
 import { useState, useMemo } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2, Package, Wrench, ChevronDown, ChevronUp,
-  Clock, Shield, AlertTriangle, Send, Plus
+  Clock, Shield, AlertTriangle, Send, Plus, ChevronRight,
+  Hammer, Lock, Zap
 } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,19 +107,56 @@ function StatusBadge({ alliance }) {
   )
 }
 
+// ─── Modul-Bilder & Bonus-Texte ───────────────────────────────────────────────
+
+const MODULE_IMAGES = {
+  herz:             '/Starbound-Alpha/buildings/hq.png',
+  flottenkommando:  '/Starbound-Alpha/buildings/schiffswerft.png',
+  planetenkommando: '/Starbound-Alpha/buildings/verteidigung.png',
+  logistikzentrum:  '/Starbound-Alpha/buildings/werft.png',
+  arbeitergilde:    '/Starbound-Alpha/buildings/universitaet.png',
+  haendlergilde:    '/Starbound-Alpha/buildings/regierung.png',
+  kulturzentrum:    '/Starbound-Alpha/buildings/forschung.png',
+  mechanik:         '/Starbound-Alpha/buildings/bunker.png',
+}
+
+const BONUS_LABELS = {
+  member_limit_bonus:      'Mitgliedslimit',
+  shipyard_capacity_bonus: 'Werftkapazität',
+  ship_stat_bonus:         'Schiffsstats',
+  defense_capacity_bonus:  'Verteidigungskapazität',
+  defense_stat_bonus:      'Verteidigungsstats',
+  bunker_capacity_bonus:   'Bunkerkapazität',
+  ship_cost_bonus:         'Schiffsbaukosten',
+  production_bonus:        'Ressourcenproduktion',
+  build_time_bonus:        'Bauzeit',
+  tax_bonus:               'Credits/h',
+  trade_price_bonus:       'Handelspreise',
+  research_chance_bonus:   'Forschungschance',
+  researcher_cost_bonus:   'Forscherkosten',
+  hq_repair_bonus:         'HQ-Reparaturgeschwindigkeit',
+}
+
+function formatBonus(key, valuePerLevel, level) {
+  if (!key) return null
+  const label = BONUS_LABELS[key] ?? key
+  if (key === 'member_limit_bonus') return `+${valuePerLevel * level} ${label}`
+  const pct = (valuePerLevel * level * 100).toFixed(1)
+  const sign = valuePerLevel >= 0 ? '+' : ''
+  return `${sign}${pct}% ${label}`
+}
+
 // ─── Modul Karte ──────────────────────────────────────────────────────────────
 
 function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, membership, onBuild, busy }) {
-  const [expanded, setExpanded] = useState(false)
   const nextLevel = currentLevel + 1
   const costs = calcModuleCost(mod, currentLevel)
   const buildMinutes = Math.round(mod.build_minutes * Math.pow(1.6, currentLevel))
 
   const inQueue = buildQueue?.some((q) => q.module_id === mod.id)
   const isTransit = alliance.hq_in_transit
-  const canBuild = !inQueue && !isTransit && membership?.rank !== 'member'
+  const canBuild = !inQueue && !isTransit && membership?.rank !== 'member' && membership?.rank !== 'konziliar'
 
-  // Kann man sich das leisten? (aus HQ-Laderaum)
   const canAfford = COST_KEYS.every(k => {
     const needed = costs[k] ?? 0
     if (!needed) return true
@@ -126,118 +164,138 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
     return ((hqCargo?.[k] ?? 0) >= needed)
   })
 
-  const hpPct = alliance.hq_hp / alliance.hq_max_hp
-  const isIllegalToBuild = hpPct < 0.5 && mod.id !== 'mechanik' // nur Mechanik bei starkem Schaden baubar
+  const hpPct = (alliance.hq_hp ?? 0) / (alliance.hq_max_hp ?? 100000)
+  const isIllegalToBuild = hpPct < 0.5 && mod.id !== 'mechanik'
+  const image = MODULE_IMAGES[mod.id]
+  const currentBonus  = formatBonus(mod.bonus_key,   mod.bonus_per_level,   currentLevel)
+  const currentBonus2 = formatBonus(mod.bonus_key_2, mod.bonus_per_level_2, currentLevel)
+  const nextBonus     = formatBonus(mod.bonus_key,   mod.bonus_per_level,   nextLevel)
+  const nextBonus2    = formatBonus(mod.bonus_key_2, mod.bonus_per_level_2, nextLevel)
 
   return (
-    <div className="panel overflow-hidden">
-      <button onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all">
+    <motion.div layout className="panel overflow-hidden flex flex-col"
+      whileHover={{ borderColor: 'rgba(34,211,238,0.3)' }}>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-mono font-semibold text-slate-100">{mod.name}</p>
-            {inQueue && (
-              <span className="text-xs font-mono px-1.5 py-0.5 rounded"
-                style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.2)' }}>
-                Im Bau
-              </span>
-            )}
-          </div>
-          <p className="text-xs font-mono text-slate-600 mt-0.5 italic">"{mod.flavor}"</p>
-        </div>
+      {/* Bild */}
+      {image && (
+        <div className="relative overflow-hidden flex-shrink-0" style={{ height: 200 }}>
+          <img src={image} alt={mod.name} className="w-full h-full object-cover"
+            style={{ filter: currentLevel === 0 ? 'grayscale(60%) brightness(0.55)' : 'brightness(0.85)' }} />
+          <div className="absolute inset-0"
+            style={{ background: 'linear-gradient(to bottom, transparent 45%, rgba(4,13,26,0.97) 100%)' }} />
 
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Level Anzeige */}
-          <div className="text-right">
-            <p className="text-xs font-mono text-slate-600">Level</p>
-            <p className="text-lg font-display font-bold text-cyan-400">{currentLevel}</p>
-          </div>
-          {expanded ? <ChevronUp size={14} style={{ color: '#475569' }} /> : <ChevronDown size={14} style={{ color: '#475569' }} />}
-        </div>
-      </button>
-
-      <AnimatePresence>
-        {expanded && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="px-5 pb-5 space-y-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-
-              {/* Beschreibung */}
-              <p className="text-sm font-mono text-slate-400 pt-4 leading-relaxed">{mod.description}</p>
-
-              {/* Aktueller Bonus */}
-              {currentLevel > 0 && (
-                <div className="px-3 py-2 rounded-lg"
-                  style={{ background: 'rgba(34,211,238,0.04)', border: '1px solid rgba(34,211,238,0.1)' }}>
-                  <p className="text-xs font-mono text-slate-500 mb-1">Aktiver Bonus (Level {currentLevel})</p>
-                  <p className="text-sm font-mono" style={{ color: '#22d3ee' }}>
-                    {mod.bonus_key}: {mod.id === 'herz'
-                      ? `+${currentLevel} Mitgliedslimit`
-                      : `${(mod.bonus_per_level * currentLevel * 100).toFixed(1)}%`}
-                    {mod.bonus_key_2 && ` · ${mod.bonus_key_2}: ${(mod.bonus_per_level_2 * currentLevel * 100).toFixed(1)}%`}
-                  </p>
-                </div>
-              )}
-
-              {/* Nächstes Level */}
-              <div>
-                <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2">
-                  Level {nextLevel} ausbauen
-                </p>
-
-                {/* Kosten */}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {COST_KEYS.map(k => {
-                    const amt = costs[k] ?? 0
-                    if (!amt) return null
-                    const available = k === 'credits'
-                      ? (alliance.credits_treasury ?? 0)
-                      : (hqCargo?.[k] ?? 0)
-                    const hasEnough = available >= amt
-                    return (
-                      <span key={k} className="text-xs font-mono px-2 py-0.5 rounded"
-                        style={{
-                          background: hasEnough ? 'rgba(255,255,255,0.04)' : 'rgba(239,68,68,0.08)',
-                          border: `1px solid ${hasEnough ? 'rgba(255,255,255,0.08)' : 'rgba(239,68,68,0.2)'}`,
-                          color: hasEnough ? '#94a3b8' : '#f87171',
-                        }}>
-                        {fmt(amt)} {COST_LABELS[k]}
-                      </span>
-                    )
-                  })}
-                  <span className="text-xs font-mono px-2 py-0.5 rounded"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: '#64748b' }}>
-                    <Clock size={9} className="inline mr-1" />{fmtTime(buildMinutes)}
-                  </span>
-                </div>
-
-                {/* Build Button */}
-                {isIllegalToBuild ? (
-                  <p className="text-xs font-mono" style={{ color: '#f87171' }}>
-                    HQ unter 50% HP — nur Mechanik-Modul kann gebaut werden.
-                  </p>
-                ) : (
-                  <button onClick={() => onBuild(mod, nextLevel, costs, buildMinutes)}
-                    disabled={!canBuild || !canAfford || busy}
-                    className="flex items-center gap-2 px-4 py-2 rounded text-sm font-mono font-semibold transition-all"
-                    style={{
-                      background: canBuild && canAfford ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${canBuild && canAfford ? 'rgba(34,211,238,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                      color: canBuild && canAfford ? '#22d3ee' : '#334155',
-                    }}>
-                    <Plus size={12} /> Ausbauen
-                    {inQueue && ' (läuft)'}
-                    {isTransit && ' (HQ unterwegs)'}
-                    {!isTransit && !inQueue && membership?.rank === 'member' && ' (keine Berechtigung)'}
-                  </button>
-                )}
-              </div>
+          {/* Level Badge */}
+          {currentLevel > 0 ? (
+            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-sm font-mono font-bold"
+              style={{ background: 'rgba(34,211,238,0.2)', border: '1px solid rgba(34,211,238,0.4)', color: '#22d3ee' }}>
+              Lvl {currentLevel}
             </div>
-          </motion.div>
+          ) : (
+            <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-sm font-mono"
+              style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)', color: '#64748b' }}>
+              Nicht gebaut
+            </div>
+          )}
+
+          {/* Im Bau Badge */}
+          {inQueue && (
+            <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded text-sm font-mono text-amber-400"
+              style={{ background: 'rgba(0,0,0,0.7)' }}>
+              <Hammer size={12} className="animate-pulse" /> Im Bau
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Name */}
+      <div className="panel-header flex-shrink-0">
+        <span className="text-sm font-semibold truncate">{mod.name}</span>
+      </div>
+
+      <div className="p-3 flex flex-col flex-1 gap-2">
+        {/* Flavor */}
+        <p className="text-xs font-mono text-slate-600 italic leading-relaxed">„{mod.flavor}"</p>
+
+        {/* Aktueller Bonus */}
+        {currentLevel > 0 && currentBonus && (
+          <div className="px-2 py-1.5 rounded text-xs font-mono space-y-0.5"
+            style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.12)' }}>
+            <p className="text-slate-600 uppercase tracking-widest" style={{ fontSize: 9 }}>Aktiv</p>
+            <p style={{ color: '#22d3ee' }}>{currentBonus}</p>
+            {currentBonus2 && <p style={{ color: '#22d3ee' }}>{currentBonus2}</p>}
+          </div>
         )}
-      </AnimatePresence>
-    </div>
+
+        {/* Nächstes Level Bonus */}
+        {nextBonus && (
+          <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>
+            → Lvl {nextLevel}: {nextBonus}{nextBonus2 ? ` · ${nextBonus2}` : ''}
+          </p>
+        )}
+
+        {/* Bauzeit */}
+        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500">
+          <Clock size={11} />{fmtTime(buildMinutes)}
+        </div>
+
+        {/* Kosten */}
+        <div className="rounded overflow-hidden text-xs" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="grid font-mono px-2 py-1 text-slate-600"
+            style={{ gridTemplateColumns: '1fr 60px 70px', background: 'rgba(0,0,0,0.3)' }}>
+            <span>Res.</span>
+            <span className="text-right">Kost.</span>
+            <span className="text-right">HQ</span>
+          </div>
+          {COST_KEYS.map(k => {
+            const amt = costs[k] ?? 0
+            if (!amt) return null
+            const available = k === 'credits'
+              ? (alliance.credits_treasury ?? 0)
+              : (hqCargo?.[k] ?? 0)
+            const ok = available >= amt
+            return (
+              <div key={k} className="grid font-mono px-2 py-0.5"
+                style={{ gridTemplateColumns: '1fr 60px 70px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                <span className="text-slate-400 truncate">{COST_LABELS[k]}</span>
+                <span className="text-right text-slate-300">{fmt(amt)}</span>
+                <span className={`text-right font-bold ${ok ? 'text-slate-500' : 'text-red-400'}`}>
+                  {ok ? fmt(available - amt) : `−${fmt(amt - available)}`}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Button */}
+        <div className="mt-auto pt-1">
+          {isIllegalToBuild ? (
+            <div className="text-xs text-center py-2 rounded font-mono"
+              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171' }}>
+              HQ unter 50% HP
+            </div>
+          ) : inQueue ? (
+            <div className="text-xs text-center py-2 rounded text-amber-500/70 font-mono"
+              style={{ background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.15)' }}>
+              🔨 Im Bau
+            </div>
+          ) : (
+            <button onClick={() => onBuild(mod, nextLevel, costs, buildMinutes)}
+              disabled={!canBuild || !canAfford || busy || isTransit}
+              className="w-full py-2 rounded text-sm font-mono flex items-center justify-center gap-1.5 transition-all"
+              style={{
+                background: canBuild && canAfford && !isTransit ? 'rgba(34,211,238,0.1)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${canBuild && canAfford && !isTransit ? 'rgba(34,211,238,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                color: canBuild && canAfford && !isTransit ? '#22d3ee' : '#334155',
+              }}>
+              {isTransit ? '🚀 HQ unterwegs'
+                : !canBuild ? <><Lock size={12} /> Keine Berechtigung</>
+                : !canAfford ? '✗ Ressourcen fehlen'
+                : <><ChevronRight size={13} /> Lvl {nextLevel} ausbauen</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
@@ -582,7 +640,7 @@ export default function AllianceHQPage() {
       hq_x: planet.x, hq_y: planet.y, hq_z: planet.z,
       credits_treasury: (alliance.credits_treasury ?? 0) - 1000000,
       hq_hp: 100000, hq_max_hp: 100000,
-      hq_cargo: {}, hq_cargo_max: 100000,
+      hq_cargo: {}, hq_cargo_max: 200000,
     }).eq('id', alliance.id)
 
     queryClient.invalidateQueries(['my-alliance'])
@@ -645,11 +703,25 @@ export default function AllianceHQPage() {
             <p className="text-sm font-mono text-slate-500 mt-1">[{alliance.tag}] {alliance.name}</p>
           </div>
           {isFounder && alliance.hq_founded && (
-            <button onClick={() => setShowMove(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
-              style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}>
-              <Send size={11} /> Verschieben
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowMove(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}>
+                <Send size={11} /> Verschieben
+              </button>
+              {/* Cheat: HQ-Laderaum auf 1Mio füllen */}
+              <button onClick={async () => {
+                const cheatCargo = {}
+                const resources = ['titan','silizium','helium','nahrung','wasser','bauxit','aluminium','uran','plutonium','wasserstoff']
+                resources.forEach(r => { cheatCargo[r] = 1000000 })
+                await supabase.from('alliances').update({ hq_cargo: cheatCargo }).eq('id', alliance.id)
+                queryClient.invalidateQueries(['my-alliance'])
+              }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24' }}>
+                <Zap size={11} /> Laderaum füllen (Test)
+              </button>
+            </div>
           )}
         </div>
 
@@ -740,22 +812,27 @@ export default function AllianceHQPage() {
 
           {/* Module Tab */}
           {tab === 'modules' && (
-            <div className="space-y-2">
-              {moduleDefs.map((mod) => (
-                <ModuleCard
-                  key={mod.id}
-                  mod={mod}
-                  currentLevel={levelMap[mod.id] ?? 0}
-                  buildQueue={buildQueue}
-                  alliance={alliance}
-                  planet={planet}
-                  hqCargo={alliance.hq_cargo ?? {}}
-                  membership={membership}
-                  onBuild={handleBuild}
-                  busy={busy}
-                />
-              ))}
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {moduleDefs.map((mod) => (
+                  <ModuleCard
+                    key={mod.id}
+                    mod={mod}
+                    currentLevel={levelMap[mod.id] ?? 0}
+                    buildQueue={buildQueue}
+                    alliance={alliance}
+                    planet={planet}
+                    hqCargo={alliance.hq_cargo ?? {}}
+                    membership={membership}
+                    onBuild={handleBuild}
+                    busy={busy}
+                  />
+                ))}
+              </div>
+            </motion.div>
           )}
 
           {/* Cargo Tab */}
