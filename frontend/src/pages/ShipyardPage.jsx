@@ -1,973 +1,532 @@
-// src/pages/ShipyardPage.jsx
-import { useState } from 'react'
+// src/components/ui/Layout.jsx — v1.1
+import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
-import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Rocket, X, ChevronRight, Hammer, AlertTriangle, Settings } from 'lucide-react'
+import ChatPanel from '@/components/chat/ChatPanel'
+import NotificationStack from '@/components/ui/NotificationStack'
+import {
+  Building2, Hammer, Rocket, FlaskConical, Anchor,
+  Shield, Crosshair, Radio, Navigation, Radar,
+  LogOut, Settings, Clock, Ship, Scale, LayoutDashboard, Swords, Users
+} from 'lucide-react'
 
-const CLASS_LABELS  = { Z: 'Klasse Z', A: 'Klasse A', B: 'Klasse B', C: 'Klasse C', D: 'Klasse D', E: 'Klasse E' }
-const CLASS_COLORS  = { Z: '#94a3b8', A: '#34d399', B: '#38bdf8', C: '#a78bfa', D: '#fb923c', E: '#f472b6' }
-const CLASS_DESC    = {
-  Z: 'Leichte Sonden und Frachter. Günstig, keine Bewaffnung.',
-  A: 'Mittlere Frachter. Gute Kapazität, geringe Kampfkraft.',
-  B: 'Leichte Kampfschiffe. Schnell und wendig.',
-  C: 'Mittelschwere Kampfschiffe. Solide Allrounder.',
-  D: 'Schwere Kreuzer. Hoher Schaden, träge.',
-  E: 'Schlachtschiffe. Nur für Admirale. Vernichtende Kraft.',
-}
-const PROFESSION_LABELS = { admiral: 'Admiral', trader: 'Händler', privateer: 'Freibeuter' }
+// ─── Nav items ────────────────────────────────────────────────────────────────
 
-const PART_CATEGORIES = [
-  { id: 'engine',           label: 'Antrieb',           required: true  },
-  { id: 'engine_aux',       label: 'Sekundärantrieb',   required: false },
-  { id: 'booster',          label: 'Booster',           required: false },
-  { id: 'primary_weapon',   label: 'Primärwaffe',       required: false },
-  { id: 'turret',           label: 'Turret',            required: false },
-  { id: 'armor',            label: 'Panzerung',         required: false },
-  { id: 'shield_hp',        label: 'HP-Schild',         required: false },
-  { id: 'shield_def',       label: 'Def-Schild',        required: false },
-  { id: 'cargo',            label: 'Ladebucht',         required: false },
-  { id: 'mining',           label: 'Bergbau',           required: false },
-  { id: 'scanner_asteroid', label: 'Ast-Scanner',       required: false },
-  { id: 'scanner_npc',      label: 'NPC-Scanner',       required: false },
-  { id: 'extension',        label: 'Erweiterung',       required: false },
+const NAV_ITEMS = [
+  { to: '/overview',  icon: LayoutDashboard, label: 'Übersicht'         },
+  { to: '/planet',    icon: Building2,   label: 'Gebäude'          },
+  { to: '/mines',     icon: Hammer,      label: 'Minen'            },
+  { to: '/shipyard',  icon: Rocket,      label: 'Werft'            },
+  { to: '/research',  icon: FlaskConical, label: 'Forschungszentrum'},
+  { to: '/dock',      icon: Anchor,      label: 'Dock'             },
+  { to: '/bunker',    icon: Shield,      label: 'Bunker'           },
+  { to: '/defense',   icon: Crosshair,   label: 'Verteidigung'     },
+  { to: '/comms',     icon: Radio,       label: 'Komm'             },
+  { to: '/government', icon: Scale,      label: 'Regierungssitz'   },
+  { to: '/ships',     icon: Ship,        label: 'Schiffe'          },
+  { to: '/fleet',     icon: Navigation,  label: 'Flotten'          },
+  { to: '/scan',      icon: Radar,       label: 'Scan'             },
+  { to: '/battle-reports', icon: Swords, label: 'Kampfberichte'    },
+  { to: '/alliance',  icon: Users,       label: 'Allianz'          },
 ]
 
-function fmt(n) {
-  if (!n) return '0'
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
-  return n.toLocaleString()
+// ─── Resources ────────────────────────────────────────────────────────────────
+
+const RESOURCES = [
+  { key: 'titan',       label: 'Titan',       icon: '/Starbound-Alpha/resources/titan.png',       color: '#94a3b8', isImg: true },
+  { key: 'silizium',    label: 'Silizium',    icon: '/Starbound-Alpha/resources/silizium.png',    color: '#a78bfa', isImg: true },
+  { key: 'helium',      label: 'Helium',      icon: '/Starbound-Alpha/resources/helium.png',      color: '#34d399', isImg: true },
+  { key: 'nahrung',     label: 'Nahrung',     icon: '/Starbound-Alpha/resources/nahrung.png',     color: '#86efac', isImg: true },
+  { key: 'wasser',      label: 'Wasser',      icon: '/Starbound-Alpha/resources/wasser.png',      color: '#67e8f9', isImg: true },
+  { key: 'bauxit',      label: 'Bauxit',      icon: '/Starbound-Alpha/resources/bauxit.png',      color: '#fb923c', isImg: true },
+  { key: 'aluminium',   label: 'Aluminium',   icon: '/Starbound-Alpha/resources/aluminium.png',   color: '#c0c0c0', isImg: true },
+  { key: 'uran',        label: 'Uran',        icon: '/Starbound-Alpha/resources/uran.png',        color: '#4ade80', isImg: true },
+  { key: 'plutonium',   label: 'Plutonium',   icon: '/Starbound-Alpha/resources/plutonium.png',   color: '#f472b6', isImg: true },
+  { key: 'wasserstoff', label: 'Wasserstoff', icon: '/Starbound-Alpha/resources/wasserstoff.png', color: '#38bdf8', isImg: true },
+  { key: 'energie',     label: 'Energie Verfügbar', icon: '⚡', color: '#fbbf24', isImg: false },
+  { key: 'credits',     label: 'Credits',     icon: '¢',  color: '#fde68a', isImg: false },
+]
+
+// Volle Zahl, keine Abkürzung, deutsche Formatierung (1.000)
+function fmtFull(n) {
+  if (n === undefined || n === null) return '—'
+  return Math.floor(n).toLocaleString('de-DE')
 }
 
-// ─── Ship Designer Modal ───────────────────────────────────────────────────────
+// Produktion /h — kleine Abkürzung OK da platzsparend
+function fmtProd(n) {
+  if (!n) return null
+  const abs = Math.abs(n)
+  let s
+  if (abs >= 1000000) s = `${(abs / 1000000).toFixed(1)}M`
+  else if (abs >= 1000) s = `${(abs / 1000).toFixed(1)}k`
+  else s = Math.floor(abs).toString()
+  return n >= 0 ? `+${s}/h` : `-${s}/h`
+}
 
-export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClose, onBuilt,
-  // Refit-Modus: ship + onRefit statt onBuilt
-  refitMode = false, ship = null, onRefit = null, queryClient = null, dockLevel = 0
-}) {
-  const [selectedParts, setSelectedParts] = useState(() =>
-    refitMode && ship?.ship_designs?.installed_parts
-      ? (Array.isArray(ship.ship_designs.installed_parts)
-          ? ship.ship_designs.installed_parts.map(p => typeof p === 'string' ? p : p?.part_id).filter(Boolean)
-          : [])
-      : []
-  )
-  const [busy, setBuilding] = useState(false)
-  const [shipName, setShipName] = useState('')
-  const [quantity, setQuantity] = useState(1)
-  const { addNotification } = useGameStore()
-
-  const getAvailableParts = (category) => {
-    const sortOrder = (id) => {
-      if (/_s$/.test(id)) return 1
-      if (/_m$/.test(id)) return 2
-      if (/_l$/.test(id)) return 3
-      if (/_xl$/.test(id)) return 4
-      if (/_xxl$/.test(id)) return 5
-      // Berufswaffen (_pvt/_adm) = Mk V (nach Mk IV)
-      if (/_\d+_(pvt|adm)$/.test(id)) return 5
-      const m = id.match(/_(\d+)$/)
-      return m ? parseInt(m[1]) : 99
+// Countdown mm:ss oder h:mm:ss
+function useCountdown(finishAt) {
+  const [t, setT] = useState('')
+  useEffect(() => {
+    if (!finishAt) { setT(''); return }
+    const tick = () => {
+      const d = new Date(finishAt) - new Date()
+      if (d <= 0) { setT('Fertig!'); return }
+      const h = Math.floor(d / 3600000)
+      const m = Math.floor((d % 3600000) / 60000)
+      const s = Math.floor((d % 60000) / 1000)
+      if (h > 0) setT(`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`)
+      else setT(`${m}:${String(s).padStart(2,'0')}`)
     }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [finishAt])
+  return t
+}
 
-    const engineTypeOrder = (id) => {
-      if (id.startsWith('engine_chem')) return 100
-      if (id.startsWith('engine_aux'))  return 200
-      if (id.startsWith('engine_ion'))  return 300
-      if (id.startsWith('engine_fusion')) return 400
-      return 500
-    }
+// ─── Top Bar ──────────────────────────────────────────────────────────────────
 
-    return (partDefs ?? []).filter(p => {
-      if (p.category !== category) return false
-      // Alle Waffen dürfen in alle Chassis (weapon_class ist nur Kampfeffektivität)
-      if (p.required_profession && p.required_profession !== player?.profession) return false
-      if (p.required_tech && !hasTech(p.required_tech)) return false
-      return true
-    }).sort((a, b) => {
-      const classOrd = { A: 1, B: 2, C: 3, D: 4, E: 5 }
-      if (category === 'turret' || category === 'primary_weapon') {
-        const ta = (classOrd[a.weapon_class] ?? 9) * 100 + sortOrder(a.id)
-        const tb = (classOrd[b.weapon_class] ?? 9) * 100 + sortOrder(b.id)
-        return ta - tb
-      }
-      if (category === 'engine' || category === 'engine_aux') {
-        return (engineTypeOrder(a.id) + sortOrder(a.id)) - (engineTypeOrder(b.id) + sortOrder(b.id))
-      }
-      return sortOrder(a.id) - sortOrder(b.id)
-    })
-  }
-
-  const baseStats = {
-    hp: chassis.base_hp, attack: chassis.base_attack, defense: chassis.base_defense,
-    speed: chassis.base_speed, maneuver: chassis.base_maneuver, cargo: chassis.base_cargo,
-  }
-
-  // Angriff: Basisangriff des Chassis wird zu jeder Waffe addiert
-  // Primärwaffe: +100% Basisangriff, Turret: +50% Basisangriff
-  const baseAtk = chassis.base_attack ?? 0
-  const weaponAttackBonus = (part) => {
-    if (!part) return 0
-    if (part.category === 'primary_weapon') return (part.attack_bonus || 0) + baseAtk
-    if (part.category === 'turret') return (part.attack_bonus || 0) + Math.floor(baseAtk / 2)
-    return 0
-  }
-
-  // Stats: Angriff kommt NUR aus Waffen (Chassis-Basisangriff steckt im Waffen-Bonus)
-  // Ohne Waffe: attack = 0 (Basis wird nicht direkt angezeigt)
-  const stats = selectedParts.reduce((acc, pid) => {
-    const p = (partDefs ?? []).find(d => d.id === pid)
-    if (!p) return acc
-    const atkContrib = (p.category === 'primary_weapon' || p.category === 'turret')
-      ? weaponAttackBonus(p)
-      : (p.attack_bonus || 0) - (p.attack_malus || 0)
-    return {
-      hp:            acc.hp            + (p.hp_bonus       || 0),
-      attack:        acc.attack        + atkContrib,
-      defense:       acc.defense       + (p.defense_bonus  || 0),
-      speed:         acc.speed         + (p.speed_bonus    || 0) - (p.speed_malus    || 0),
-      maneuver:      acc.maneuver      + (p.maneuver_bonus || 0) - (p.maneuver_malus || 0),
-      cargo:         acc.cargo         + (p.cargo_bonus    || 0),
-      ast_scan_range: acc.ast_scan_range + (p.category === 'scanner_asteroid' ? (p.scan_range || 0) : 0),
-      npc_scan_range: acc.npc_scan_range + (p.category === 'scanner_npc'      ? (p.scan_range || 0) : 0),
-    }
-  }, { ...baseStats, attack: 0, ast_scan_range: 0, npc_scan_range: 0 })
-
-  const totalCells = selectedParts.reduce((sum, pid) => {
-    const p = (partDefs ?? []).find(d => d.id === pid)
-    return sum + (p?.cells_required || 0)
-  }, 0)
-
-  const COST_KEYS = ['titan', 'silizium', 'aluminium', 'uran', 'plutonium']
-  const costs = COST_KEYS.reduce((acc, k) => {
-    let total = chassis[`cost_${k}`] || 0
-    selectedParts.forEach(pid => {
-      const p = (partDefs ?? []).find(d => d.id === pid)
-      total += p?.[`cost_${k}`] || 0
-    })
-    if (total > 0) acc[k] = total
-    return acc
-  }, {})
-
-  const canAfford = Object.entries(costs).every(([res, amt]) => (planet?.[res] ?? 0) >= amt)
-
-  const engineCount = selectedParts.filter(pid =>
-    (partDefs ?? []).find(d => d.id === pid)?.category === 'engine'
-  ).length
-  const hasEngine  = engineCount === 1
-
-  const primaryCount = selectedParts.filter(pid =>
-    (partDefs ?? []).find(d => d.id === pid)?.category === 'primary_weapon'
-  ).length
-  const maxPrimary = chassis.max_primary_weapons ?? 1
-  const primaryOk  = primaryCount <= maxPrimary
-
-  const cellsOk  = totalCells <= chassis.total_cells
-  const canBuild = hasEngine && cellsOk && canAfford && primaryOk
-
-  // Waffen/Turrets können mehrfach eingebaut werden → Array mit Duplikaten
-  // Antriebe: immer nur 1 (tauscht aus)
-  // Alles andere: erstes Klick = hinzufügen, zweites Klick = entfernen (letztes Vorkommen)
-  // Stackbare Kategorien: können mehrfach eingebaut werden
-  const isStackable = (cat) => cat === 'primary_weapon' || cat === 'turret'
-
-  const addPart = (pid) => {
-    const part = (partDefs ?? []).find(d => d.id === pid)
-    if (!part) return
-    setSelectedParts(prev => {
-      // Antrieb: ersetze bestehenden
-      if (part.category === 'engine') {
-        return [...prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category !== 'engine'), pid]
-      }
-      // Primärwaffe: max-Check
-      if (part.category === 'primary_weapon') {
-        const totalPrimary = prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category === 'primary_weapon').length
-        if (totalPrimary >= maxPrimary) return prev
-        return [...prev, pid]
-      }
-      // Turret + alles andere: einfach hinzufügen (Zellen-Check läuft über canBuild)
-      return [...prev, pid]
-    })
-  }
-
-  const removePart = (pid) => {
-    setSelectedParts(prev => {
-      // Letztes Vorkommen entfernen
-      const lastIdx = prev.lastIndexOf(pid)
-      if (lastIdx === -1) return prev
-      const result = [...prev]
-      result.splice(lastIdx, 1)
-      return result
-    })
-  }
-
-  const togglePart = (pid) => {
-    const part = (partDefs ?? []).find(d => d.id === pid)
-    if (!part) return
-    if (isStackable(part.category)) return  // stackbare Parts nur via +/-
-    setSelectedParts(prev => {
-      if (part.category === 'engine') {
-        return [...prev.filter(p => (partDefs ?? []).find(d => d.id === p)?.category !== 'engine'), pid]
-      }
-      const isSelected = prev.includes(pid)
-      if (isSelected) return prev.filter(p => p !== pid)
-      return [...prev, pid]
-    })
-  }
-
-  // Waffenliste: erst Primär, dann Sekundär
-  const installedWeapons = selectedParts
-    .map(pid => (partDefs ?? []).find(d => d.id === pid))
-    .filter(p => p?.category === 'primary_weapon' || p?.category === 'turret')
-    .sort((a, b) => {
-      if (a.category === b.category) return 0
-      return a.category === 'primary_weapon' ? -1 : 1
-    })
-    .map(p => ({
-      name: p.name,
-      type: p.category === 'primary_weapon' ? 'Primär' : 'Sekundär',
-      weaponClass: p.weapon_class ?? '—',
-      attack: weaponAttackBonus(p),
-    }))
-
-  // Original-Parts für Refit-Modus (zum Delta-Vergleich)
-  const originalParts = refitMode && ship?.ship_designs?.installed_parts
-    ? (Array.isArray(ship.ship_designs.installed_parts)
-        ? ship.ship_designs.installed_parts.map(p => typeof p === 'string' ? p : p?.part_id).filter(Boolean)
-        : [])
-    : []
-
-  // Stats der Original-Konfiguration (für Delta-Anzeige)
-  const originalStats = originalParts.reduce((acc, pid) => {
-    const p = (partDefs ?? []).find(d => d.id === pid)
-    if (!p) return acc
-    const atkContrib = (p.category === 'primary_weapon' || p.category === 'turret')
-      ? weaponAttackBonus(p)
-      : (p.attack_bonus || 0) - (p.attack_malus || 0)
-    return {
-      hp:            acc.hp            + (p.hp_bonus       || 0),
-      attack:        acc.attack        + atkContrib,
-      defense:       acc.defense       + (p.defense_bonus  || 0),
-      speed:         acc.speed         + (p.speed_bonus    || 0) - (p.speed_malus    || 0),
-      maneuver:      acc.maneuver      + (p.maneuver_bonus || 0) - (p.maneuver_malus || 0),
-      cargo:         acc.cargo         + (p.cargo_bonus    || 0),
-      ast_scan_range: acc.ast_scan_range + (p.category === 'scanner_asteroid' ? (p.scan_range || 0) : 0),
-      npc_scan_range: acc.npc_scan_range + (p.category === 'scanner_npc'      ? (p.scan_range || 0) : 0),
-    }
-  }, { ...baseStats, attack: 0, ast_scan_range: 0, npc_scan_range: 0 })
-
-  const handleBuild = async () => {
-    if (!canBuild || busy) return
-    setBuilding(true)
-
-    if (refitMode) {
-      // ── Umbau-Modus ──────────────────────────────────────────────────────
-      try {
-        const COST_KEYS_R = ['titan','silizium','aluminium','uran','plutonium']
-        const toRemove  = originalParts.filter(id => !selectedParts.includes(id))
-        const toInstall = selectedParts.filter(id => !originalParts.includes(id))
-
-        // Netto-Kosten berechnen
-        const netCosts = {}
-        for (const pid of toInstall) {
-          const p = (partDefs ?? []).find(d => d.id === pid)
-          if (!p) continue
-          for (const k of COST_KEYS_R) {
-            netCosts[k] = (netCosts[k] ?? 0) + (p[`cost_${k}`] ?? 0)
-          }
-        }
-        for (const pid of toRemove) {
-          const p = (partDefs ?? []).find(d => d.id === pid)
-          if (!p) continue
-          for (const k of COST_KEYS_R) {
-            netCosts[k] = (netCosts[k] ?? 0) - Math.floor((p[`cost_${k}`] ?? 0) * 0.75)
-          }
-        }
-
-        // Ressourcen abbuchen/erstatten
-        const updates = {}
-        for (const [k, net] of Object.entries(netCosts)) {
-          if (net !== 0) updates[k] = (planet[k] ?? 0) - net
-        }
-        if (Object.keys(updates).length > 0) {
-          await supabase.from('planets').update(updates).eq('id', planet.id)
-        }
-
-        // Queue-Einträge sequenziell
-        const applyDockBonus = (base, type) => {
-          if (type === 'time') return base * Math.max(0.1, 1 - dockLevel * 0.015)
-          return base
-        }
-        let offset = 0
-        for (const pid of toRemove) {
-          const p = (partDefs ?? []).find(d => d.id === pid)
-          const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
-          const min = applyDockBonus(base * 0.2, 'time')
-          const finishAt = new Date(Date.now() + (offset + min) * 60 * 1000).toISOString()
-          await supabase.from('refit_queue').insert({
-            ship_id: ship.id, planet_id: planet.id, player_id: player.id,
-            action: 'remove', part_id: pid, finish_at: finishAt,
-          })
-          offset += min
-        }
-        for (const pid of toInstall) {
-          const p = (partDefs ?? []).find(d => d.id === pid)
-          const base = p?.build_minutes ?? Math.max(0.1, (p?.cells_required ?? 1) / 10)
-          const min = applyDockBonus(base, 'time')
-          const finishAt = new Date(Date.now() + (offset + min) * 60 * 1000).toISOString()
-          await supabase.from('refit_queue').insert({
-            ship_id: ship.id, planet_id: planet.id, player_id: player.id,
-            action: 'install', part_id: pid, finish_at: finishAt,
-          })
-          offset += min
-        }
-
-        queryClient?.invalidateQueries(['dock-ships'])
-        queryClient?.invalidateQueries(['refit-queue', ship.id])
-        queryClient?.invalidateQueries(['planet', player.id])
-        onRefit?.()
-        onClose()
-      } catch (err) {
-        addNotification('Fehler: ' + err.message, 'error')
-      } finally {
-        setBuilding(false)
-      }
-      return
-    }
-
-    // ── Bau-Modus ──────────────────────────────────────────────────────────
-    try {
-      const name = shipName.trim() || chassis.name
-      const qty  = Math.max(1, Math.min(99, quantity))
-
-      // Kosten für alle Schiffe zusammen abziehen
-      const totalCostUpdates = {}
-      for (const [res, amt] of Object.entries(costs)) {
-        totalCostUpdates[res] = (planet[res] || 0) - amt * qty
-      }
-      await supabase.from('planets').update(totalCostUpdates).eq('id', planet.id)
-
-      const buildMinutes = Math.max(2, Math.floor((chassis.shipyard_space ?? 100) / 50))
-
-      // Letztes finish_at aus bestehender Queue als Ausgangspunkt
-      const { data: existingQueue } = await supabase.from('ship_build_queue')
-        .select('finish_at')
-        .eq('planet_id', planet.id)
-        .order('finish_at', { ascending: false })
-        .limit(1)
-      const lastFinish = existingQueue?.[0]?.finish_at
-        ? new Date(existingQueue[0].finish_at).getTime()
-        : Date.now()
-      const queueBase = Math.max(lastFinish, Date.now())
-
-      // Für jedes Schiff einzeln ein Design + Queue-Eintrag erstellen
-      for (let i = 0; i < qty; i++) {
-        const shipNameFinal = qty > 1
-          ? `${name} ${String(i + 1).padStart(2, '0')}`
-          : name
-
-        const { data: design, error: designErr } = await supabase.from('ship_designs').insert({
-          player_id:       player.id,
-          name:            shipNameFinal,
-          chassis_id:      chassis.id,
-          installed_parts: selectedParts,
-          total_hp:        stats.hp,
-          total_defense:   stats.defense,
-          total_attack:    stats.attack,
-          total_speed:     stats.speed,
-          total_maneuver:  stats.maneuver,
-          total_cargo:     stats.cargo,
-          total_cells_used: totalCells,
-          ast_scan_range:  stats.ast_scan_range ?? 0,
-          npc_scan_range:  stats.npc_scan_range ?? 0,
-          shipyard_space:  chassis.shipyard_space ?? 100,
-          build_minutes:   buildMinutes,
-          cost_titan:      costs.titan ?? 0,
-          cost_silizium:   costs.silizium ?? 0,
-          cost_aluminium:  costs.aluminium ?? 0,
-          cost_uran:       costs.uran ?? 0,
-          cost_plutonium:  costs.plutonium ?? 0,
-          is_valid:        true,
-        }).select().single()
-
-        if (designErr) throw designErr
-
-        // Jedes Schiff hängt sich ans Ende der Queue
-        const finishAt = new Date(queueBase + buildMinutes * 60000 * (i + 1)).toISOString()
-        const { error: queueErr } = await supabase.from('ship_build_queue').insert({
-          planet_id:         planet.id,
-          design_id:         design.id,
-          quantity:          1,
-          minutes_remaining: buildMinutes,
-          finish_at:         finishAt,
-        })
-        if (queueErr) throw queueErr
-      }
-
-      addNotification(`🚀 ${qty}× ${name} in Bau (${buildMinutes} Min.)`, 'success')
-      onBuilt?.()
-      // Fenster bleibt offen — Spieler kann weitere Schiffe konfigurieren
-    } catch (err) {
-      addNotification('Fehler: ' + err.message, 'error')
-    } finally {
-      setBuilding(false)
-    }
-  }
-
-  const color = CLASS_COLORS[chassis.class]
-
+function QueuePill({ icon: Icon, color, label, name, level, countdown }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-lg flex flex-col"
-        style={{ background: '#040d1a', border: '1px solid rgba(34,211,238,0.2)' }}>
-
-        <div className="flex items-center justify-between p-4 border-b border-cyan-500/15">
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 rounded text-sm font-mono font-bold"
-              style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
-              {chassis.class}
-            </span>
-            <h2 className="text-lg font-display font-bold text-slate-200">{chassis.name} — Designer</h2>
-          </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={18} /></button>
-        </div>
-
-        <div className="flex flex-1 overflow-hidden">
-          {/* Part selector */}
-          <div className="w-60 flex-shrink-0 border-r border-cyan-500/10 overflow-y-auto p-3 space-y-3">
-            <div>
-              <div className="flex justify-between text-xs font-mono text-slate-500 mb-1">
-                <span>Zellen</span>
-                <span style={{ color: totalCells > chassis.total_cells ? '#f87171' : '#22d3ee' }}>
-                  {totalCells} / {chassis.total_cells}
-                </span>
-              </div>
-              <div className="w-full rounded-full h-1.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <div className="h-1.5 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(totalCells / chassis.total_cells * 100, 100)}%`,
-                    background: totalCells > chassis.total_cells ? '#ef4444' : '#22d3ee',
-                  }} />
-              </div>
-            </div>
-            <div className="flex justify-between text-xs font-mono text-slate-500">
-              <span>Primärwaffen</span>
-              <span style={{ color: primaryCount > maxPrimary ? '#f87171' : primaryCount > 0 ? '#4ade80' : '#475569' }}>
-                {primaryCount} / {maxPrimary}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs font-mono text-slate-500">
-              <span>Antrieb</span>
-              <span style={{ color: engineCount === 1 ? '#4ade80' : '#f87171' }}>
-                {engineCount === 0 ? 'Fehlt' : engineCount === 1 ? '✓' : `${engineCount}x (zu viele)`}
-              </span>
-            </div>
-
-            {PART_CATEGORIES.map(({ id, label, required }) => {
-              const parts = getAvailableParts(id)
-              if (parts.length === 0) return null
-              return (
-                <div key={id}>
-                  <p className="text-xs font-mono uppercase tracking-widest mb-1"
-                    style={{ color: required ? '#fbbf24' : '#475569' }}>
-                    {label}{required ? ' *' : ''}
-                  </p>
-                  <div className="space-y-0.5">
-                    {parts.map(part => {
-                      const count = selectedParts.filter(p => p === part.id).length
-                      const sel   = count > 0
-                      const canStack = isStackable(part.category)
-                      const wouldExceed = (totalCells + (part.cells_required || 0)) > chassis.total_cells
-                      const primaryFull = part.category === 'primary_weapon' && primaryCount >= maxPrimary
-                      const cantAdd = wouldExceed || primaryFull
-
-                      if (canStack) {
-                        // Stackbare Parts: Zeile mit +/- Buttons
-                        return (
-                          <div key={part.id} className="flex items-center gap-1 px-2 py-1.5 rounded text-xs"
-                            style={{
-                              background: sel ? 'rgba(34,211,238,0.08)' : 'rgba(255,255,255,0.03)',
-                              border: sel ? '1px solid rgba(34,211,238,0.25)' : '1px solid rgba(255,255,255,0.06)',
-                            }}>
-                            <span className="flex-1 truncate" style={{ color: sel ? '#22d3ee' : '#94a3b8' }}>
-                              {part.name}
-                            </span>
-                            <span className="text-slate-700 mr-1 flex-shrink-0">{part.cells_required}Z</span>
-                            {/* − Button */}
-                            <button
-                              onClick={() => removePart(part.id)}
-                              disabled={count === 0}
-                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all font-bold text-sm leading-none"
-                              style={{
-                                background: count > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
-                                border: `1px solid ${count > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                                color: count > 0 ? '#f87171' : '#1e293b',
-                                cursor: count === 0 ? 'not-allowed' : 'pointer',
-                              }}>
-                              −
-                            </button>
-                            {/* Count */}
-                            <span className="w-5 text-center font-mono font-bold text-xs flex-shrink-0"
-                              style={{ color: count > 0 ? '#22d3ee' : '#334155' }}>
-                              {count}
-                            </span>
-                            {/* + Button */}
-                            <button
-                              onClick={() => addPart(part.id)}
-                              disabled={cantAdd}
-                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all font-bold text-sm leading-none"
-                              style={{
-                                background: !cantAdd ? 'rgba(34,211,238,0.15)' : 'rgba(255,255,255,0.03)',
-                                border: `1px solid ${!cantAdd ? 'rgba(34,211,238,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                                color: !cantAdd ? '#22d3ee' : '#1e293b',
-                                cursor: cantAdd ? 'not-allowed' : 'pointer',
-                              }}>
-                              +
-                            </button>
-                          </div>
-                        )
-                      }
-
-                      // Nicht-stackbare Parts: normaler Toggle-Button
-                      const isSelected = selectedParts.includes(part.id)
-                      const cellsFull = !isSelected && (totalCells + (part.cells_required || 0)) > chassis.total_cells
-                      return (
-                        <button key={part.id}
-                          onClick={() => !cellsFull && togglePart(part.id)}
-                          disabled={cellsFull && !isSelected}
-                          className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
-                          style={{
-                            background: isSelected ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
-                            border: isSelected ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(255,255,255,0.06)',
-                            color: isSelected ? '#22d3ee' : cellsFull ? '#1e293b' : '#94a3b8',
-                            cursor: cellsFull && !isSelected ? 'not-allowed' : 'pointer',
-                          }}>
-                          <div className="flex justify-between items-center">
-                            <span className="truncate">{part.name}</span>
-                            <span className="text-slate-600 ml-1 flex-shrink-0">{part.cells_required}Z</span>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Preview */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-44 h-44 rounded overflow-hidden"
-                style={{ border: '1px solid rgba(34,211,238,0.15)' }}>
-                <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name}
-                  className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1 grid grid-cols-2 gap-2">
-                {[
-                  ['HP', stats.hp, baseStats.hp],
-                  ['Angriff', stats.attack, baseStats.attack],
-                  ['Verteidigung', stats.defense, baseStats.defense],
-                  ['Geschw.', stats.speed, baseStats.speed],
-                  ['Manöver', stats.maneuver, baseStats.maneuver],
-                  ['Laderaum', stats.cargo, baseStats.cargo],
-                ].map(([l, v, b]) => {
-                  const origV = refitMode ? originalStats[{
-                    HP: 'hp', Angriff: 'attack', Verteidigung: 'defense',
-                    'Geschw.': 'speed', Manöver: 'maneuver', Laderaum: 'cargo'
-                  }[l]] ?? v : b
-                  const delta = v - origV
-                  return (
-                    <div key={l} className="px-3 py-2 rounded"
-                      style={{ background: 'rgba(7,20,40,0.6)', border: '1px solid rgba(34,211,238,0.08)' }}>
-                      <div className="text-xs text-slate-500 font-mono">{l}</div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {refitMode && delta !== 0 ? (
-                          <>
-                            <span className="text-sm font-mono text-slate-500 line-through">{origV}</span>
-                            <span className="text-xs text-slate-600">→</span>
-                            <span className="text-base font-mono font-bold"
-                              style={{ color: delta > 0 ? '#4ade80' : '#f87171' }}>{v}</span>
-                            <span className="text-xs font-mono font-semibold"
-                              style={{ color: delta > 0 ? '#4ade80' : '#f87171' }}>
-                              ({delta > 0 ? '+' : ''}{delta})
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-base font-mono font-bold text-slate-200">{v}</span>
-                            {!refitMode && v - b !== 0 && (
-                              <span className={`text-xs font-mono ${v > b ? 'text-green-400' : 'text-red-400'}`}>
-                                {v > b ? `+${v - b}` : v - b}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Waffenliste */}
-            {installedWeapons.length > 0 && (
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-widest font-mono mb-2">Bewaffnung</p>
-                <div className="space-y-1">
-                  {installedWeapons.map((w, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-1.5 rounded text-xs font-mono"
-                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <span className="text-slate-300">{w.name}</span>
-                      <span className="text-slate-500 flex items-center gap-2">
-                        <span style={{ color: w.type === 'Primär' ? '#22d3ee' : '#a78bfa' }}>{w.type}</span>
-                        <span>Klasse {w.weaponClass}</span>
-                        <span className="font-semibold" style={{ color: '#f59e0b' }}>{w.attack} Atk</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {engineCount === 0 && (
-              <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
-                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-                <AlertTriangle size={14} /> Kein Antrieb — genau 1 Hauptantrieb erforderlich
-              </div>
-            )}
-            {engineCount > 1 && (
-              <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
-                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-                <AlertTriangle size={14} /> Zu viele Antriebe — nur 1 Hauptantrieb erlaubt
-              </div>
-            )}
-            {!primaryOk && (
-              <div className="flex items-center gap-2 text-sm text-amber-400 px-3 py-2 rounded"
-                style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-                <AlertTriangle size={14} /> Zu viele Primärwaffen — max. {maxPrimary} für dieses Chassis
-              </div>
-            )}
-
-            {Object.keys(costs).length > 0 && (
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-widest font-mono mb-2">Gesamtkosten</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {Object.entries(costs).map(([res, amt]) => {
-                    const rest = (planet?.[res] ?? 0) - amt
-                    const ok   = rest >= 0
-                    return (
-                      <div key={res} className="grid text-sm font-mono px-2 py-1 rounded"
-                        style={{ gridTemplateColumns: '1fr 55px 65px', background: 'rgba(4,13,26,0.6)' }}>
-                        <span className="text-slate-400 capitalize">{res}</span>
-                        <span className="text-right text-slate-300">{fmt(amt)}</span>
-                        <span className={`text-right font-bold ${ok ? 'text-slate-500' : 'text-red-400'}`}>
-                          {ok ? fmt(rest) : `-${fmt(Math.abs(rest))}`}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 p-4 border-t border-cyan-500/15 flex-wrap">
-          <button onClick={onClose} className="btn-ghost text-sm">Abbrechen</button>
-
-          {!refitMode && (
-            <>
-              {/* Schiffsname */}
-              <input
-                value={shipName}
-                onChange={e => setShipName(e.target.value)}
-                placeholder={`z.B. ${chassis.name} Alpha`}
-                maxLength={30}
-                className="flex-1 min-w-32 px-3 py-2 rounded text-sm font-mono"
-                style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${!shipName.trim() ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.15)'}`, color: '#e2e8f0', outline: 'none' }}
-              />
-
-              {/* Anzahl */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  className="w-7 h-8 rounded text-sm font-mono font-bold transition-all"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-                  −
-                </button>
-                <span className="w-7 text-center text-sm font-mono font-bold text-slate-200">{quantity}</span>
-                <button onClick={() => setQuantity(q => Math.min(99, q + 1))}
-                  className="w-7 h-8 rounded text-sm font-mono font-bold transition-all"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-                  +
-                </button>
-              </div>
-            </>
-          )}
-
-          <button onClick={handleBuild} disabled={!canBuild || busy || (!refitMode && !shipName.trim())}
-            className={`btn-primary py-2 px-6 text-sm flex items-center gap-2 ${(!canBuild || (!refitMode && !shipName.trim())) ? 'opacity-40' : ''}`}>
-            {busy
-              ? <><Hammer size={14} className="animate-pulse" /> {refitMode ? 'Wird umgebaut...' : 'Wird gebaut...'}</>
-              : refitMode
-                ? <><Settings size={14} /> Umbau bestätigen</>
-                : <><Rocket size={14} /> {quantity > 1 ? `${quantity}× ` : ''}{chassis.name} bauen</>
-            }
-          </button>
-        </div>
-      </motion.div>
+    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded"
+      style={{ background: `${color}11`, border: `1px solid ${color}28` }}>
+      <Icon size={10} style={{ color, flexShrink: 0 }} />
+      <span className="text-xs font-mono truncate max-w-[110px]" style={{ color: '#cbd5e1' }}>
+        {name}{level ? <span style={{ color: '#475569' }}> Lv{level}</span> : null}
+      </span>
+      <span className="text-xs font-mono flex-shrink-0" style={{ color }}>{countdown}</span>
     </div>
   )
 }
 
-// ─── Chassis Card ──────────────────────────────────────────────────────────────
-
-function ChassisCard({ chassis, player, shipyardLevel, onSelect }) {
-  const noYard    = shipyardLevel < 1
-  const wrongProf = chassis.required_profession && player?.profession !== chassis.required_profession
-  const disabled  = noYard || wrongProf
-  const color     = CLASS_COLORS[chassis.class]
-
-  return (
-    <motion.div className="panel overflow-hidden cursor-pointer" style={{ opacity: disabled ? 0.4 : 1 }}
-      whileHover={!disabled ? { borderColor: `${color}50` } : {}}
-      onClick={() => !disabled && onSelect(chassis)}>
-      <div className="relative overflow-hidden" style={{ height: 300 }}>
-        <img src={`/Starbound-Alpha/ships/${chassis.id}.png`} alt={chassis.name}
-          className="w-full h-full object-cover"
-          style={{ filter: disabled ? 'grayscale(80%) brightness(0.5)' : 'brightness(0.9)' }} />
-        <div className="absolute inset-0"
-          style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(4,13,26,0.97) 100%)' }} />
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-xs font-mono font-bold"
-          style={{ background: `${color}25`, color, border: `1px solid ${color}50` }}>
-          {chassis.class}
-        </div>
-        {!disabled && (
-          <div className="absolute bottom-8 right-2 text-xs text-cyan-400/50 font-mono flex items-center gap-1">
-            <ChevronRight size={11} /> Designer
-          </div>
-        )}
-      </div>
-      <div className="p-3 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-semibold text-sm text-slate-200">{chassis.name}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{CLASS_DESC[chassis.class]}</p>
-          </div>
-          {chassis.required_profession && (
-            <span className="text-xs px-1.5 py-0.5 rounded font-mono flex-shrink-0"
-              style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
-              {PROFESSION_LABELS[chassis.required_profession]}
-            </span>
-          )}
-        </div>
-        <div className="grid grid-cols-4 gap-1 text-xs font-mono text-center">
-          {[['HP', chassis.base_hp], ['ATK', chassis.base_attack], ['SPD', chassis.base_speed], ['MNV', chassis.base_maneuver]].map(([l, v]) => (
-            <div key={l} className="rounded py-1" style={{ background: 'rgba(7,20,40,0.5)' }}>
-              <div className="text-slate-600">{l}</div>
-              <div className="text-slate-300">{v}</div>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between text-xs font-mono px-0.5">
-          <span className="text-slate-600">Werftplatz</span>
-          <span style={{ color }}>{chassis.shipyard_space ?? '—'}</span>
-        </div>
-        {wrongProf && (
-          <p className="text-xs text-red-400/60 font-mono">
-            Nur für {PROFESSION_LABELS[chassis.required_profession]}
-          </p>
-        )}
-      </div>
-    </motion.div>
-  )
-}
-
-// ─── Main Page ─────────────────────────────────────────────────────────────────
-
-export default function ShipyardPage() {
-  const { planet, player, buildings, hasTech } = useGameStore()
-  const [classFilter, setClassFilter] = useState('all')
-  const [designer, setDesigner]       = useState(null)
-
-  const shipyardLevel = buildings.find(b => b.building_id === 'shipyard')?.level ?? 0
-
-  const { data: chassisDefs } = useQuery({
-    queryKey: ['chassis-defs'],
+function TopBar({ player, planet }) {
+  const { data: buildQueue = [] } = useQuery({
+    queryKey: ['bq-bar', planet?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('chassis_definitions').select('*').order('class')
-      return data ?? []
-    },
-    staleTime: 300000,
-  })
-
-  const { data: partDefs } = useQuery({
-    queryKey: ['part-defs'],
-    queryFn: async () => {
-      const { data } = await supabase.from('ship_part_definitions').select('*')
-      return data ?? []
-    },
-    staleTime: 300000,
-  })
-
-  const { data: myShips, refetch: refetchShips } = useQuery({
-    queryKey: ['my-ships', player?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('ships')
-        .select('*, ship_designs(shipyard_space), fleets!inner(player_id)')
-        .eq('fleets.player_id', player.id)
-      return data ?? []
-    },
-    enabled: !!player,
-    refetchInterval: 15000,
-  })
-
-  const { data: buildQueue = [], refetch: refetchBuildQueue } = useQuery({
-    queryKey: ['ship-build-queue', planet?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from('ship_build_queue')
-        .select('*, ship_designs(name, shipyard_space, chassis_id)')
-        .eq('planet_id', planet.id)
+      const { data } = await supabase.from('build_queue').select('*')
+        .eq('planet_id', planet.id).order('queue_position')
       return data ?? []
     },
     enabled: !!planet,
-    refetchInterval: 10000,
+    refetchInterval: 5000,
   })
 
-  const shipyardCapacity = shipyardLevel * 500
-  const usedByShips = (myShips ?? []).reduce((sum, s) => sum + (s.ship_designs?.shipyard_space ?? 0), 0)
-  const usedByQueue = buildQueue.reduce((sum, q) => sum + (q.ship_designs?.shipyard_space ?? 0) * (q.quantity ?? 1), 0)
-  const usedCapacity = usedByShips + usedByQueue
-  const freeCapacity = shipyardCapacity - usedCapacity
+  const { data: researchQueue = [] } = useQuery({
+    queryKey: ['rq-bar', player?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('research_queue').select('*')
+        .eq('player_id', player.id).order('started_at')
+      return data ?? []
+    },
+    enabled: !!player,
+    refetchInterval: 5000,
+  })
 
-  const available = (chassisDefs ?? []).filter(c => !c.required_tech || hasTech(c.required_tech))
-  const CLASS_ORDER = ['Z', 'A', 'B', 'C', 'D', 'E']
-  const CHASSIS_SORT = {
-    // Klasse Z — explizite Reihenfolge
-    probe_s: 1, probe_m: 2, probe_l: 3,
-    freighter_s: 4, freighter_m: 5,
-    trade_station: 6, battle_station: 7,
-  }
-  const classes   = ['all', ...CLASS_ORDER.filter(cls => available.some(c => c.class === cls))]
-  const filtered  = available
-    .filter(c => classFilter === 'all' || c.class === classFilter)
-    .sort((a, b) => {
-      // Erst nach Klassen-Reihenfolge
-      const clsA = CLASS_ORDER.indexOf(a.class)
-      const clsB = CLASS_ORDER.indexOf(b.class)
-      if (clsA !== clsB) return clsA - clsB
-      // Innerhalb Z: explizite Reihenfolge
-      const sA = CHASSIS_SORT[a.id] ?? 99
-      const sB = CHASSIS_SORT[b.id] ?? 99
-      return sA - sB
-    })
+  const { data: fleetQueue = [] } = useQuery({
+    queryKey: ['fq-bar', player?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('fleets').select('*')
+        .eq('player_id', player.id).eq('is_in_transit', true)
+      return data ?? []
+    },
+    enabled: !!player,
+    refetchInterval: 5000,
+  })
 
-  if (shipyardLevel < 1) return (
-    <div className="max-w-2xl mx-auto">
-      <div className="panel p-8 text-center space-y-3">
-        <Rocket size={48} className="mx-auto text-slate-600" />
-        <h2 className="text-xl font-display text-slate-300">Schiffswerft nicht gebaut</h2>
-        <p className="text-slate-500">Baue zuerst eine Schiffswerft auf deinem Planeten.</p>
-      </div>
-    </div>
-  )
+  const { data: buildingDefs = [] } = useQuery({
+    queryKey: ['building-defs-names'],
+    queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,name'); return data ?? [] },
+    staleTime: Infinity,
+  })
+
+  const { data: techDefs = [] } = useQuery({
+    queryKey: ['tech-defs-bar'],
+    queryFn: async () => { const { data } = await supabase.from('tech_definitions').select('id,name'); return data ?? [] },
+    staleTime: 60000,
+  })
+
+  const { data: shipBuildQueue = [] } = useQuery({
+    queryKey: ['sbq-bar', planet?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('ship_build_queue')
+        .select('*, ship_designs(name)')
+        .eq('planet_id', planet.id)
+        .order('finish_at')
+      return data ?? []
+    },
+    enabled: !!planet,
+    refetchInterval: 5000,
+  })
+
+  const hasAnything = buildQueue.length > 0 || researchQueue.length > 0 || fleetQueue.length > 0 || shipBuildQueue.length > 0
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
+    <div className="flex-shrink-0 flex items-center gap-3 px-4 flex-wrap"
+      style={{
+        borderBottom: '1px solid rgba(34,211,238,0.08)',
+        background: 'rgba(2,8,20,0.7)',
+        minHeight: 38,
+        paddingTop: 5,
+        paddingBottom: 5,
+      }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">Schiffswerft</h2>
-          <p className="text-sm text-slate-500 font-mono">Lvl {shipyardLevel} · {myShips?.length ?? 0} Schiffe</p>
-        </div>
-        <div className="panel p-3 min-w-[200px]">
-          <div className="flex justify-between text-xs font-mono text-slate-500 mb-1.5">
-            <span>Werftkapazität</span>
-            <span style={{ color: freeCapacity <= 0 ? '#f87171' : '#22d3ee' }}>
-              {usedCapacity} / {shipyardCapacity}
-            </span>
-          </div>
-          <div className="w-full rounded-full h-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
-            <div className="h-2 rounded-full transition-all"
-              style={{
-                width: `${shipyardCapacity > 0 ? Math.min(usedCapacity / shipyardCapacity * 100, 100) : 0}%`,
-                background: freeCapacity <= 0 ? '#ef4444' : '#22d3ee',
-              }} />
-          </div>
-          <p className="text-xs font-mono mt-1" style={{ color: freeCapacity <= 0 ? '#f87171' : '#4ade80' }}>
-            {freeCapacity <= 0 ? 'Keine Kapazität frei' : `${freeCapacity} frei`}
-          </p>
-        </div>
-      </div>
-
-      {/* Build Queue */}
-      {buildQueue.length > 0 && (
-        <div className="panel p-3 space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-slate-500">In Bau</p>
-          {buildQueue.map(q => {
-            const finishMs  = q.finish_at ? new Date(q.finish_at).getTime() : 0
-            const remaining = Math.max(0, Math.floor((finishMs - Date.now()) / 1000))
-            const mins = Math.floor(remaining / 60)
-            const secs = remaining % 60
-            return (
-              <div key={q.id} className="flex items-center gap-3 text-sm font-mono">
-                <Hammer size={13} className="text-amber-400 animate-pulse flex-shrink-0" />
-                <span className="text-slate-300 flex-1">{q.ship_designs?.name ?? 'Schiff'}</span>
-                <span className="text-amber-400">{mins}m {secs}s</span>
-              </div>
-            )
-          })}
-        </div>
+      {!hasAnything && (
+        <span className="text-xs font-mono text-slate-700">Keine aktiven Aufträge</span>
       )}
 
-      {/* Class Filter */}
-      <div className="flex gap-1.5 flex-wrap">
-        {classes.map(cls => {
-          const clsColor = CLASS_COLORS[cls] ?? '#22d3ee'
-          const isActive = classFilter === cls
-          return (
-            <button key={cls} onClick={() => setClassFilter(cls)}
-              className="px-3 py-1.5 rounded text-sm font-mono transition-all"
+      {buildQueue.map(item => {
+        const def = buildingDefs.find(d => d.id === item.building_id)
+        return (
+          <BuildQueuePill key={item.id} item={item} name={def?.name ?? item.building_id} />
+        )
+      })}
+
+      {buildQueue.length > 0 && researchQueue.length > 0 && (
+        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+      )}
+
+      {researchQueue.map(item => {
+        const def = techDefs.find(d => d.id === item.tech_id)
+        return (
+          <ResearchQueuePill key={item.id} item={item} name={def?.name ?? item.tech_id} />
+        )
+      })}
+
+      {researchQueue.length > 0 && fleetQueue.length > 0 && (
+        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+      )}
+
+      {fleetQueue.map(fleet => (
+        <FleetQueuePill key={fleet.id} fleet={fleet} />
+      ))}
+
+      {(fleetQueue.length > 0 || researchQueue.length > 0 || buildQueue.length > 0) && shipBuildQueue.length > 0 && (
+        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
+      )}
+
+      {shipBuildQueue.map(item => (
+        <ShipBuildQueuePill key={item.id} item={item} />
+      ))}
+    </div>
+  )
+}
+
+function BuildQueuePill({ item, name }) {
+  const countdown = useCountdown(item.finish_at)
+  return (
+    <QueuePill icon={Building2} color="#fbbf24"
+      name={name} level={item.target_level} countdown={countdown} />
+  )
+}
+
+function ResearchQueuePill({ item, name }) {
+  const countdown = useCountdown(item.finish_at)
+  return (
+    <QueuePill icon={FlaskConical} color="#22d3ee"
+      name={name} level={item.target_level} countdown={countdown} />
+  )
+}
+
+function ShipBuildQueuePill({ item }) {
+  const countdown = useCountdown(item.finish_at)
+  const name = item.ship_designs?.name ?? 'Schiff'
+  const qty = item.quantity ?? 1
+  return (
+    <QueuePill icon={Rocket} color="#f472b6"
+      name={qty > 1 ? `${qty}× ${name}` : name}
+      level={null}
+      countdown={countdown} />
+  )
+}
+
+function FleetQueuePill({ fleet }) {
+  const countdown = useCountdown(fleet.arrive_at)
+  return (
+    <QueuePill icon={Navigation} color="#a855f7"
+      name={fleet.name ?? 'Flotte'}
+      level={null}
+      countdown={countdown || '→'} />
+  )
+}
+
+// ─── Sidebar Resources ────────────────────────────────────────────────────────
+
+function SidebarResources({ planet: initialPlanet }) {
+  const [planet, setPlanet] = useState(initialPlanet)
+  const { buildings, mineProductionBonus } = useGameStore()
+
+  const govLevel = buildings.find(b => b.building_id === 'gov_center')?.level ?? 0
+  const liveCreditsPerHour = govLevel * 1000
+
+  const { data: buildingDefsEnergy = [] } = useQuery({
+    queryKey: ['building-defs-energy-only'],
+    queryFn: async () => { const { data } = await supabase.from('building_definitions').select('id,energy_per_level'); return data ?? [] },
+    staleTime: Infinity,
+  })
+
+  const energieVerbrauch = buildings.reduce((sum, pb) => {
+    const def = buildingDefsEnergy.find(d => d.id === pb.building_id)
+    return sum + (def?.energy_per_level ?? 0) * pb.level
+  }, 0)
+
+  // Energieproduktion: Kraftwerk level × 100
+  const kraftwerkLevel = buildings.find(b => b.building_id === 'power_plant')?.level ?? 0
+  const energieProduktion = kraftwerkLevel * 100
+
+  const energieSaldo = energieProduktion - energieVerbrauch
+  const energieMangel = energieSaldo < 0
+
+  // Immer aktuell halten wenn gameStore-Planet sich ändert
+  useEffect(() => {
+    if (initialPlanet) setPlanet(initialPlanet)
+  }, [initialPlanet])
+
+  // Refresh zur vollen und halben Minute
+  useEffect(() => {
+    if (!initialPlanet?.id) return
+    let timer
+    const scheduleNext = () => {
+      const now = new Date()
+      const secs = now.getSeconds()
+      const wait = secs < 30 ? (30 - secs) : (60 - secs)
+      timer = setTimeout(async () => {
+        const { data } = await supabase.from('planets')
+          .select('*').eq('id', initialPlanet.id).single()
+        if (data) setPlanet(data)
+        scheduleNext()
+      }, wait * 1000)
+    }
+    scheduleNext()
+    return () => clearTimeout(timer)
+  }, [initialPlanet?.id])
+
+  const bunkerLevel = buildings.find(b => b.building_id === 'bunker')?.level ?? 0
+  const bunkerCapacity = bunkerLevel * 15000
+
+  // Bunker-Einstellungen für Füllstand laden
+  const { data: bunkerSettings } = useQuery({
+    queryKey: ['bunker-settings-sidebar', initialPlanet?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('bunker_settings')
+        .select('*').eq('planet_id', initialPlanet.id).maybeSingle()
+      return data
+    },
+    enabled: !!initialPlanet?.id && bunkerLevel > 0,
+    staleTime: 30000,
+  })
+
+  const bunkerUsed = bunkerSettings
+    ? ['titan','silizium','helium','nahrung','wasser','bauxit','aluminium','uran','plutonium','wasserstoff']
+        .reduce((sum, k) => sum + (bunkerSettings[`protect_${k}`] ?? 0), 0)
+    : 0
+  const bunkerFill = bunkerCapacity > 0 ? Math.min(100, (bunkerUsed / bunkerCapacity) * 100) : 0
+
+  if (!planet) return null
+
+  return (
+    <div className="px-2 py-3 border-t border-cyan-500/10">
+      {/* Bunker-Füllstand */}
+      {bunkerLevel > 0 && (
+        <div className="px-1 mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-slate-600 uppercase tracking-widest font-mono flex items-center gap-1.5">
+              🛡️ Bunker
+            </span>
+            <span className="text-xs font-mono tabular-nums"
+              style={{ color: bunkerFill > 90 ? '#f87171' : bunkerFill > 70 ? '#fbbf24' : '#818cf8' }}>
+              {bunkerFill.toFixed(0)}%
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
               style={{
-                background: isActive ? `${clsColor}20` : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${isActive ? `${clsColor}50` : 'rgba(255,255,255,0.08)'}`,
-                color: isActive ? clsColor : '#64748b',
-              }}>
-              {cls === 'all' ? 'Alle' : CLASS_LABELS[cls]}
-            </button>
+                width: `${bunkerFill}%`,
+                background: bunkerFill > 90
+                  ? 'linear-gradient(90deg,#f87171,#ef4444)'
+                  : bunkerFill > 70
+                    ? 'linear-gradient(90deg,#fbbf24,#f59e0b)'
+                    : 'linear-gradient(90deg,#818cf8,#6366f1)',
+              }}
+            />
+          </div>
+        </div>
+      )}
+      <p className="text-xs text-slate-600 uppercase tracking-widest font-mono px-1 mb-2">Ressourcen</p>
+      <div className="space-y-0.5">
+        {RESOURCES.map(({ key, label, icon, color, isImg }) => {
+          const val  = planet[key] ?? 0
+          // Produktion live berechnen: minen * 50 * bonus
+          const mines = planet?.mine_distribution?.[key] ?? 0
+          const isMineable = !['energie','credits'].includes(key)
+          const isCredits = key === 'credits'
+          const prod = isMineable
+            ? Math.round(mines * 50 * (mineProductionBonus ?? 1.0))
+            : isCredits
+              ? liveCreditsPerHour
+              : (planet[`prod_${key}`] ?? 0)
+          const prodStr = fmtProd(prod)
+          const isEnergie = key === 'energie'
+
+          // Energie: saldo = produktion - verbrauch
+          const energieFrei = energieProduktion - energieVerbrauch
+          const energieMangel = energieFrei <= 0
+
+          return (
+            <div key={key} className="flex items-center gap-1.5 px-1.5 py-1 rounded"
+              style={{ background: 'rgba(7,20,40,0.4)' }}>
+              {/* Icon */}
+              {isImg
+                ? <img src={icon} alt={label} style={{ width: 15, height: 15, objectFit: 'contain', flexShrink: 0 }} />
+                : <span style={{ color, fontSize: 12, width: 15, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              }
+              <span className="font-mono text-slate-300 text-sm flex-1 truncate">{label}</span>
+              {isEnergie ? (
+                // Energie: "frei / total" — rot wenn mangel
+                <span className="font-mono tabular-nums text-sm font-semibold flex-shrink-0"
+                  style={{ color: energieMangel ? '#f87171' : '#4ade80' }}>
+                  {energieFrei} / {energieProduktion}
+                </span>
+              ) : (
+                <>
+                  <span className="font-mono text-slate-100 text-sm tabular-nums font-semibold">{fmtFull(val)}</span>
+                  {(prodStr || isCredits) && (
+                    <span className="font-mono tabular-nums flex-shrink-0"
+                      style={{ color: prod >= 0 ? '#4ade80' : '#f87171', fontSize: 11 }}>
+                      {prodStr || '—'}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           )
         })}
       </div>
+    </div>
+  )
+}
 
-      {/* Empty state */}
-      {filtered.length === 0 && (
-        <div className="panel p-8 text-center text-slate-500 text-sm">
-          Keine Schiffe verfügbar. Erforsche neue Technologien im Forschungszentrum.
+// ─── Layout ───────────────────────────────────────────────────────────────────
+
+export default function Layout() {
+  const { player, planet, logout } = useGameStore()
+  const navigate = useNavigate()
+
+  // Rassen-Bild: /Starbound-Alpha/races/{race_id}.png, Fallback auf Platzhalter
+  const raceImg = player?.race_id
+    ? `/Starbound-Alpha/races/${player.race_id}.png`
+    : `/Starbound-Alpha/races/placeholder.png`
+
+  return (
+    <div className="scanlines flex h-screen overflow-hidden star-bg">
+
+      {/* ── Sidebar ── */}
+      <aside className="w-64 flex-shrink-0 flex flex-col border-r border-cyan-500/15 overflow-y-auto"
+        style={{ background: 'linear-gradient(180deg, rgba(4,13,26,0.98) 0%, rgba(2,4,9,0.99) 100%)' }}>
+
+        {/* Rassen-Bild + Spielername — klickbar → Dashboard */}
+        <button onClick={() => navigate('/dashboard')}
+          className="flex-shrink-0 group w-full text-left"
+          style={{ borderBottom: '1px solid rgba(34,211,238,0.1)' }}>
+          <div className="relative w-full overflow-hidden"
+            style={{ height: 120 }}>
+            <img
+              src={raceImg}
+              alt="Rasse"
+              className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-80"
+              style={{ filter: 'brightness(0.85)' }}
+              onError={e => { e.target.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' }}
+            />
+            {/* Gradient overlay unten */}
+            <div className="absolute inset-0"
+              style={{ background: 'linear-gradient(to bottom, transparent 40%, rgba(4,13,26,0.95) 100%)' }} />
+            {/* Spielername */}
+            <div className="absolute bottom-0 left-0 right-0 px-3 pb-2">
+              <p className="font-display font-bold text-sm text-slate-200 truncate"
+                style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                {player?.username}
+              </p>
+              <div className="flex gap-1.5 text-xs font-mono">
+                {player?.race_id && (
+                  <span style={{ color: '#22d3ee', opacity: 0.8 }}>{player.race_id}</span>
+                )}
+                {player?.profession && (
+                  <span style={{ color: '#94a3b8', opacity: 0.6 }}>· {player.profession}</span>
+                )}
+              </div>
+            </div>
+            {/* Hover-Indikator */}
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="text-xs font-mono text-cyan-400/60">Dossier →</span>
+            </div>
+          </div>
+        </button>
+
+        {/* Navigation */}
+        <nav className="px-2 py-2 flex-shrink-0 space-y-0.5">
+          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+            <NavLink key={to} to={to}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Icon size={14} />
+              <span className="text-sm">{label}</span>
+            </NavLink>
+          ))}
+
+          {player?.is_admin && (
+            <>
+              <div className="my-1 mx-2 border-t border-cyan-500/10" />
+              <NavLink to="/admin"
+                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Settings size={14} />
+                <span className="text-sm">Admin</span>
+              </NavLink>
+            </>
+          )}
+        </nav>
+
+        {/* Ressourcen */}
+        <div className="flex-1">
+          <SidebarResources planet={planet} />
         </div>
-      )}
 
-      {/* Chassis Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filtered.map(chassis => (
-          <ChassisCard key={chassis.id} chassis={chassis} player={player}
-            shipyardLevel={shipyardLevel} onSelect={setDesigner} />
-        ))}
+        {/* Logout */}
+        <div className="p-2 border-t border-cyan-500/10 flex-shrink-0">
+          <button onClick={logout}
+            className="w-full nav-item text-slate-500 hover:text-red-400">
+            <LogOut size={13} />
+            <span className="text-sm">Abmelden</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main ── */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+        {/* Top queue bar */}
+        <TopBar player={player} planet={planet} />
+
+        <main className="flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="h-full p-4">
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
+        </main>
       </div>
 
-      <AnimatePresence>
-        {designer && (
-          <ShipDesigner
-            chassis={designer} planet={planet} player={player}
-            partDefs={partDefs} hasTech={hasTech}
-            onClose={() => setDesigner(null)}
-            onBuilt={() => { refetchShips(); refetchBuildQueue(); }}
-          />
-        )}
-      </AnimatePresence>
-
+      <ChatPanel />
+      <NotificationStack />
     </div>
   )
 }
