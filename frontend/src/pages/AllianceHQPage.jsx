@@ -735,7 +735,7 @@ export default function AllianceHQPage() {
   )
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="max-w-screen-2xl mx-auto space-y-5">
 
       {/* Header */}
       <div className="panel p-5">
@@ -858,7 +858,7 @@ export default function AllianceHQPage() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.15 }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                 {moduleDefs.map((mod) => (
                   <ModuleCard
                     key={mod.id}
