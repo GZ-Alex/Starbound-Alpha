@@ -82,27 +82,54 @@ function StatusBadge({ alliance }) {
   const statusLabel = pct <= 1 ? 'Besiegt' : pct < 50 ? 'Beschädigt' : 'Unbeschadet'
   const statusColor = pct <= 1 ? '#ef4444' : pct < 50 ? '#fbbf24' : '#4ade80'
 
+  const cargoMax  = alliance.hq_cargo_max ?? 200000
+  const hqCargo   = alliance.hq_cargo ?? {}
+  const cargoUsed = Object.values(hqCargo).reduce((a, b) => a + (b || 0), 0)
+  const cargoPct  = cargoMax > 0 ? Math.min(100, Math.round((cargoUsed / cargoMax) * 100)) : 0
+  const cargoColor = cargoPct > 90 ? '#f87171' : cargoPct > 70 ? '#fbbf24' : '#4ade80'
+
   return (
-    <div className="flex items-center gap-4">
-      <div>
-        <p className="text-xs font-mono text-slate-600 mb-1">Status</p>
-        <span className="text-sm font-mono font-semibold" style={{ color: statusColor }}>
-          {statusLabel}
-        </span>
+    <div className="space-y-3">
+      {/* Hülle */}
+      <div className="flex items-center gap-4">
+        <div>
+          <p className="text-xs font-mono text-slate-600 mb-1">Status</p>
+          <span className="text-sm font-mono font-semibold" style={{ color: statusColor }}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-mono text-slate-600 mb-1">
+            Hülle: <span style={{ color: hpColor }}>{fmt(hp)}</span> / {fmt(maxHp)} ({pct}%)
+          </p>
+          <div className="h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: hpColor }} />
+          </div>
+        </div>
+        {alliance.hq_defeated_until && new Date(alliance.hq_defeated_until) > new Date() && (
+          <div className="text-xs font-mono" style={{ color: '#f87171' }}>
+            🛡 Schutz: {etaString(alliance.hq_defeated_until)}
+          </div>
+        )}
       </div>
-      <div className="flex-1">
-        <p className="text-xs font-mono text-slate-600 mb-1">
-          Hülle: <span style={{ color: hpColor }}>{fmt(hp)}</span> / {fmt(maxHp)} ({pct}%)
-        </p>
-        <div className="h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: hpColor }} />
+
+      {/* Laderaum */}
+      <div className="flex items-center gap-4">
+        <div>
+          <p className="text-xs font-mono text-slate-600 mb-1">Laderaum</p>
+          <span className="text-sm font-mono font-semibold" style={{ color: cargoColor }}>
+            {cargoPct}%
+          </span>
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-mono text-slate-600 mb-1">
+            <span style={{ color: cargoColor }}>{fmt(cargoUsed)}</span> / {fmt(cargoMax)} ({cargoPct}%)
+          </p>
+          <div className="h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="h-2 rounded-full transition-all" style={{ width: `${cargoPct}%`, background: cargoColor }} />
+          </div>
         </div>
       </div>
-      {alliance.hq_defeated_until && new Date(alliance.hq_defeated_until) > new Date() && (
-        <div className="text-xs font-mono" style={{ color: '#f87171' }}>
-          🛡 Schutz: {etaString(alliance.hq_defeated_until)}
-        </div>
-      )}
     </div>
   )
 }
@@ -110,14 +137,14 @@ function StatusBadge({ alliance }) {
 // ─── Modul-Bilder & Bonus-Texte ───────────────────────────────────────────────
 
 const MODULE_IMAGES = {
-  herz:             '/Starbound-Alpha/buildings/hq.png',
-  flottenkommando:  '/Starbound-Alpha/buildings/schiffswerft.png',
-  planetenkommando: '/Starbound-Alpha/buildings/verteidigung.png',
-  logistikzentrum:  '/Starbound-Alpha/buildings/werft.png',
-  arbeitergilde:    '/Starbound-Alpha/buildings/universitaet.png',
-  haendlergilde:    '/Starbound-Alpha/buildings/regierung.png',
-  kulturzentrum:    '/Starbound-Alpha/buildings/forschung.png',
-  mechanik:         '/Starbound-Alpha/buildings/bunker.png',
+  herz:             '/Starbound-Alpha/hq-modules/herz.png',
+  flottenkommando:  '/Starbound-Alpha/hq-modules/flottenkommando.png',
+  planetenkommando: '/Starbound-Alpha/hq-modules/planetenkommando.png',
+  logistikzentrum:  '/Starbound-Alpha/hq-modules/logistik.png',
+  arbeitergilde:    '/Starbound-Alpha/hq-modules/arbeitergilde.png',
+  haendlergilde:    '/Starbound-Alpha/hq-modules/händlergilde.png',
+  kulturzentrum:    '/Starbound-Alpha/hq-modules/kultur.png',
+  mechanik:         '/Starbound-Alpha/hq-modules/mechanik.png',
 }
 
 const BONUS_LABELS = {
@@ -250,8 +277,8 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
         {/* Kosten */}
         <div className="rounded overflow-hidden text-xs" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="grid font-mono px-2 py-1 text-slate-600"
-            style={{ gridTemplateColumns: '1fr 60px 70px', background: 'rgba(0,0,0,0.3)' }}>
-            <span>Res.</span>
+            style={{ gridTemplateColumns: '1fr 52px 64px', background: 'rgba(0,0,0,0.3)' }}>
+            <span>Ressource</span>
             <span className="text-right">Kost.</span>
             <span className="text-right">HQ</span>
           </div>
@@ -264,8 +291,8 @@ function ModuleCard({ mod, currentLevel, buildQueue, alliance, planet, hqCargo, 
             const ok = available >= amt
             return (
               <div key={k} className="grid font-mono px-2 py-0.5"
-                style={{ gridTemplateColumns: '1fr 60px 70px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
-                <span className="text-slate-400 truncate">{COST_LABELS[k]}</span>
+                style={{ gridTemplateColumns: '1fr 52px 64px', background: 'rgba(4,13,26,0.5)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                <span className="text-slate-400">{COST_LABELS[k]}</span>
                 <span className="text-right text-slate-300">{fmt(amt)}</span>
                 <span className={`text-right font-bold ${ok ? 'text-slate-500' : 'text-red-400'}`}>
                   {ok ? fmt(available - amt) : `−${fmt(amt - available)}`}
