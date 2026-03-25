@@ -621,31 +621,59 @@ async function processAsteroidTick(log: string[]) {
 
 // ── NPC Chassis-Pool nach Schwierigkeit ──────────────────────────────────────
 
-const NPC_DIFFICULTY: Record<string, string> = {
-  pirat_leicht:    'rookie',
-  pirat_mittel:    'veteran',
-  piraten_verbund: 'elite',
-  haendler_konvoi: 'rookie',
-  npc_streitmacht: 'commander',
-}
+// ─── NPC-Typ-System: 5 Schwierigkeiten × 4 Größen ───────────────────────────
+// Format: {difficulty}_{size}, z.B. 'rookie_staffel', 'commander_armada'
 
-type Difficulty = 'rookie' | 'soldat' | 'veteran' | 'elite' | 'commander'
+type Difficulty = 'rookie' | 'seasoned' | 'veteran' | 'elite' | 'commander'
+type FleetSize  = 'staffel' | 'geschwader' | 'flotte' | 'armada'
 
 const DIFF_STATS: Record<Difficulty, { statMul: number; hpMul: number }> = {
   rookie:    { statMul: 1.0, hpMul: 1.5 },
-  soldat:    { statMul: 1.5, hpMul: 2.0 },
+  seasoned:  { statMul: 1.5, hpMul: 2.0 },
   veteran:   { statMul: 2.0, hpMul: 2.5 },
   elite:     { statMul: 2.5, hpMul: 3.0 },
-  commander: { statMul: 3.0, hpMul: 4.0 },
+  commander: { statMul: 3.0, hpMul: 3.5 },
 }
 
+// Verfügbare Chassis-Klassen pro Schwierigkeit
 const DIFF_CLASSES: Record<Difficulty, { combat: string[]; trade: string[] }> = {
-  rookie:    { combat: ['B','B','C','C'],             trade: ['Z','Z'] },
-  soldat:    { combat: ['B','C','C','D'],             trade: ['Z','A'] },
-  veteran:   { combat: ['C','C','D','D','D'],         trade: ['A','A'] },
-  elite:     { combat: ['C','D','D','D','E','E'],     trade: ['A','A'] },
-  commander: { combat: ['D','D','E','E','E','E'],     trade: ['A','A'] },
+  rookie:    { combat: ['B'],             trade: ['Z'] },
+  seasoned:  { combat: ['B','C'],         trade: ['Z','A'] },
+  veteran:   { combat: ['B','C','D'],     trade: ['A'] },
+  elite:     { combat: ['B','C','D','E'], trade: ['A'] },
+  commander: { combat: ['B','C','D','E'], trade: ['A'] },
 }
+
+// Schiffsanzahl pro Größe: [basis, extraMin, extraMax]
+// Gesamt = basis + rand(extraMin..extraMax) Kampfschiffe + 0-1 Händler
+const SIZE_SHIPS: Record<FleetSize, { base: number; extra: number }> = {
+  staffel:    { base: 3,  extra: 3  },  // 3–6
+  geschwader: { base: 6,  extra: 6  },  // 6–12
+  flotte:     { base: 9,  extra: 9  },  // 9–18
+  armada:     { base: 16, extra: 24 },  // 16–40  (Boss-Flotte)
+}
+
+// NPC-Label für den Scanner (was der Spieler sieht)
+const NPC_LABELS: Record<string, { name: string; difficulty: string }> = {}
+for (const diff of ['rookie','seasoned','veteran','elite','commander'] as Difficulty[]) {
+  for (const size of ['staffel','geschwader','flotte','armada'] as FleetSize[]) {
+    const key = diff + '_' + size
+    const sizeName = size.charAt(0).toUpperCase() + size.slice(1)
+    const diffName = diff.charAt(0).toUpperCase() + diff.slice(1)
+    NPC_LABELS[key] = { name: 'Piraten-' + sizeName, difficulty: diffName }
+  }
+}
+// Händler-Konvoi bleibt separat
+NPC_LABELS['haendler_konvoi'] = { name: 'Händler-Konvoi', difficulty: 'Rookie' }
+
+// Rückwärtskompatibilität: alte npc_types auf neues System mappen
+const NPC_DIFFICULTY: Record<string, string> = {}
+for (const diff of ['rookie','seasoned','veteran','elite','commander']) {
+  for (const size of ['staffel','geschwader','flotte','armada']) {
+    NPC_DIFFICULTY[diff + '_' + size] = diff
+  }
+}
+NPC_DIFFICULTY['haendler_konvoi'] = 'rookie'
 
 const CLASS_SHOTS: Record<string, number> = { Z: 0, A: 0, B: 1, C: 2, D: 3, E: 6 }
 
@@ -692,20 +720,32 @@ function buildNpcShip(chassis: any, diff: Difficulty, isTrader: boolean, idx: nu
 }
 
 function buildNpcFleet(npcType: string, chassisDefs: any[]): NpcShip[] {
-  const diff = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
-  const pool = DIFF_CLASSES[diff]
+  // npcType format: '{difficulty}_{size}' z.B. 'veteran_flotte'
+  const parts    = npcType.split('_')
+  const size     = parts[parts.length - 1] as FleetSize
+  const diff     = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
+  const pool     = DIFF_CLASSES[diff]
+  const sizeConf = SIZE_SHIPS[size] ?? SIZE_SHIPS['staffel']
   const ships: NpcShip[] = []
   let idx = 0
-  const combatCount = Math.min(pool.combat.length, 2 + Math.floor(rand() * Math.min(4, pool.combat.length)))
+
+  // Anzahl Kampfschiffe: basis + rand(0..extra)
+  const combatCount = sizeConf.base + Math.floor(rand() * (sizeConf.extra + 1))
+
   for (let i = 0; i < combatCount; i++) {
-    const cls = pool.combat[Math.floor(rand() * pool.combat.length)]
-    const cands = chassisDefs.filter((c: any) => c.class === cls && !c.id.includes('station'))
+    // Klassen-Pool: höhere Schwierigkeit bevorzugt stärkere Klassen
+    // Gewichtung: letzte Klasse im Pool häufiger bei höheren Levels
+    const clsIdx = Math.floor(Math.pow(rand(), 0.6) * pool.combat.length)
+    const cls = pool.combat[Math.min(clsIdx, pool.combat.length - 1)]
+    const cands = chassisDefs.filter((c: any) => c.class === cls && !c.id.includes('station') && !c.id.includes('probe'))
     if (!cands.length) continue
     ships.push(buildNpcShip(cands[Math.floor(rand() * cands.length)], diff, false, idx++))
   }
-  const tradeCount = pool.trade.length
-  for (let t = 0; t < tradeCount; t++) {
-    const tradeCls = pool.trade[t]
+
+  // Händler: Armada hat immer 1-2, kleinere Flotten manchmal einen
+  const traderChance = size === 'armada' ? 2 : size === 'flotte' ? 1 : rand() < 0.4 ? 1 : 0
+  for (let t = 0; t < traderChance; t++) {
+    const tradeCls = pool.trade[Math.floor(rand() * pool.trade.length)]
     const tradeCands = chassisDefs.filter((c: any) =>
       c.class === tradeCls && c.base_cargo > 0 && !c.id.includes('station') && !c.id.includes('probe')
     )
@@ -1014,10 +1054,21 @@ async function processCombat(log: string[]) {
       if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
 
       const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
-      // Separater Hash für Typ-Bestimmung (anderer Salt = andere Verteilung als Spawn-Check)
-      const typeHash = coordHashJs(fx * 7 + fy, fy * 13 + fz, fz * 17 + fx, timeSlot + 42)
-      const npcType = typeHash < 0.30 ? 'pirat_leicht' : typeHash < 0.65 ? 'pirat_mittel' : typeHash < 0.90 ? 'piraten_verbund' : 'npc_streitmacht'
-      if (fleet.flight_mode === 'bounty' && !npcType.startsWith('pirat')) continue
+      // Schwierigkeit: 30% rookie / 35% seasoned / 25% veteran / 8% elite / 2% commander
+      const diffHash = coordHashJs(fx, fy, fz, timeSlot + 42)
+      const diff = diffHash < 0.30 ? 'rookie'
+                 : diffHash < 0.65 ? 'seasoned'
+                 : diffHash < 0.90 ? 'veteran'
+                 : diffHash < 0.98 ? 'elite'
+                 : 'commander'
+      // Größe: 40% staffel / 30% geschwader / 20% flotte / 10% armada
+      const sizeHash = coordHashJs(fx, fz, fy, timeSlot + 99)
+      const size = sizeHash < 0.40 ? 'staffel'
+                 : sizeHash < 0.70 ? 'geschwader'
+                 : sizeHash < 0.90 ? 'flotte'
+                 : 'armada'
+      const npcType = diff + '_' + size
+      if (fleet.flight_mode === 'bounty' && diff === 'commander' && size === 'armada') continue
 
       const diff = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
       const npcShips = buildNpcFleet(npcType, chassisDefs)
