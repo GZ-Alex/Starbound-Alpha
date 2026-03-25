@@ -252,6 +252,160 @@ function drawExplosion(ctx, x, y, progress) {
   ctx.globalAlpha = 1.0
 }
 
+// ─── Waffentreffer-Effekte ────────────────────────────────────────────────────
+
+function drawHitEffect(ctx, x, y, weaponType, progress) {
+  // progress 0→1, Effekt erscheint bei progress~0, verblasst bis 1
+  const alpha = Math.max(0, 1 - progress * 1.5)
+  if (alpha <= 0) return
+
+  if (weaponType === 'laser') {
+    // Roter Blitz / Leuchten
+    ctx.globalAlpha = alpha * 0.8
+    ctx.shadowColor = '#ff2020'
+    ctx.shadowBlur = 20
+    const r = 12 * (1 - progress * 0.5)
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+    grad.addColorStop(0, '#ffffff')
+    grad.addColorStop(0.3, '#ff4444')
+    grad.addColorStop(1, 'transparent')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+    // Kreuzförmige Blitze
+    ctx.strokeStyle = '#ff6666'
+    ctx.lineWidth = 1.5
+    const len = 10 * (1 - progress)
+    for (let i = 0; i < 4; i++) {
+      const a = (Math.PI / 2) * i
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len)
+      ctx.stroke()
+    }
+    ctx.shadowBlur = 0
+
+  } else if (weaponType === 'ion') {
+    // Blaues elektrisches Knistern
+    ctx.globalAlpha = alpha * 0.9
+    ctx.shadowColor = '#60a5fa'
+    ctx.shadowBlur = 15
+    ctx.strokeStyle = '#93c5fd'
+    ctx.lineWidth = 1
+    // Zufällige Blitzzacken (deterministisch über progress)
+    const seed = Math.floor(progress * 10)
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2 + seed * 0.3
+      const len = 8 + (i * 3) % 7
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      // Zackenlinie
+      const mx2 = x + Math.cos(angle) * len * 0.5 + Math.sin(angle + 1) * 4
+      const my2 = y + Math.sin(angle) * len * 0.5 + Math.cos(angle + 1) * 4
+      ctx.lineTo(mx2, my2)
+      ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len)
+      ctx.stroke()
+    }
+    // Zentrales Leuchten
+    ctx.fillStyle = '#bfdbfe'
+    ctx.beginPath()
+    ctx.arc(x, y, 4 * (1 - progress * 0.8), 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+
+  } else if (weaponType === 'railgun') {
+    // Plasma-Einschlag: orangefarbener Krater-Splash
+    ctx.globalAlpha = alpha * 0.85
+    ctx.shadowColor = '#a855f7'
+    ctx.shadowBlur = 18
+    const r = 14 * (1 - progress * 0.4)
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+    grad.addColorStop(0, '#ffffff')
+    grad.addColorStop(0.2, '#e879f9')
+    grad.addColorStop(0.6, '#7c3aed')
+    grad.addColorStop(1, 'transparent')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+    // Splash-Partikel
+    for (let i = 0; i < 5; i++) {
+      const a = (Math.PI * 2 / 5) * i + progress
+      const sr = r * 1.3
+      ctx.fillStyle = '#c084fc'
+      ctx.globalAlpha = alpha * 0.6
+      ctx.beginPath()
+      ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr, 2, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.shadowBlur = 0
+
+  } else if (weaponType === 'plasma') {
+    // Plasma-Treffer: orange-grüner Energieausbruch
+    ctx.globalAlpha = alpha * 0.85
+    ctx.shadowColor = '#f97316'
+    ctx.shadowBlur = 22
+    const r = 16 * (1 - progress * 0.3)
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+    grad.addColorStop(0, '#ffffff')
+    grad.addColorStop(0.25, '#fde68a')
+    grad.addColorStop(0.6, '#f97316')
+    grad.addColorStop(1, 'transparent')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+    // Plasma-Wellen
+    ctx.strokeStyle = '#fb923c'
+    ctx.lineWidth = 1.5
+    ctx.globalAlpha = alpha * 0.5
+    ctx.beginPath()
+    ctx.arc(x, y, r * 1.4, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.shadowBlur = 0
+
+  } else if (weaponType === 'torpedo') {
+    // Torpedo-Explosion (größer als normale Explosion)
+    const r = progress * 40
+    const alpha2 = 1 - progress
+    ctx.globalAlpha = alpha2
+    ctx.shadowColor = '#fbbf24'
+    ctx.shadowBlur = 25
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+    grad.addColorStop(0, '#ffffff')
+    grad.addColorStop(0.2, '#fde68a')
+    grad.addColorStop(0.5, '#f97316')
+    grad.addColorStop(0.8, '#dc2626')
+    grad.addColorStop(1, 'transparent')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+    // Schockwelle
+    ctx.strokeStyle = '#fbbf24'
+    ctx.lineWidth = 2
+    ctx.globalAlpha = alpha2 * 0.4
+    ctx.beginPath()
+    ctx.arc(x, y, r * 1.5, 0, Math.PI * 2)
+    ctx.stroke()
+    // Funken
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI * 2 / 8) * i + progress
+      const sr = r * 1.2
+      ctx.fillStyle = '#fde68a'
+      ctx.globalAlpha = alpha2 * 0.7
+      ctx.beginPath()
+      ctx.arc(x + Math.cos(a) * sr, y + Math.sin(a) * sr, 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.shadowBlur = 0
+  }
+
+  ctx.globalAlpha = 1.0
+  ctx.shadowBlur = 0
+}
+
 // ─── Simulation-State aufbauen ────────────────────────────────────────────────
 
 function buildSimState(report) {
@@ -318,6 +472,8 @@ export default function BattleAnimation({ report, onClose }) {
   const [currentRound, setCurrentRound] = useState(0)
   const [done, setDone] = useState(false)
   const pausedRef = useRef(false)
+  const [speed, setSpeed] = useState(1)
+  const speedRef = useRef(1)
   const [key, setKey] = useState(0)  // key ändern = Animation neu starten
 
   const W = 700, H = 500
@@ -377,8 +533,10 @@ export default function BattleAnimation({ report, onClose }) {
       if (pausedRef.current) { rafRef.current = requestAnimationFrame(frame); return }
       const st = stateRef.current
       if (!lastTime) lastTime = now
-      const dt = now - lastTime
+      const dt = (now - lastTime) * speedRef.current
       lastTime = now
+      // Virtuelle Zeit: läuft mit Speed-Faktor
+      st.virtualNow = (st.virtualNow ?? now) + dt
 
       // ── Canvas leeren ────────────────────────────────────────────────────────
       ctx.fillStyle = '#040d1a'
@@ -420,8 +578,9 @@ export default function BattleAnimation({ report, onClose }) {
       }
 
       // ── Projektile ────────────────────────────────────────────────────────────
+      const vNow = st.virtualNow
       st.activeProjectiles = st.activeProjectiles.filter(p => {
-        const elapsed = now - p.startTime
+        const elapsed = vNow - p.startTime
         const progress = Math.min(1, elapsed / p.duration)
         const c = WEAPON_COLORS[p.weaponType] ?? WEAPON_COLORS.laser
 
@@ -433,24 +592,43 @@ export default function BattleAnimation({ report, onClose }) {
           drawProjectile(ctx, p.x1, p.y1, p.x2, p.y2, c.beam, c.glow, progress, p.style === 'projectile_fast' ? 3 : 5)
         }
 
-        // Treffer-Explosion wenn angekommen
+        // Treffer-Effekt + HP erst wenn Projektil ankommt (progress >= 0.95)
         if (progress >= 0.95 && !p.exploded) {
           p.exploded = true
-          if (p.hit) st.explosions.push({ x: p.x2, y: p.y2, startTime: now })
+          if (p.hit) {
+            // HP-Update JETZT (bei Ankunft, nicht beim Abschuss)
+            const isPlayerTarget = !!pPositions[p.targetId]
+            if (isPlayerTarget) {
+              st.pHp[p.targetId] = p.targetHpAfter
+              if (p.destroyed) st.pDead.add(p.targetId)
+            } else {
+              st.nHp[p.targetId] = p.targetHpAfter
+              if (p.destroyed) st.nDead.add(p.targetId)
+            }
+            // Waffentreffer-Effekt statt generischer Explosion
+            st.hitEffects = st.hitEffects ?? []
+            st.hitEffects.push({ x: p.x2, y: p.y2, startTime: vNow, weaponType: p.weaponType })
+          }
         }
         // Winkel zurücksetzen wenn Projektil weg
         if (progress >= 1) {
-          // Nur zurücksetzen wenn kein anderes Projektil dieses Schiffs noch fliegt
-          const stillAiming = st.activeProjectiles.some(other => other !== p && other.attackerId === p.attackerId && (now - other.startTime) / other.duration < 1)
+          const stillAiming = st.activeProjectiles.some(other => other !== p && other.attackerId === p.attackerId && (vNow - other.startTime) / other.duration < 1)
           if (!stillAiming) delete st.aimAngles[p.attackerId]
           return false
         }
         return true
       })
 
-      // ── Explosionen ──────────────────────────────────────────────────────────
+      // ── Treffer-Effekte (waffentyp-spezifisch) ───────────────────────────────
+      st.hitEffects = (st.hitEffects ?? []).filter(e => {
+        const progress = Math.min(1, (vNow - e.startTime) / 500)
+        drawHitEffect(ctx, e.x, e.y, e.weaponType, progress)
+        return progress < 1
+      })
+
+      // ── Explosionen (nur noch für Schiff-Zerstörung) ─────────────────────────
       st.explosions = st.explosions.filter(e => {
-        const progress = Math.min(1, (now - e.startTime) / 600)
+        const progress = Math.min(1, (vNow - e.startTime) / 600)
         drawExplosion(ctx, e.x, e.y, progress)
         return progress < 1
       })
@@ -460,9 +638,9 @@ export default function BattleAnimation({ report, onClose }) {
         const round = sim.rounds[st.roundIdx]
         const actions = round?.actions ?? []
 
-        if (!st.roundStartTime) st.roundStartTime = now
+        if (!st.roundStartTime) st.roundStartTime = vNow
 
-        const elapsed = now - st.roundStartTime
+        const elapsed = vNow - st.roundStartTime
         const nextActionTime = st.actionIdx * ACTION_INTERVAL
 
         if (st.actionIdx < actions.length && elapsed >= nextActionTime) {
@@ -472,8 +650,6 @@ export default function BattleAnimation({ report, onClose }) {
           const style   = WEAPON_STYLE[action.weaponType] ?? 'beam'
           const dur     = PROJECTILE_DURATION[style] ?? 400
 
-          // Winkel vom Angreifer zum Ziel berechnen
-          // atan2 gibt Winkel von (fromPos) zu (toPos), +π/2 weil Sprites nach oben zeigen (Norden=0)
           const dx = toPos.x - fromPos.x
           const dy = toPos.y - fromPos.y
           const aimAngle = Math.atan2(dy, dx) + Math.PI / 2
@@ -483,22 +659,14 @@ export default function BattleAnimation({ report, onClose }) {
             x1: fromPos.x, y1: fromPos.y,
             x2: toPos.x,   y2: toPos.y,
             weaponType: action.weaponType ?? 'laser',
-            style, duration: dur, startTime: now,
+            style, duration: dur, startTime: vNow,
             hit: action.hit, exploded: false,
             attackerId: action.attackerId,
+            // HP wird erst bei Projektil-Ankunft angewendet
+            targetId: action.targetId,
+            targetHpAfter: action.targetHpAfter,
+            destroyed: action.destroyed,
           })
-
-          // HP nach Treffer sofort aktualisieren
-          if (action.hit) {
-            const isPlayerTarget = !!pPositions[action.targetId]
-            if (isPlayerTarget) {
-              st.pHp[action.targetId] = action.targetHpAfter
-              if (action.destroyed) st.pDead.add(action.targetId)
-            } else {
-              st.nHp[action.targetId] = action.targetHpAfter
-              if (action.destroyed) st.nDead.add(action.targetId)
-            }
-          }
 
           st.actionIdx++
         }
@@ -506,7 +674,7 @@ export default function BattleAnimation({ report, onClose }) {
         // Runde beendet wenn alle Aktionen durch und Projektile weg
         const roundDone = st.actionIdx >= actions.length && st.activeProjectiles.length === 0 && st.explosions.length === 0
         if (roundDone) {
-          const sinceLastAction = now - (st.roundStartTime + (actions.length) * ACTION_INTERVAL)
+          const sinceLastAction = vNow - (st.roundStartTime + (actions.length) * ACTION_INTERVAL)
           if (sinceLastAction >= ROUND_PAUSE) {
             st.roundIdx++
             st.actionIdx = 0
@@ -583,7 +751,7 @@ export default function BattleAnimation({ report, onClose }) {
 
       {/* Controls — nur sichtbar wenn gestartet */}
       {started && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={togglePause}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
             style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}>
@@ -592,8 +760,22 @@ export default function BattleAnimation({ report, onClose }) {
           <span className="text-xs font-mono text-slate-600">
             Runde {Math.min(currentRound + 1, totalRounds)} / {totalRounds}
           </span>
+          {/* Geschwindigkeit */}
+          <div className="flex items-center gap-1 ml-auto">
+            {[0.5, 1, 2, 3, 4].map(s => (
+              <button key={s} onClick={() => { setSpeed(s); speedRef.current = s }}
+                className="px-2 py-1 rounded text-xs font-mono transition-all"
+                style={{
+                  background: speed === s ? 'rgba(34,211,238,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${speed === s ? 'rgba(34,211,238,0.3)' : 'rgba(255,255,255,0.07)'}`,
+                  color: speed === s ? '#22d3ee' : '#475569',
+                }}>
+                {s}×
+              </button>
+            ))}
+          </div>
           <button onClick={handleRestart}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono ml-auto transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#64748b' }}>
             <RotateCcw size={11} /> Nochmal
           </button>
