@@ -148,8 +148,8 @@ export const useGameStore = create((set, get) => ({
     for (const s of skills ?? []) skillMap[s.skill_key] = s.points_spent
     set({ playerSkills: skillMap })
 
-    // mineProductionBonus berechnen
-    get().recalcMineBonus(race, skillMap, techEffectsMap, techLevelMap)
+    // mineProductionBonus berechnen (techEffects aus Store nach refreshTechnologies)
+    get().recalcMineBonus(race, skillMap, null, null)
 
     // scanRanges berechnen
     get().recalcScanRanges()
