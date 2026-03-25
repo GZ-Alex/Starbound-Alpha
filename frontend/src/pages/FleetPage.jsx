@@ -6,6 +6,10 @@ import { useGameStore } from '@/store/gameStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import {
+  Navigation, ChevronLeft, Package, Shield, Zap,
+  Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store,
+  Bookmark, BookmarkPlus, Trash2, Send, Users, Globe, Info
+} from 'lucide-react'
 
 // ─── NPC Meta Helper ──────────────────────────────────────────────────────────
 const DIFF_COLORS_FLEET = {
@@ -15,8 +19,8 @@ const DIFF_COLORS_FLEET = {
   elite:     '#f87171',
   commander: '#e879f9',
 }
-const SIZE_LABELS_FLEET  = { staffel: 'Staffel', geschwader: 'Geschwader', flotte: 'Flotte', armada: 'Armada' }
-const DIFF_LABELS_FLEET  = { rookie: 'Rookie', seasoned: 'Seasoned', veteran: 'Veteran', elite: 'Elite', commander: 'Commander' }
+const SIZE_LABELS_FLEET = { staffel: 'Staffel', geschwader: 'Geschwader', flotte: 'Flotte', armada: 'Armada' }
+const DIFF_LABELS_FLEET = { rookie: 'Rookie', seasoned: 'Seasoned', veteran: 'Veteran', elite: 'Elite', commander: 'Commander' }
 
 function getNpcMetaFleet(npcType, difficulty, size) {
   if (npcType === 'haendler_konvoi') return { label: 'Händler-Konvoi', color: '#34d399', threat: 'Passiv' }
@@ -28,11 +32,6 @@ function getNpcMetaFleet(npcType, difficulty, size) {
     threat: DIFF_LABELS_FLEET[diff] ?? diff ?? '?',
   }
 }
-
-  Navigation, ChevronLeft, Package, Shield, Zap,
-  Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store,
-  Bookmark, BookmarkPlus, Trash2, Send, Users, Globe, Info
-} from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
