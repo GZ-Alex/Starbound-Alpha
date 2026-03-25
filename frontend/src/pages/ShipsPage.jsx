@@ -409,7 +409,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       </div>
 
       {/* Name */}
-      <div className="w-36 flex-shrink-0">
+      <div className="w-32 flex-shrink-0">
         <p className="font-mono text-sm font-semibold text-slate-200 truncate">
           {ship.name ?? design?.name ?? 'Unbenannt'}
         </p>
@@ -452,7 +452,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       </div>
 
       {/* Position */}
-      <div className="w-32 flex-shrink-0 text-center">
+      <div className="w-24 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Position</p>
         <p className="text-xs font-mono text-slate-400">
           {fleet ? coords(fleet) : (ship.x != null ? `${ship.x}/${ship.y}/${ship.z}` : (planet ? `${planet.x ?? 0}/${planet.y ?? 0}/${planet.z ?? 0}` : '—'))}
@@ -460,7 +460,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       </div>
 
       {/* HP */}
-      <div className="w-28 flex-shrink-0">
+      <div className="w-24 flex-shrink-0">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-mono text-slate-600">HP</span>
           <span className="text-xs font-mono font-semibold" style={{ color: hpColor }}>
@@ -509,9 +509,9 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
             outline: 'none',
           }}
           title="Automatisch fliehen wenn HP unter diesem Wert">
-          <option value={0}>Nie fliehen</option>
-          {[10,20,30,40,50,60,70,80,90].map(v => (
-            <option key={v} value={v}>Flucht bei {v}%</option>
+          <option value={0}>Nie</option>
+          {[10,20,30,40,50,60,70,80,90,100].map(v => (
+            <option key={v} value={v}>{v}%</option>
           ))}
         </select>
         <button onClick={() => onDetail(ship)}
@@ -689,16 +689,16 @@ export default function ShipsPage() {
               <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#22d3ee' }} />}
           </button>
           <div className="w-9 flex-shrink-0" />
-          <div className="w-36 flex-shrink-0">
+          <div className="w-32 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Name / Chassis</span>
           </div>
           <div className="w-36 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flotte</span>
           </div>
-          <div className="w-32 flex-shrink-0 text-center">
+          <div className="w-24 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Position</span>
           </div>
-          <div className="w-28 flex-shrink-0">
+          <div className="w-24 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Hülle</span>
           </div>
           <div className="w-20 flex-shrink-0 text-center">
@@ -710,9 +710,10 @@ export default function ShipsPage() {
           <div className="w-20 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Laderaum</span>
           </div>
-          <div className="ml-auto flex-shrink-0">
+          <div className="flex-shrink-0 w-24">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flucht</span>
           </div>
+          <div className="flex-shrink-0 w-8" />
         </div>
       )}
 
