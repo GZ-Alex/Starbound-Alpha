@@ -1323,7 +1323,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
         {ships.length === 0 ? (
           <p className="text-sm font-mono text-slate-700">Keine Schiffe in dieser Flotte. Weise Schiffe auf der Schiffe-Seite zu.</p>
         ) : (
-          {/* Spalten-Header */}
+          <>{/* Spalten-Header */}
           <div className="flex items-center gap-3 px-3 pb-1 mb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="w-8 flex-shrink-0" />
             <div className="w-36 flex-shrink-0">
@@ -1434,6 +1434,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
               )
             })}
           </div>
+          </>
         )}
       </div>
 
