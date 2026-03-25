@@ -1015,7 +1015,7 @@ async function processCombat(log: string[]) {
 
       const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
       const typeHash = coordHashJs(fx, fy, fz, timeSlot + 1)
-      const npcType = typeHash < 0.70 ? 'pirat_leicht' : typeHash < 0.90 ? 'pirat_mittel' : 'piraten_verbund'
+      const npcType = typeHash < 0.30 ? 'pirat_leicht' : typeHash < 0.65 ? 'pirat_mittel' : typeHash < 0.90 ? 'piraten_verbund' : 'npc_streitmacht'
       if (fleet.flight_mode === 'bounty' && !npcType.startsWith('pirat')) continue
 
       const diff = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
