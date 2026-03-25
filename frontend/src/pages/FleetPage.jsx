@@ -911,7 +911,7 @@ function FleetShipDetailPopup({ ship, chassisDefs, onClose }) {
             <p className="text-xs font-mono text-slate-500">{chassis?.name} · Klasse {chassis?.class}</p>
             <p className="text-xs font-mono mt-0.5" style={{ color: '#475569' }}>
               XP: {ship.experience ?? 0} · Level {ship.ship_level ?? 1}
-              {ship.auto_retreat_at > 0 ? ` · Flucht bei ${ship.auto_retreat_at}%` : ' · Flucht deaktiviert'}
+              {ship.auto_retreat_at > 0 ? ` · Flucht bei ${ship.auto_retreat_at}%` : ''}
             </p>
           </div>
           <button onClick={onClose} className="flex-shrink-0 p-1.5 rounded hover:bg-white/5"
@@ -1313,7 +1313,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                 }}>
                 <option value="" disabled>Setzen…</option>
                 <option value={0}>Nie</option>
-                {[10,20,30,40,50,60,70,80,90].map(v => (
+                {[10,20,30,40,50,60,70,80,90,100].map(v => (
                   <option key={v} value={v}>{v}%</option>
                 ))}
               </select>
@@ -1418,9 +1418,9 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                         color: (ship.auto_retreat_at ?? 0) > 0 ? '#fbbf24' : '#334155',
                         outline: 'none',
                       }}>
-                      <option value={0}>Nie fliehen</option>
-                      {[10,20,30,40,50,60,70,80,90].map(v => (
-                        <option key={v} value={v}>Flucht bei {v}%</option>
+                      <option value={0}>Nie</option>
+                      {[10,20,30,40,50,60,70,80,90,100].map(v => (
+                        <option key={v} value={v}>{v}%</option>
                       ))}
                     </select>
                     <button onClick={() => setSelectedShip(ship)}
@@ -1628,6 +1628,16 @@ function FleetRow({ fleet, ships, onClick }) {
       <div className="w-24 flex-shrink-0">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Laderaum</p>
         <p className="text-xs font-mono text-slate-300">{fmt(cargoUsed)} / {fmt(cargoMax)}</p>
+      </div>
+
+      <div className="w-24 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-mono text-slate-600">Status</p>
+          <p className="text-xs font-mono font-semibold" style={{ color: hpColor }}>{hpPct}%</p>
+        </div>
+        <div className="w-full h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="h-1 rounded-full" style={{ width: `${hpPct}%`, background: hpColor }} />
+        </div>
       </div>
 
       <div className="flex-shrink-0 ml-auto text-right min-w-[60px]">
