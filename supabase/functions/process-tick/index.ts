@@ -760,6 +760,43 @@ const WEAPON_TARGET_CLASS: Record<string, string> = {
   A: 'A', B: 'B', C: 'C', D: 'D', E: 'E',
 }
 
+// Ziel-Prioritätskette pro Klasse: welche Klassen werden bevorzugt angegriffen
+const TARGET_PRIORITY: Record<string, string[]> = {
+  A: ['E','D','C','B','A'],  // Händler/Sonde: flieht, greift stärkste Bedrohung an wenn muss
+  B: ['B','C','A','D','E'],  // Leichte Kampfschiffe: bevorzugen Gleichklasse
+  C: ['C','B','D','A','E'],
+  D: ['D','C','E','B','A'],
+  E: ['E','D','C','B','A'],  // Schwere: fokussieren stärkste Ziele zuerst
+  Z: ['B','C','D','E','A'],  // Z-Klasse (Frachter): letzter Fallback
+}
+
+// Zielauswahl nach Angriffskraft — stärkste Bedrohung zuerst, leichte Zufallskomponente
+function pickTarget<T extends { chassisClass: string; attack: number; hp: number; id: string }>(
+  attacker: { chassisClass: string },
+  alive: T[]
+): T {
+  const priority = TARGET_PRIORITY[attacker.chassisClass] ?? TARGET_PRIORITY['B']
+
+  // Erste Prioritätsklasse mit lebenden Zielen finden
+  for (const cls of priority) {
+    const group = alive.filter(s => s.chassisClass === cls)
+    if (!group.length) continue
+
+    // Sortieren nach Angriffskraft (stärkste Bedrohung zuerst)
+    group.sort((a, b) => b.attack - a.attack)
+
+    // Leichte Zufallskomponente: 30% Chance auf zweitstärkstes wenn nahe beieinander
+    if (group.length > 1 && rand() < 0.30) {
+      const diff = group[0].attack - group[1].attack
+      if (diff < 20) return group[1]
+    }
+    return group[0]
+  }
+
+  // Absoluter Fallback: irgendein lebendes Ziel
+  return alive[Math.floor(rand() * alive.length)]
+}
+
 // Waffenart → weaponType string (aus Part-ID erkannt)
 function weaponTypeFromId(id: string): string {
   if (id.startsWith('laser'))      return 'laser'
@@ -785,7 +822,7 @@ interface Weapon {
 
 interface CombatShip {
   id: string; name: string; chassisClass: string
-  hp: number; maxHp: number; defense: number
+  hp: number; maxHp: number; attack: number; defense: number
   speed: number; maneuver: number
   weapons: Weapon[]    // Eine Einheit pro Waffe (inkl. Duplikate)
   autoRetreatAt: number; isPlayer: true
@@ -843,6 +880,7 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
   return {
     id: ship.id, name: ship.name ?? d?.name ?? 'Schiff', chassisClass: cls,
     hp: ship.current_hp, maxHp: ship.max_hp,
+    attack:   d?.total_attack   ?? chassis?.base_attack   ?? 0,
     defense:  d?.total_defense  ?? chassis?.base_defense  ?? 5,
     speed:    d?.total_speed    ?? chassis?.base_speed    ?? 20,
     maneuver: d?.total_maneuver ?? chassis?.base_maneuver ?? 20,
@@ -883,8 +921,7 @@ function simulateOneRound(
       for (const weapon of attacker.weapons) {
         const alive = nShips.filter(s => s.hp > 0)
         if (!alive.length) break
-        const pref = alive.filter(s => s.chassisClass === weapon.targetClass)
-        const target = pref.length ? pref[Math.floor(rand() * pref.length)] : alive[Math.floor(rand() * alive.length)]
+        const target = pickTarget(attacker, alive)
         const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
         const damage = hit ? calcDamage(weapon.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
@@ -904,8 +941,7 @@ function simulateOneRound(
       for (let shot = 0; shot < attacker.shots; shot++) {
         const stillAlive = pShips.filter(s => s.hp > 0)
         if (!stillAlive.length) break
-        const pref = stillAlive.filter(s => s.chassisClass === attacker.targetClass)
-        const target = pref.length ? pref[Math.floor(rand() * pref.length)] : stillAlive[Math.floor(rand() * stillAlive.length)]
+        const target = pickTarget(attacker, stillAlive)
         const hit = rand() < hitChance(attacker.maneuver, target.maneuver)
         const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
