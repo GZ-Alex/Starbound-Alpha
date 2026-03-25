@@ -6,6 +6,29 @@ import { useGameStore } from '@/store/gameStore'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import {
+
+// ─── NPC Meta Helper ──────────────────────────────────────────────────────────
+const DIFF_COLORS_FLEET = {
+  rookie:    '#4ade80',
+  seasoned:  '#86efac',
+  veteran:   '#fb923c',
+  elite:     '#f87171',
+  commander: '#e879f9',
+}
+const SIZE_LABELS_FLEET  = { staffel: 'Staffel', geschwader: 'Geschwader', flotte: 'Flotte', armada: 'Armada' }
+const DIFF_LABELS_FLEET  = { rookie: 'Rookie', seasoned: 'Seasoned', veteran: 'Veteran', elite: 'Elite', commander: 'Commander' }
+
+function getNpcMetaFleet(npcType, difficulty, size) {
+  if (npcType === 'haendler_konvoi') return { label: 'Händler-Konvoi', color: '#34d399', threat: 'Passiv' }
+  const diff = difficulty ?? npcType?.split('_')[0]
+  const sz   = size ?? npcType?.split('_')[1]
+  return {
+    label: 'Piraten-' + (SIZE_LABELS_FLEET[sz] ?? sz ?? '?'),
+    color: DIFF_COLORS_FLEET[diff] ?? '#f87171',
+    threat: DIFF_LABELS_FLEET[diff] ?? diff ?? '?',
+  }
+}
+
   Navigation, ChevronLeft, Package, Shield, Zap,
   Clock, Crosshair, AlertTriangle, Plus, X, Gem, Store,
   Bookmark, BookmarkPlus, Trash2, Send, Users, Globe, Info
@@ -789,8 +812,7 @@ function FleetScanArea({ fleet, ships, onSetTarget }) {
 
             let icon, label, subLabel, color
             if (isNpc) {
-              const npcType = o.data?.npc_type ?? 'pirat_leicht'
-              const meta = NPC_COLORS[npcType] ?? { label: npcType, color: '#f87171', threat: '?' }
+              const meta = getNpcMetaFleet(o.data?.npc_type, o.data?.difficulty, o.data?.size)
               icon     = <AlertTriangle size={11} style={{ color: meta.color, flexShrink: 0 }} />
               label    = meta.label
               subLabel = `${o.data?.ship_count ?? '?'} Schiffe · ${meta.threat}`
@@ -1302,58 +1324,113 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
         {ships.length === 0 ? (
           <p className="text-sm font-mono text-slate-700">Keine Schiffe in dieser Flotte. Weise Schiffe auf der Schiffe-Seite zu.</p>
         ) : (
+          {/* Spalten-Header */}
+          <div className="flex items-center gap-3 px-3 pb-1 mb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="w-8 flex-shrink-0" />
+            <div className="w-36 flex-shrink-0">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Name / Chassis</span>
+            </div>
+            <div className="w-32 flex-shrink-0 text-center">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Position</span>
+            </div>
+            <div className="w-28 flex-shrink-0">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Hülle</span>
+            </div>
+            <div className="w-20 flex-shrink-0 text-center">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Angriff</span>
+            </div>
+            <div className="w-20 flex-shrink-0 text-center">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Geschw.</span>
+            </div>
+            <div className="w-20 flex-shrink-0 text-center">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Laderaum</span>
+            </div>
+            <div className="ml-auto flex-shrink-0">
+              <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flucht</span>
+            </div>
+          </div>
           <div className="space-y-2">
             {ships.map(ship => {
-              const chassis = chassisDefs.find(c => c.id === ship.ship_designs?.chassis_id)
+              const chassis = chassisDefs.find(ch => ch.id === ship.ship_designs?.chassis_id)
               const hpPct = ship.max_hp > 0 ? Math.round((ship.current_hp / ship.max_hp) * 100) : 0
               const hpCol = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
               const imgSrc = chassis?.image_key ? `/Starbound-Alpha/ships/${chassis.image_key}.png` : null
+              const pos = fleet.x != null ? `${fleet.x}/${fleet.y}/${fleet.z}` : '—'
               return (
                 <div key={ship.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  {/* Icon */}
                   <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded"
                     style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.1)' }}>
                     {imgSrc
                       ? <img src={imgSrc} alt={chassis?.name} className="w-full h-full object-contain p-0.5" />
-                      : <span className="text-slate-600">🚀</span>}
+                      : <span className="text-slate-600 text-sm">🚀</span>}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono text-slate-200 truncate">{ship.name ?? ship.ship_designs?.name ?? '—'}</p>
-                    <p className="text-xs font-mono text-slate-600">{chassis?.name ?? '—'}</p>
+                  {/* Name / Chassis */}
+                  <div className="w-36 flex-shrink-0">
+                    <p className="font-mono text-sm font-semibold text-slate-200 truncate">
+                      {ship.name ?? ship.ship_designs?.name ?? '—'}
+                    </p>
+                    <p className="text-xs font-mono text-slate-600 truncate">{chassis?.name ?? '—'}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <span className="text-xs font-mono" style={{ color: hpCol }}>{hpPct}%</span>
-                    <div className="w-12 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  {/* Position */}
+                  <div className="w-32 flex-shrink-0 text-center">
+                    <p className="text-xs font-mono text-slate-400">{pos}</p>
+                  </div>
+                  {/* HP */}
+                  <div className="w-28 flex-shrink-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-mono text-slate-600">HP</span>
+                      <span className="text-xs font-mono font-semibold" style={{ color: hpCol }}>
+                        {fmt(ship.current_hp)} / {fmt(ship.max_hp)}
+                      </span>
+                    </div>
+                    <div className="w-full h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
                       <div className="h-1 rounded-full" style={{ width: `${hpPct}%`, background: hpCol }} />
                     </div>
                   </div>
-                  <div className="text-xs font-mono text-slate-500 w-20 text-right flex-shrink-0">
-                    <Zap size={9} className="inline mr-1" />
-                    {fmt(ship.ship_designs?.total_speed)}
+                  {/* Angriff */}
+                  <div className="w-20 flex-shrink-0 text-center">
+                    <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
+                      {fmt(ship.ship_designs?.total_attack ?? 0)}
+                    </p>
                   </div>
-                  {/* Flucht-Dropdown */}
-                  <select
-                    value={ship.auto_retreat_at ?? 0}
-                    onChange={e => handleRetreatChange(ship.id, parseInt(e.target.value))}
-                    className="text-xs font-mono rounded px-1.5 py-1 flex-shrink-0"
-                    style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      color: (ship.auto_retreat_at ?? 0) > 0 ? '#fbbf24' : '#334155',
-                      outline: 'none',
-                    }}>
-                    <option value={0}>Nie</option>
-                    {[10,20,30,40,50,60,70,80,90].map(v => (
-                      <option key={v} value={v}>{v}%</option>
-                    ))}
-                  </select>
-                  {/* Detail-Button */}
-                  <button onClick={() => setSelectedShip(ship)}
-                    className="flex-shrink-0 p-1.5 rounded-full transition-all hover:bg-white/5"
-                    style={{ border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}
-                    title="Details">
-                    <Info size={13} />
-                  </button>
+                  {/* Geschw. */}
+                  <div className="w-20 flex-shrink-0 text-center">
+                    <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
+                      {fmt(ship.ship_designs?.total_speed ?? 0)}
+                    </p>
+                  </div>
+                  {/* Laderaum */}
+                  <div className="w-20 flex-shrink-0 text-center">
+                    <p className="text-xs font-mono text-slate-300">
+                      {fmt(ship.ship_designs?.total_cargo ?? 0)}
+                    </p>
+                  </div>
+                  {/* Flucht + Detail */}
+                  <div className="ml-auto flex-shrink-0 flex items-center gap-1.5">
+                    <select
+                      value={ship.auto_retreat_at ?? 0}
+                      onChange={e => handleRetreatChange(ship.id, parseInt(e.target.value))}
+                      className="text-xs font-mono rounded px-1.5 py-1"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: (ship.auto_retreat_at ?? 0) > 0 ? '#fbbf24' : '#334155',
+                        outline: 'none',
+                      }}>
+                      <option value={0}>Nie fliehen</option>
+                      {[10,20,30,40,50,60,70,80,90].map(v => (
+                        <option key={v} value={v}>Flucht bei {v}%</option>
+                      ))}
+                    </select>
+                    <button onClick={() => setSelectedShip(ship)}
+                      className="p-1.5 rounded-full transition-all hover:bg-white/5"
+                      style={{ border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}
+                      title="Details">
+                      <Info size={13} />
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -1530,9 +1607,16 @@ function FleetRow({ fleet, ships, onClick }) {
       </div>
 
       <div className="w-32 flex-shrink-0">
-        <p className="text-xs font-mono text-slate-600 mb-0.5">Ziel</p>
+        <p className="text-xs font-mono text-slate-600 mb-0.5">Ziel / Status</p>
         <p className="text-xs font-mono" style={{ color: isTransit ? '#22d3ee' : '#475569' }}>
-          {coords(fleet.target_x, fleet.target_y, fleet.target_z)}
+          {isTransit ? coords(fleet.target_x, fleet.target_y, fleet.target_z) : mission.label}
+        </p>
+      </div>
+
+      <div className="w-20 flex-shrink-0 text-center">
+        <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
+        <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
+          {fmt(ships.reduce((s, sh) => s + (sh.ship_designs?.total_attack ?? 0), 0))}
         </p>
       </div>
 
@@ -1542,18 +1626,8 @@ function FleetRow({ fleet, ships, onClick }) {
       </div>
 
       <div className="w-24 flex-shrink-0">
-        <p className="text-xs font-mono text-slate-600 mb-0.5">Ladung</p>
+        <p className="text-xs font-mono text-slate-600 mb-0.5">Laderaum</p>
         <p className="text-xs font-mono text-slate-300">{fmt(cargoUsed)} / {fmt(cargoMax)}</p>
-      </div>
-
-      <div className="w-24 flex-shrink-0">
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-mono text-slate-600">Status</p>
-          <p className="text-xs font-mono font-semibold" style={{ color: hpColor }}>{hpPct}%</p>
-        </div>
-        <div className="w-full h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-1 rounded-full" style={{ width: `${hpPct}%`, background: hpColor }} />
-        </div>
       </div>
 
       <div className="flex-shrink-0 ml-auto text-right min-w-[60px]">
