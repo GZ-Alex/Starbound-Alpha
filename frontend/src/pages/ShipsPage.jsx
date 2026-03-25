@@ -451,6 +451,14 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
         )}
       </div>
 
+      {/* Position */}
+      <div className="w-32 flex-shrink-0 text-center">
+        <p className="text-xs font-mono text-slate-600 mb-0.5">Position</p>
+        <p className="text-xs font-mono text-slate-400">
+          {fleet ? coords(fleet) : (ship.x != null ? `${ship.x}/${ship.y}/${ship.z}` : (planet ? `${planet.x ?? 0}/${planet.y ?? 0}/${planet.z ?? 0}` : '—'))}
+        </p>
+      </div>
+
       {/* HP */}
       <div className="w-28 flex-shrink-0">
         <div className="flex items-center justify-between mb-1">
@@ -465,17 +473,11 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
         </div>
       </div>
 
-      {/* Laderaum */}
-      <div className="w-24 flex-shrink-0 text-center">
-        <p className="text-xs font-mono text-slate-600 mb-0.5">Laderaum</p>
-        <p className="text-xs font-mono font-semibold text-slate-300">{fmt(design?.total_cargo)}</p>
-      </div>
-
-      {/* Position */}
-      <div className="w-32 flex-shrink-0 text-center">
-        <p className="text-xs font-mono text-slate-600 mb-0.5">Position</p>
-        <p className="text-xs font-mono text-slate-400">
-          {fleet ? coords(fleet) : (ship.x != null ? `${ship.x}/${ship.y}/${ship.z}` : (planet ? `${planet.x ?? 0}/${planet.y ?? 0}/${planet.z ?? 0}` : '—'))}
+      {/* Angriff */}
+      <div className="w-20 flex-shrink-0 text-center">
+        <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
+        <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
+          {fmt(design?.total_attack ?? 0)}
         </p>
       </div>
 
@@ -485,6 +487,12 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
         <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
           {fmt(design?.total_speed)}
         </p>
+      </div>
+
+      {/* Laderaum */}
+      <div className="w-20 flex-shrink-0 text-center">
+        <p className="text-xs font-mono text-slate-600 mb-0.5">Laderaum</p>
+        <p className="text-xs font-mono font-semibold text-slate-300">{fmt(design?.total_cargo)}</p>
       </div>
 
       {/* Flucht bei % + Detail Button */}
@@ -687,17 +695,20 @@ export default function ShipsPage() {
           <div className="w-36 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flotte</span>
           </div>
-          <div className="w-28 flex-shrink-0">
-            <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Hülle</span>
-          </div>
-          <div className="w-24 flex-shrink-0 text-center">
-            <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Laderaum</span>
-          </div>
           <div className="w-32 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Position</span>
           </div>
+          <div className="w-28 flex-shrink-0">
+            <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Hülle</span>
+          </div>
+          <div className="w-20 flex-shrink-0 text-center">
+            <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Angriff</span>
+          </div>
           <div className="w-20 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Geschw.</span>
+          </div>
+          <div className="w-20 flex-shrink-0 text-center">
+            <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Laderaum</span>
           </div>
           <div className="ml-auto flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flucht</span>
