@@ -22,11 +22,42 @@ const ASTEROID_TYPE_META = {
   ore:      { label: 'Erzasteroid',            color: '#f472b6' },
   rich:     { label: 'Reichhaltiger Asteroid', color: '#fbbf24' },
 }
-const NPC_TYPE_META = {
-  pirat_leicht:    { label: 'Piraten-Patrouille', color: '#f87171', threat: 'Leicht' },
-  pirat_mittel:    { label: 'Piratengruppe',       color: '#fb923c', threat: 'Mittel' },
-  piraten_verbund: { label: 'Piraten-Verbund',     color: '#ef4444', threat: 'Schwer' },
-  haendler_konvoi: { label: 'Händler-Konvoi',      color: '#34d399', threat: 'Passiv' },
+// Farben pro Schwierigkeit
+const DIFF_COLORS = {
+  rookie:    '#4ade80',
+  seasoned:  '#86efac',
+  veteran:   '#fb923c',
+  elite:     '#f87171',
+  commander: '#e879f9',
+}
+// Größen-Labels
+const SIZE_LABELS = {
+  staffel:    'Staffel',
+  geschwader: 'Geschwader',
+  flotte:     'Flotte',
+  armada:     'Armada',
+}
+// Schwierigkeits-Labels
+const DIFF_LABELS = {
+  rookie:    'Rookie',
+  seasoned:  'Seasoned',
+  veteran:   'Veteran',
+  elite:     'Elite',
+  commander: 'Commander',
+}
+
+function getNpcMeta(npcType, difficulty, size) {
+  if (npcType === 'haendler_konvoi') return { label: 'Händler-Konvoi', color: '#34d399', threat: 'Passiv' }
+  const diff = difficulty ?? (npcType?.split('_')[0])
+  const sz   = size ?? (npcType?.split('_')[1])
+  const color = DIFF_COLORS[diff] ?? '#f87171'
+  const sizeLabel = SIZE_LABELS[sz] ?? sz ?? '?'
+  const diffLabel = DIFF_LABELS[diff] ?? diff ?? '?'
+  return {
+    label: `Piraten-${sizeLabel}`,
+    color,
+    threat: diffLabel,
+  }
 }
 
 function ScanEntry({ icon: Icon, iconColor, title, subtitle, distance, badge, wip }) {
@@ -214,7 +245,7 @@ export default function ScanPage() {
               )
             }
             if (entry.obj_type === 'npc') {
-              const meta = NPC_TYPE_META[d.npc_type] ?? { label: d.npc_type, color: '#f87171', threat: '?' }
+              const meta = getNpcMeta(d.npc_type, d.difficulty, d.size)
               return (
                 <ScanEntry key={entry.obj_id} icon={AlertTriangle} iconColor={meta.color}
                   title={meta.label}
