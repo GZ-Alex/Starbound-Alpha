@@ -1013,7 +1013,7 @@ async function processCombat(log: string[]) {
       if (gx !== fx || gy !== fy || gz !== fz) continue // Flotte nicht auf NPC-Gitter
       if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
 
-      const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
+      const timeSlot = Math.floor(Date.now() / 1000 / (5 * 60))  // Alle 5 Min. rotieren (Test)
       const typeHash = coordHashJs(fx, fy, fz, timeSlot + 1)
       const npcType = typeHash < 0.30 ? 'pirat_leicht' : typeHash < 0.65 ? 'pirat_mittel' : typeHash < 0.90 ? 'piraten_verbund' : 'npc_streitmacht'
       if (fleet.flight_mode === 'bounty' && !npcType.startsWith('pirat')) continue
