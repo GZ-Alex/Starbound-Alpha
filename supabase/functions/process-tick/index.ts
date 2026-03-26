@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.007 — 26. März 2026
+// Version: 0.008 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1269,6 +1269,7 @@ async function processCombat(log: string[]) {
     }
 
     // Eine Runde simulieren
+    console.log(`combat_round: battle=${battle.id} round=${battle.round} pShips=${pShips.length} nShips=${nShips.length}`)
     const roundResult = simulateOneRound(pShips, nShips)
     const roundLog = {
       round: battle.round + 1,
@@ -1294,11 +1295,13 @@ async function processCombat(log: string[]) {
       battlesResolved++
     } else {
       // Kampf läuft weiter
-      await supabase.from('active_battles').update({
+      const { error: updateErr } = await supabase.from('active_battles').update({
         player_ships: pShips, npc_ships: nShips,
         round: battle.round + 1, rounds_log: newRoundsLog,
         last_tick_at: new Date().toISOString(),
       }).eq('id', battle.id)
+      if (updateErr) console.error(`battle_update_err: ${updateErr.message}`)
+      else console.log(`battle_round_done: id=${battle.id} round=${battle.round + 1} actions=${roundResult.actions.length}`)
     }
   }
 
