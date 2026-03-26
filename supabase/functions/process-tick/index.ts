@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.012 — 26. März 2026
+// Version: 0.013 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1138,9 +1138,11 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[], tech
 
   const boostedMaxHp = Math.round(rawHp * tb.hp)
 
-    // Wenn current_hp extrem niedrig im Verhältnis zu max (< 1%) → alter Bug, volle HP nehmen
-    const hpRatio = boostedMaxHp > 0 ? ship.current_hp / boostedMaxHp : 0
-    const startHp = (hpRatio < 0.01 && boostedMaxHp > 10) ? boostedMaxHp : Math.min(ship.current_hp, boostedMaxHp)
+    // current_hp in DB = ungebooste HP. Kampf startet immer mit vollen geboosten HP.
+    // Wenn Schiff beschädigt: Verhältnis erhalten (z.B. 80% HP bleibt 80% von boostedMax)
+    const rawMax = ship.max_hp ?? 0
+    const hpRatio = rawMax > 0 ? Math.min(ship.current_hp, rawMax) / rawMax : 1.0
+    const startHp = Math.round(boostedMaxHp * hpRatio)
 
   return {
     id: ship.id, name: ship.name ?? d?.name ?? 'Schiff', chassisClass: cls,
