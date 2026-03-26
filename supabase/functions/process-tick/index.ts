@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.013 — 26. März 2026
+// Version: 0.014 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1072,9 +1072,7 @@ interface CombatShip {
   autoRetreatAt: number; isPlayer: true
 }
 
-function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[], techBonuses?: { attack: number; defense: number; hp: number; militarySpeed: number; civilianSpeed: number; cargo: number }): CombatShip {
-  const tb = techBonuses ?? { attack: 1.0, defense: 1.0, hp: 1.0, militarySpeed: 1.0, civilianSpeed: 1.0, cargo: 1.0 }
-  const isMilitary = !['Z'].includes(ship.ship_designs?.chassis?.class ?? 'B')
+function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): CombatShip {
   const d = ship.ship_designs
   const chassis = chassisDefs.find((c: any) => c.id === d?.chassis_id)
   const cls = chassis?.class ?? 'B'
@@ -1123,35 +1121,18 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[], tech
     })
   }
 
-  const rawAtk  = d?.total_attack   ?? chassis?.base_attack   ?? 0
-  const rawDef  = d?.total_defense  ?? chassis?.base_defense  ?? 5
-  const rawHp   = ship.max_hp ?? 0
-  const rawSpd  = d?.total_speed    ?? chassis?.base_speed    ?? 20
-  const rawMnv  = d?.total_maneuver ?? chassis?.base_maneuver ?? 20
-  const speedMul = cls === 'Z' ? tb.civilianSpeed : tb.militarySpeed
-
-  // Waffen-Angriff auch mit Tech-Bonus skalieren
-  const boostedWeapons = weapons.map(w => ({
-    ...w,
-    attack: Math.round(w.attack * tb.attack),
-  }))
-
-  const boostedMaxHp = Math.round(rawHp * tb.hp)
-
-    // current_hp in DB = ungebooste HP. Kampf startet immer mit vollen geboosten HP.
-    // Wenn Schiff beschädigt: Verhältnis erhalten (z.B. 80% HP bleibt 80% von boostedMax)
-    const rawMax = ship.max_hp ?? 0
-    const hpRatio = rawMax > 0 ? Math.min(ship.current_hp, rawMax) / rawMax : 1.0
-    const startHp = Math.round(boostedMaxHp * hpRatio)
+  // total_* in ship_designs enthält bereits gebooste Werte (via recalc_ship_stats_for_player)
+  const maxHp = ship.max_hp ?? d?.total_hp ?? 0
+  const curHp = Math.min(ship.current_hp ?? maxHp, maxHp)
 
   return {
     id: ship.id, name: ship.name ?? d?.name ?? 'Schiff', chassisClass: cls,
-    hp: startHp, maxHp: boostedMaxHp,
-    attack:   Math.round(rawAtk * tb.attack),
-    defense:  Math.round(rawDef * tb.defense),
-    speed:    Math.round(rawSpd * speedMul),
-    maneuver: Math.round(rawMnv * tb.attack * 0.3 + rawMnv * 0.7),  // leichter Manöver-Bonus
-    weapons:  boostedWeapons,
+    hp: curHp, maxHp,
+    attack:   d?.total_attack   ?? chassis?.base_attack   ?? 0,
+    defense:  d?.total_defense  ?? chassis?.base_defense  ?? 5,
+    speed:    d?.total_speed    ?? chassis?.base_speed     ?? 20,
+    maneuver: d?.total_maneuver ?? chassis?.base_maneuver  ?? 20,
+    weapons,
     autoRetreatAt: ship.auto_retreat_at ?? 0,
     isPlayer: true,
   }
@@ -1261,9 +1242,6 @@ async function processCombat(log: string[]) {
   let battlesResolved = 0
 
   for (const battle of activeBattles ?? []) {
-    // Tech-Boni für diesen Spieler laden
-    const playerId = battle.fleets?.player_id
-    const techBonuses = playerId ? await loadPlayerTechBonuses(playerId) : undefined
     const pShips: CombatShip[] = battle.player_ships
     const nShips: NpcShip[]    = battle.npc_ships
     const alivePlayers = pShips.filter((s: CombatShip) => s.hp > 0)
@@ -1415,7 +1393,7 @@ async function processCombat(log: string[]) {
 
     // Neuen Kampf starten
     const newBattleTechBonuses = fleet.player_id ? await loadPlayerTechBonuses(fleet.player_id) : undefined
-    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs, partDefs, newBattleTechBonuses))
+    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs, partDefs))
     await supabase.from('active_battles').insert({
       player_id: fleet.player_id, fleet_id: fleet.id,
       npc_fleet_id: npcFleetRow.id, x: fx, y: fy, z: fz,
