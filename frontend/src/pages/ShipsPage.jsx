@@ -249,11 +249,11 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
 
   const stats = [
     { label: 'Hülle',       value: `${ship.current_hp} / ${ship.max_hp}`, color: '#4ade80' },
-    { label: 'Angriff',     value: fmt(design?.total_attack),              color: '#f87171' },
-    { label: 'Verteidigung',value: fmt(design?.total_defense),             color: '#38bdf8' },
-    { label: 'Geschw.',     value: fmt(design?.total_speed),               color: '#fbbf24' },
+    { label: 'Angriff',     value: fmt(Math.round((design?.total_attack ?? 0) * (stm?.attack ?? 1))),    color: '#f87171' },
+    { label: 'Verteidigung',value: fmt(Math.round((design?.total_defense ?? 0) * (stm?.defense ?? 1))), color: '#38bdf8' },
+    { label: 'Geschw.',     value: fmt(Math.round((design?.total_speed ?? 0) * (chassis?.class === 'Z' ? (stm?.civilianSpeed ?? 1) : (stm?.militarySpeed ?? 1)))), color: '#fbbf24' },
     { label: 'Manöver',     value: fmt(design?.total_maneuver),            color: '#a78bfa' },
-    { label: 'Laderaum',    value: fmt(design?.total_cargo),               color: '#34d399' },
+    { label: 'Laderaum',    value: fmt(Math.round((design?.total_cargo ?? 0) * (stm?.cargo ?? 1))),      color: '#34d399' },
     { label: 'Scanweite',   value: fmt(design?.total_scan_range),          color: '#67e8f9' },
     { label: 'Zellen',      value: `${design?.total_cells_used ?? 0}`,     color: '#94a3b8' },
   ]
@@ -369,7 +369,10 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClo
 
 // ─── Ship Row ─────────────────────────────────────────────────────────────────
 
-function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onToggleSelect, onDetail, onAssign, onGoToFleet, onRetreatChange }) {
+function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onToggleSelect, onDetail, onAssign, onGoToFleet, onRetreatChange, stm }) {
+  const m = stm ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
+  const isZClass = chassis?.class === 'Z'
+  const spdMul = isZClass ? m.civilianSpeed : m.militarySpeed
   const imgSrc = chassis?.image_key
     ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
@@ -409,7 +412,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       </div>
 
       {/* Name */}
-      <div className="w-32 flex-shrink-0">
+      <div className="w-36 flex-shrink-0">
         <p className="font-mono text-sm font-semibold text-slate-200 truncate">
           {ship.name ?? design?.name ?? 'Unbenannt'}
         </p>
@@ -452,7 +455,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       </div>
 
       {/* Position */}
-      <div className="w-24 flex-shrink-0 text-center">
+      <div className="w-32 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Position</p>
         <p className="text-xs font-mono text-slate-400">
           {fleet ? coords(fleet) : (ship.x != null ? `${ship.x}/${ship.y}/${ship.z}` : (planet ? `${planet.x ?? 0}/${planet.y ?? 0}/${planet.z ?? 0}` : '—'))}
@@ -460,11 +463,11 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       </div>
 
       {/* HP */}
-      <div className="w-24 flex-shrink-0">
+      <div className="w-28 flex-shrink-0">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-mono text-slate-600">HP</span>
           <span className="text-xs font-mono font-semibold" style={{ color: hpColor }}>
-            {fmt(ship.current_hp)} / {fmt(ship.max_hp)}
+            {fmt(ship.current_hp)} / {fmt(Math.round((ship.max_hp ?? 0) * m.hp))}
           </span>
         </div>
         <div className="w-full h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
@@ -477,7 +480,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-          {fmt(design?.total_attack ?? 0)}
+          {fmt(Math.round((design?.total_attack ?? 0) * m.attack))}
         </p>
       </div>
 
@@ -485,14 +488,14 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Geschw.</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
-          {fmt(design?.total_speed)}
+          {fmt(Math.round((design?.total_speed ?? 0) * spdMul))}
         </p>
       </div>
 
       {/* Laderaum */}
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Laderaum</p>
-        <p className="text-xs font-mono font-semibold text-slate-300">{fmt(design?.total_cargo)}</p>
+        <p className="text-xs font-mono font-semibold text-slate-300">{fmt(Math.round((design?.total_cargo ?? 0) * m.cargo))}</p>
       </div>
 
       {/* Flucht bei % + Detail Button */}
@@ -509,9 +512,9 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
             outline: 'none',
           }}
           title="Automatisch fliehen wenn HP unter diesem Wert">
-          <option value={0}>Nie</option>
-          {[10,20,30,40,50,60,70,80,90,100].map(v => (
-            <option key={v} value={v}>{v}%</option>
+          <option value={0}>Nie fliehen</option>
+          {[10,20,30,40,50,60,70,80,90].map(v => (
+            <option key={v} value={v}>Flucht bei {v}%</option>
           ))}
         </select>
         <button onClick={() => onDetail(ship)}
@@ -528,7 +531,8 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
 // ─── ShipsPage ────────────────────────────────────────────────────────────────
 
 export default function ShipsPage() {
-  const { player, planet } = useGameStore()
+  const { player, planet, shipTechMultipliers } = useGameStore()
+  const stm = shipTechMultipliers ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedShip, setSelectedShip] = useState(null)
@@ -689,16 +693,16 @@ export default function ShipsPage() {
               <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#22d3ee' }} />}
           </button>
           <div className="w-9 flex-shrink-0" />
-          <div className="w-32 flex-shrink-0">
+          <div className="w-36 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Name / Chassis</span>
           </div>
           <div className="w-36 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flotte</span>
           </div>
-          <div className="w-24 flex-shrink-0 text-center">
+          <div className="w-32 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Position</span>
           </div>
-          <div className="w-24 flex-shrink-0">
+          <div className="w-28 flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Hülle</span>
           </div>
           <div className="w-20 flex-shrink-0 text-center">
@@ -710,10 +714,9 @@ export default function ShipsPage() {
           <div className="w-20 flex-shrink-0 text-center">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Laderaum</span>
           </div>
-          <div className="flex-shrink-0 w-24">
+          <div className="ml-auto flex-shrink-0">
             <span className="text-xs font-mono text-slate-600 uppercase tracking-widest">Flucht</span>
           </div>
-          <div className="flex-shrink-0 w-8" />
         </div>
       )}
 
@@ -741,6 +744,7 @@ export default function ShipsPage() {
               onAssign={handleBulkAssign}
               onGoToFleet={handleGoToFleet}
               onRetreatChange={handleRetreatChange}
+              stm={stm}
             />
           ))}
         </div>
