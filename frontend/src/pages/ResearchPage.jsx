@@ -873,6 +873,7 @@ export default function ResearchPage() {
             .update({ level: newLevel }).eq('player_id', player.id).eq('tech_id', entry.tech_id)
           else await supabase.from('player_technologies')
             .insert({ player_id: player.id, tech_id: entry.tech_id, level: 1 })
+          await supabase.rpc('recalc_ship_stats_for_player', { p_player_id: player.id })
         }
         await supabase.from('research_queue').delete().eq('id', entry.id)
         handleRefresh()
