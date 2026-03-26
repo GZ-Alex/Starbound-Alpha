@@ -437,15 +437,26 @@ export const useGameStore = create((set, get) => ({
     if (sk.civilian_speed) civSpdBonus += (sk.civilian_speed ?? 0) * 0.04
     if (sk.ship_cargo)     cargoBonus  += (sk.ship_cargo     ?? 0) * 0.03
 
-    // Tech-Boni
+    // Tech-Boni — DB-Keys: attack, defense, hp, cargo, speed, military_speed, civilian_speed
+    // Werte < 1 = Dezimal-Prozent, >= 1 = absolute Zahl (flat, nicht für Multiplikator relevant)
     for (const [techId, effects] of Object.entries(te)) {
       const lvl = tl[techId] ?? 1
-      if (effects?.ship_attack_bonus)    atkBonus    += effects.ship_attack_bonus    * lvl
-      if (effects?.ship_defense_bonus)   defBonus    += effects.ship_defense_bonus   * lvl
-      if (effects?.ship_hp_bonus)        hpBonus     += effects.ship_hp_bonus        * lvl
-      if (effects?.military_speed_bonus) milSpdBonus += effects.military_speed_bonus * lvl
-      if (effects?.civilian_speed_bonus) civSpdBonus += effects.civilian_speed_bonus * lvl
-      if (effects?.ship_cargo_bonus)     cargoBonus  += effects.ship_cargo_bonus     * lvl
+      const e = effects ?? {}
+      // Prozent-Boni (< 1): direkt als Multiplikator-Bonus verwenden
+      if (e.attack         && Math.abs(e.attack)         < 1) atkBonus    += e.attack         * lvl
+      if (e.defense        && Math.abs(e.defense)        < 1) defBonus    += e.defense        * lvl
+      if (e.hp             && Math.abs(e.hp)             < 1) hpBonus     += e.hp             * lvl
+      if (e.cargo          && Math.abs(e.cargo)          < 1) cargoBonus  += e.cargo          * lvl
+      if (e.speed          && Math.abs(e.speed)          < 1) { milSpdBonus += e.speed * lvl; civSpdBonus += e.speed * lvl }
+      if (e.military_speed && Math.abs(e.military_speed) < 1) milSpdBonus += e.military_speed * lvl
+      if (e.civilian_speed && Math.abs(e.civilian_speed) < 1) civSpdBonus += e.civilian_speed * lvl
+      // ship_*_bonus Keys (aus Rassen-Tabelle-Format, falls in Tech-Effects)
+      if (e.ship_attack_bonus    && Math.abs(e.ship_attack_bonus)    < 1) atkBonus    += e.ship_attack_bonus    * lvl
+      if (e.ship_defense_bonus   && Math.abs(e.ship_defense_bonus)   < 1) defBonus    += e.ship_defense_bonus   * lvl
+      if (e.ship_hp_bonus        && Math.abs(e.ship_hp_bonus)        < 1) hpBonus     += e.ship_hp_bonus        * lvl
+      if (e.military_speed_bonus && Math.abs(e.military_speed_bonus) < 1) milSpdBonus += e.military_speed_bonus * lvl
+      if (e.civilian_speed_bonus && Math.abs(e.civilian_speed_bonus) < 1) civSpdBonus += e.civilian_speed_bonus * lvl
+      if (e.ship_cargo_bonus     && Math.abs(e.ship_cargo_bonus)     < 1) cargoBonus  += e.ship_cargo_bonus     * lvl
     }
 
     set({
