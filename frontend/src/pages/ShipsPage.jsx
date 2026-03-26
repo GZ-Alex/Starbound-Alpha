@@ -467,7 +467,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-mono text-slate-600">HP</span>
           <span className="text-xs font-mono font-semibold" style={{ color: hpColor }}>
-            {fmt(ship.current_hp)} / {fmt(Math.round((ship.max_hp ?? 0) * m.hp))}
+            {fmt(ship.current_hp)} / {fmt(ship.max_hp ?? 0)}
           </span>
         </div>
         <div className="w-full h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
@@ -480,7 +480,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-          {fmt(Math.round((design?.total_attack ?? 0) * m.attack))}
+          {fmt(design?.total_attack ?? 0)}
         </p>
       </div>
 
@@ -495,7 +495,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       {/* Laderaum */}
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Laderaum</p>
-        <p className="text-xs font-mono font-semibold text-slate-300">{fmt(Math.round((design?.total_cargo ?? 0) * m.cargo))}</p>
+        <p className="text-xs font-mono font-semibold text-slate-300">{fmt(design?.total_cargo ?? 0)}</p>
       </div>
 
       {/* Flucht bei % + Detail Button */}
