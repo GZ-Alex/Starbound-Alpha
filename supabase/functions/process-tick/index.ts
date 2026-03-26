@@ -1,3 +1,10 @@
+// process-tick/index.ts
+// Version: 0.003 — 26. März 2026
+// Änderungen v0.003:
+// - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
+// - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
+// - Tech-Boni: loadPlayerTechBonuses liest korrekte DB-Keys
+// - NPC-Spawn: processNpcSpawns schreibt Positionen in npc_combat_fleets
 // supabase/functions/process-tick/index.ts
 // Tick-System — läuft alle 30 Sekunden via externem Cron (Upstash/Render)
 // Reihenfolge: Lock → Counter → Ressourcen → Build → Research → Schiffsbau → Flotten
@@ -1162,7 +1169,16 @@ function simulateOneRound(
   for (const fighter of order) {
     if (fighter.side === 'player') {
       const attacker = pShips.find(s => s.id === fighter.id)
-      if (!attacker || attacker.hp <= 0 || attacker.weapons.length === 0) continue
+      if (!attacker || attacker.hp <= 0) continue
+
+      // Flucht-Check VOR dem Schießen — Schiff flieht ODER schießt, nicht beides
+      if (attacker.autoRetreatAt > 0 && (attacker.hp / attacker.maxHp) * 100 <= attacker.autoRetreatAt) {
+        fleeingPlayerIds.push(attacker.id)
+        attacker.hp = -(attacker.hp)  // negativ = geflohen, Betrag = echte HP
+        continue  // kein Schuss diese Runde
+      }
+
+      if (attacker.weapons.length === 0) continue
       if (!nShips.filter(s => s.hp > 0).length) break
 
       // Jede Waffe schießt separat auf ihr bevorzugtes Ziel
@@ -1203,15 +1219,7 @@ function simulateOneRound(
     }
   }
 
-  // Auto-Retreat prüfen nach der Runde
-  for (const ps of pShips) {
-    if (ps.hp > 0 && ps.autoRetreatAt > 0) {
-      if ((ps.hp / ps.maxHp) * 100 <= ps.autoRetreatAt) {
-        ps.hp = -1 // geflohen
-        fleeingPlayerIds.push(ps.id)
-      }
-    }
-  }
+  // Flucht bereits VOR dem Schießen verarbeitet (shoot-or-flee Regel)
 
   return {
     actions,
@@ -1393,8 +1401,9 @@ async function finalizeBattle(
 
   // Spieler-Schiff HP aktualisieren
   for (const ps of pShips) {
-    if (ps.hp === -1) {
-      await supabase.from('ships').update({ current_hp: 1 }).eq('id', ps.id) // geflohen
+    if (ps.hp < 0) {
+      const actualHp = Math.abs(ps.hp)  // negativer Wert = echte HP beim Fliehen
+      await supabase.from('ships').update({ current_hp: actualHp }).eq('id', ps.id) // geflohen
     } else if (ps.hp <= 0) {
       await supabase.from('wrecks').insert({ x: battle.x, y: battle.y, z: battle.z, resources: {} })
       await supabase.from('ships').delete().eq('id', ps.id) // zerstört
