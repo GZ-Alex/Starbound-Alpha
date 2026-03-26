@@ -111,8 +111,7 @@ function fleetSpeed(ships) {
 function CreateFleetModal({ onClose, onCreate }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
-  const { player, planet, shipTechMultipliers } = useGameStore()
-  const stm = shipTechMultipliers ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
+  const { player, planet } = useGameStore()
 
   const handleCreate = async () => {
     if (!name.trim() || saving) return
@@ -1114,7 +1113,8 @@ function FlightModeModal({ currentMode, onClose, onSelect }) {
 
 // ─── Fleet Detail View ────────────────────────────────────────────────────────
 
-function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, onBack, onDissolved }) {
+function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, onBack, onDissolved, stm }) {
+  const m = stm ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
   const hpPct = fleetHpPct(ships)
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
@@ -1392,19 +1392,19 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                   {/* Angriff */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-                      {fmt(Math.round((ship.ship_designs?.total_attack ?? 0) * stm.attack))}
+                      {fmt(Math.round((ship.ship_designs?.total_attack ?? 0) * m.attack))}
                     </p>
                   </div>
                   {/* Geschw. */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
-                      {fmt(Math.round((ship.ship_designs?.total_speed ?? 0) * stm.militarySpeed))}
+                      {fmt(Math.round((ship.ship_designs?.total_speed ?? 0) * m.militarySpeed))}
                     </p>
                   </div>
                   {/* Laderaum */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono text-slate-300">
-                      {fmt(Math.round((ship.ship_designs?.total_cargo ?? 0) * stm.cargo))}
+                      {fmt(Math.round((ship.ship_designs?.total_cargo ?? 0) * m.cargo))}
                     </p>
                   </div>
                   {/* Flucht + Detail */}
@@ -1760,6 +1760,7 @@ export default function FleetPage() {
         planet={planet}
         onBack={() => setSelectedFleet(null)}
         onDissolved={handleDissolved}
+        stm={stm}
       />
     )
   }
