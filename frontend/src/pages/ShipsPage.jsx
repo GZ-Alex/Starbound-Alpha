@@ -485,7 +485,7 @@ function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onT
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Geschw.</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
-          {fmt(Math.round((design?.total_speed ?? 0) * spdMul))}
+          {fmt(design?.total_speed ?? 0)}
         </p>
       </div>
 
