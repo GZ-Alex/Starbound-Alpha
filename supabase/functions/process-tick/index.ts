@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.004 — 26. März 2026
+// Version: 0.005 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1383,6 +1383,8 @@ async function processCombat(log: string[]) {
       npcFleetRow = inserted
     }
 
+    if (!npcFleetRow) continue  // Insert fehlgeschlagen oder kein NPC an dieser Pos
+
     // NPC-Schiffe generieren falls noch nicht vorhanden (ships = [])
     if (!npcFleetRow.ships?.length) {
       const npcShips = buildNpcFleet(npcFleetRow.npc_type, chassisDefs)
@@ -1392,7 +1394,7 @@ async function processCombat(log: string[]) {
       npcFleetRow = { ...npcFleetRow, ships: npcShips }
     }
 
-    if (!npcFleetRow) continue
+    if (!npcFleetRow.ships?.length) continue  // buildNpcFleet hat nichts geliefert
 
     const npcShips: NpcShip[] = npcFleetRow.ships
     const aliveNpcs = npcShips.filter((s: NpcShip) => s.hp > 0)
