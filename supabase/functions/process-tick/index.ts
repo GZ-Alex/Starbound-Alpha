@@ -12,6 +12,15 @@ const supabase = createClient(
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
 const PROD_PER_MINE_PER_TICK = 50 / 60  // 50/h bei 60 Ticks/h
+const NPC_SLOT_SECONDS = 5 * 60  // 5 Min. (Test) — auf 4 * 3600 für Live setzen
+
+// Hilfsfunktion: timeSlot + expires_at Ende des aktuellen Slots
+function getNpcTimeSlot(): { slot: number; expiresAt: Date } {
+  const now = Date.now() / 1000
+  const slot = Math.floor(now / NPC_SLOT_SECONDS)
+  const slotEnd = (slot + 1) * NPC_SLOT_SECONDS * 1000  // ms
+  return { slot, expiresAt: new Date(slotEnd) }
+}
 
 const MINEABLE = [
   'titan','silizium','helium','nahrung','wasser',
@@ -621,101 +630,130 @@ async function processHQRepair(log: string[]) {
 
 async function processNpcSpawns(log: string[]) {
   const npcStep = 15
-  const timeSlot = Math.floor(Date.now() / 1000 / (5 * 60))  // 5 Min. (Test)
+  const { slot: timeSlot, expiresAt: slotExpiry } = getNpcTimeSlot()
 
-  // Alle bestehenden NPC-Positionen laden (für Mindestabstand-Check)
+  // Bestehende NPC-Positionen für diesen Slot (nicht überschreiben)
   const { data: existing } = await supabase
     .from('npc_combat_fleets')
-    .select('x, y, z')
+    .select('x, y, z, time_slot')
     .gt('expires_at', new Date().toISOString())
 
-  const existingSet = new Set((existing ?? []).map((e: any) => `${e.x},${e.y},${e.z}`))
+  const existingSet = new Set(
+    (existing ?? [])
+      .filter((e: any) => e.time_slot === timeSlot)
+      .map((e: any) => `${e.x},${e.y},${e.z}`)
+  )
 
-  // Alle anfliegenden Spielerflotten laden — für Reservierungen
+  // Cooldowns laden
+  const { data: cooldowns } = await supabase
+    .from('npc_spawn_cooldowns')
+    .select('x, y, z')
+    .gt('blocked_until', new Date().toISOString())
+  const cooldownSet = new Set((cooldowns ?? []).map((c: any) => `${c.x},${c.y},${c.z}`))
+
+  // Alle NPC-Gitterpunkte im Universum berechnen und in DB schreiben
+  // Universum: 0-500 x, 0-500 y, 0-200 z
+  const toInsert: any[] = []
+
+  for (let gx = 0; gx <= 500; gx += npcStep) {
+    for (let gy = 0; gy <= 500; gy += npcStep) {
+      for (let gz = 0; gz <= 200; gz += npcStep) {
+        // Modulo-Check: 10% der Gitterpunkte sind NPC-Positionen
+        if (((gx/npcStep + gy/npcStep * 37 + gz/npcStep * 1009) % 10) !== 0) continue
+        const key = `${gx},${gy},${gz}`
+        if (existingSet.has(key)) continue   // bereits in DB für diesen Slot
+        if (cooldownSet.has(key)) continue   // Cooldown aktiv
+
+        // NPC-Typ via deterministischem Hash (djb2 — konsistent über Ticks)
+        const djb2 = (s: string) => {
+          let v = 5381
+          for (let i = 0; i < s.length; i++) v = ((v << 5) + v + s.charCodeAt(i)) & 0xFFFFFFFF
+          return (v >>> 0) / 4294967295.0
+        }
+
+        const npcH  = djb2(`${gx},${gy},${gz},${timeSlot}`)
+        const sizeH = djb2(`${gx},${gz},${gy},${timeSlot + 99}`)
+        const cntH  = djb2(`${gy},${gx},${gz},${timeSlot + 1}`)
+
+        const npcDiff = npcH < 0.30 ? 'rookie'
+                      : npcH < 0.65 ? 'seasoned'
+                      : npcH < 0.90 ? 'veteran'
+                      : npcH < 0.98 ? 'elite'
+                      : 'commander'
+        const npcSize = sizeH < 0.40 ? 'staffel'
+                      : sizeH < 0.70 ? 'geschwader'
+                      : sizeH < 0.90 ? 'flotte'
+                      : 'armada'
+        const sizeConf = SIZE_SHIPS[npcSize as FleetSize] ?? SIZE_SHIPS['staffel']
+        const shipCount = sizeConf.base + Math.floor(cntH * sizeConf.extra)
+        const npcShips = buildNpcFleet(`${npcDiff}_${npcSize}`, [])  // Schiffe ohne chassisDefs für Vorschau
+
+        toInsert.push({
+          npc_type:   `${npcDiff}_${npcSize}`,
+          difficulty: npcDiff,
+          x: gx, y: gy, z: gz,
+          ships:      [],  // Schiffe werden beim Kampfstart generiert
+          ship_count: shipCount,
+          time_slot:  timeSlot,
+          expires_at: slotExpiry.toISOString(),
+        })
+      }
+    }
+  }
+
+  // In Batches einfügen (max 500 pro Insert)
+  let spawned = 0
+  for (let i = 0; i < toInsert.length; i += 500) {
+    const batch = toInsert.slice(i, i + 500)
+    const { error } = await supabase.from('npc_combat_fleets').insert(batch)
+    if (!error) spawned += batch.length
+    else log.push(`npc_spawn_err: ${error.message}`)
+  }
+
+  if (spawned > 0) log.push(`npc_spawned=${spawned}`)
+
+  // Reservierungen für anfliegende Flotten anlegen
   const { data: transitFleets } = await supabase
     .from('fleets')
-    .select('id, target_x, target_y, target_z, arrive_at, player_id')
+    .select('id, target_x, target_y, target_z, arrive_at')
     .eq('is_in_transit', true)
     .not('target_x', 'is', null)
 
-  // Bereits reservierte Positionen
-  const { data: existingReservations } = await supabase
-    .from('npc_spawn_reservations')
-    .select('x, y, z, fleet_id')
-  const reservedFleetIds = new Set((existingReservations ?? []).map((r: any) => r.fleet_id))
+  const { data: existingRes } = await supabase
+    .from('npc_spawn_reservations').select('fleet_id')
+  const reservedFleetIds = new Set((existingRes ?? []).map((r: any) => r.fleet_id))
 
-  let spawned = 0, reserved = 0
-
-  // Für jede anfliegende Flotte prüfen ob Zielkoord. einen NPC haben sollte
+  let reserved = 0
   for (const fleet of transitFleets ?? []) {
-    if (!fleet.target_x || !fleet.target_y) continue
-    if (reservedFleetIds.has(fleet.id)) continue  // schon reserviert
-
+    if (reservedFleetIds.has(fleet.id)) continue
     const fx = fleet.target_x, fy = fleet.target_y, fz = fleet.target_z ?? 0
-
-    // Prüf ob Ziel auf NPC-Gitter liegt (gleiche Logik wie get_scan_objects)
     const gx = Math.round(fx / npcStep) * npcStep
     const gy = Math.round(fy / npcStep) * npcStep
     const gz = Math.round(fz / npcStep) * npcStep
     if (gx !== fx || gy !== fy || gz !== fz) continue
     if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
+    if (cooldownSet.has(`${fx},${fy},${fz}`)) continue
 
-    // Cooldown prüfen
-    const { data: cooldown } = await supabase
-      .from('npc_spawn_cooldowns')
-      .select('blocked_until')
+    // ship_count aus npc_combat_fleets lesen (wurde oben geschrieben)
+    const { data: npcRow } = await supabase
+      .from('npc_combat_fleets')
+      .select('npc_type, difficulty, ship_count')
       .eq('x', fx).eq('y', fy).eq('z', fz)
+      .eq('time_slot', timeSlot)
       .maybeSingle()
-    if (cooldown) continue
 
-    // NPC-Typ berechnen (gleiche MD5-Logik wie get_scan_objects)
-    const hashInput = `${fx},${fy},${fz},${timeSlot}`
-    // Vereinfachter deterministischer Hash (Deno-kompatibel ohne crypto)
-    let h = 0
-    for (let i = 0; i < hashInput.length; i++) {
-      h = ((h << 5) - h + hashInput.charCodeAt(i)) & 0x7FFFFFFF
-    }
-    const npcH = h / 2147483647.0
+    if (!npcRow) continue  // kein NPC an dieser Position
 
-    const npcDiff = npcH < 0.30 ? 'rookie'
-                  : npcH < 0.65 ? 'seasoned'
-                  : npcH < 0.90 ? 'veteran'
-                  : npcH < 0.98 ? 'elite'
-                  : 'commander'
-
-    let sH = 0
-    const sInput = `${fx},${fz},${fy},${timeSlot+99}`
-    for (let i = 0; i < sInput.length; i++) {
-      sH = ((sH << 5) - sH + sInput.charCodeAt(i)) & 0x7FFFFFFF
-    }
-    const sizeH = sH / 2147483647.0
-    const npcSize = sizeH < 0.40 ? 'staffel'
-                  : sizeH < 0.70 ? 'geschwader'
-                  : sizeH < 0.90 ? 'flotte'
-                  : 'armada'
-
-    const npcType = npcDiff + '_' + npcSize
-
-    // ship_count berechnen und fixieren (gleiche Logik wie get_scan_objects)
-    const sizeConf = SIZE_SHIPS[npcSize as FleetSize] ?? SIZE_SHIPS['staffel']
-    let cH = 0
-    const cInput = `${fy},${fx},${fz},${timeSlot+1}`
-    for (let i = 0; i < cInput.length; i++) {
-      cH = ((cH << 5) - cH + cInput.charCodeAt(i)) & 0x7FFFFFFF
-    }
-    const shipCount = sizeConf.base + Math.floor((cH / 2147483647.0) * sizeConf.extra)
-
-    // Reservierung anlegen — hält bis Ankunft + 30 Min Puffer
     const arriveAt = fleet.arrive_at ? new Date(fleet.arrive_at) : new Date()
-    const expiresAt = new Date(arriveAt.getTime() + 30 * 60 * 1000)
+    const resExpiry = new Date(Math.max(arriveAt.getTime() + 30 * 60 * 1000, slotExpiry.getTime()))
 
     await supabase.from('npc_spawn_reservations').insert({
       x: fx, y: fy, z: fz,
-      npc_type: npcType,
-      difficulty: npcDiff,
-      ship_count: shipCount,
-      fleet_id: fleet.id,
-      expires_at: expiresAt.toISOString(),
+      npc_type:   npcRow.npc_type,
+      difficulty: npcRow.difficulty,
+      ship_count: npcRow.ship_count,
+      fleet_id:   fleet.id,
+      expires_at: resExpiry.toISOString(),
     })
     reserved++
   }
@@ -1294,7 +1332,7 @@ async function processCombat(log: string[]) {
       .limit(1)
       .maybeSingle()
 
-    // Wenn keine persistente NPC-Flotte: Cooldown prüfen
+    // Kein NPC-Eintrag → kein Kampf (processNpcSpawns hat alle Positionen vorbelegt)
     if (!npcFleetRow) {
       const { data: cooldown } = await supabase
         .from('npc_spawn_cooldowns')
@@ -1302,44 +1340,16 @@ async function processCombat(log: string[]) {
         .eq('x', fx).eq('y', fy).eq('z', fz)
         .maybeSingle()
       if (cooldown) continue
+      continue  // Keine NPC-Flotte in DB → kein Kampf
     }
 
-    // Wenn keine persistente NPC-Flotte: Modulo-Check ob NPC hier sein sollte
-    // Gleiche Logik wie get_scan_objects: jeder 10. Gitterpunkt (npc_step=15)
-    if (!npcFleetRow) {
-      const npcStep = 15
-      // Koordinaten müssen auf Gitter ausgerichtet sein
-      const gx = Math.round(fx / npcStep) * npcStep
-      const gy = Math.round(fy / npcStep) * npcStep
-      const gz = Math.round(fz / npcStep) * npcStep
-      if (gx !== fx || gy !== fy || gz !== fz) continue // Flotte nicht auf NPC-Gitter
-      if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
-
-      const timeSlot = Math.floor(Date.now() / 1000 / (4 * 3600))
-      // Schwierigkeit: 30% rookie / 35% seasoned / 25% veteran / 8% elite / 2% commander
-      const diffHash = coordHashJs(fx, fy, fz, timeSlot + 42)
-      const diff = diffHash < 0.30 ? 'rookie'
-                 : diffHash < 0.65 ? 'seasoned'
-                 : diffHash < 0.90 ? 'veteran'
-                 : diffHash < 0.98 ? 'elite'
-                 : 'commander'
-      // Größe: 40% staffel / 30% geschwader / 20% flotte / 10% armada
-      const sizeHash = coordHashJs(fx, fz, fy, timeSlot + 99)
-      const size = sizeHash < 0.40 ? 'staffel'
-                 : sizeHash < 0.70 ? 'geschwader'
-                 : sizeHash < 0.90 ? 'flotte'
-                 : 'armada'
-      const npcType = diff + '_' + size
-      if (fleet.flight_mode === 'bounty' && diff === 'commander' && size === 'armada') continue
-
-      const npcShips = buildNpcFleet(npcType, chassisDefs)
-
-      const { data: inserted } = await supabase.from('npc_combat_fleets').insert({
-        npc_type: npcType, difficulty: diff, x: fx, y: fy, z: fz,
-        ships: npcShips, time_slot: timeSlot,
-        expires_at: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
-      }).select().single()
-      npcFleetRow = inserted
+    // NPC-Schiffe generieren falls noch nicht vorhanden (ships = [])
+    if (!npcFleetRow.ships?.length) {
+      const npcShips = buildNpcFleet(npcFleetRow.npc_type, chassisDefs)
+      await supabase.from('npc_combat_fleets')
+        .update({ ships: npcShips })
+        .eq('id', npcFleetRow.id)
+      npcFleetRow = { ...npcFleetRow, ships: npcShips }
     }
 
     if (!npcFleetRow) continue
