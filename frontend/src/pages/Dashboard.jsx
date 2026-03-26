@@ -387,15 +387,15 @@ export default function Dashboard() {
                       Object.entries(techBonuses)
                         .sort((a, b) => a[0].localeCompare(b[0]))
                         .map(([key, val]) => {
-                          const isSmall = Math.abs(val) < 1
-                          const display = isSmall
-                            ? `${val > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`
-                            : `${val > 0 ? '+' : ''}${val % 1 === 0 ? val : val.toFixed(2)}`
+                          // Alle Tech-Effects sind Dezimal-Prozent (0.05 = 5%)
+                          const pct = val * 100
+                          const display = `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`
+                          const label = key.replace(/_bonus$/, '').replace(/_/g, ' ')
                           return (
                             <div key={key}
                               className="flex justify-between items-center px-2 py-1 rounded"
                               style={{ background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.06)' }}>
-                              <span className="text-sm text-slate-400 font-mono">{key}</span>
+                              <span className="text-sm text-slate-400 font-mono">{label}</span>
                               <span className="text-sm font-mono font-semibold" style={{ color: '#34d399' }}>
                                 {display}
                               </span>
