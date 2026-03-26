@@ -48,7 +48,7 @@ function loadSprite(chassisId) {
 // Feinde: Math.PI (zeigt nach unten)
 // Beim Schießen: Winkel zum Ziel
 
-function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chassisId, aimAngle, sizeOverride) {
+function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chassisId, aimAngle) {
   const cfg = CLASS_SHAPES[cls] ?? CLASS_SHAPES.B
   const alpha = isDestroyed ? 0.15 : 1.0
   ctx.globalAlpha = alpha
@@ -67,7 +67,7 @@ function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chass
   ctx.rotate(finalAngle)
 
   const sprite = chassisId ? loadSprite(chassisId) : false
-  const s = sizeOverride ?? cfg.size
+  const s = cfg.size
 
   if (sprite && sprite !== false) {
     // Sprite zeichnen — zentriert, skaliert auf cfg.size * 3
@@ -163,13 +163,11 @@ function buildSimState(report) {
 
 function layoutShips(ships, side, canvasW, canvasH) {
   const MAX_ROWS = 3
-  // Berechne Schiffe pro Reihe: max 3 Reihen, min 1 Schiff pro Reihe
   const perRow = Math.ceil(ships.length / MAX_ROWS)
   const rows = Math.ceil(ships.length / perRow)
-  // Spacing dynamisch: Canvas-Breite / Schiffe pro Reihe, min 40px max 70px
-  const spacing = Math.max(40, Math.min(70, Math.floor((canvasW - 40) / perRow)))
-  const shipSize = Math.max(24, Math.min(44, spacing - 10))
-  const rowSpacing = shipSize + 18
+  // Spacing: Canvas-Breite aufteilen, min 44px damit Schiffe nicht überlappen
+  const spacing = Math.max(44, Math.min(80, Math.floor((canvasW - 20) / perRow)))
+  const rowSpacing = 65
 
   const result = {}
   ships.forEach((s, i) => {
@@ -181,7 +179,7 @@ function layoutShips(ships, side, canvasW, canvasH) {
     const rowY = side === 'player'
       ? canvasH - 50 - row * rowSpacing
       : 50 + row * rowSpacing
-    result[s.id] = { x: startX, y: rowY, size: shipSize }
+    result[s.id] = { x: startX, y: rowY }
   })
   return result
 }
@@ -294,12 +292,12 @@ export default function BattleAnimation({ report, onClose }) {
       for (const s of sim.playerShips) {
         const pos = pPositions[s.id]
         if (!pos) continue
-        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.pHp[s.id] ?? 0, s.maxHp, true, st.pDead.has(s.id), s.name?.split(' ')[0], s.chassisId, st.aimAngles[s.id], pos.size)
+        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.pHp[s.id] ?? 0, s.maxHp, true, st.pDead.has(s.id), s.name?.split(' ')[0], s.chassisId, st.aimAngles[s.id])
       }
       for (const s of sim.npcShips) {
         const pos = nPositions[s.id]
         if (!pos) continue
-        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.nHp[s.id] ?? 0, s.maxHp, false, st.nDead.has(s.id), s.name?.split(' ')[0], s.chassisId, st.aimAngles[s.id], pos.size)
+        drawShip(ctx, pos.x, pos.y, s.chassisClass, st.nHp[s.id] ?? 0, s.maxHp, false, st.nDead.has(s.id), s.name?.split(' ')[0], s.chassisId, st.aimAngles[s.id])
       }
 
       // ── Projektile ────────────────────────────────────────────────────────────
