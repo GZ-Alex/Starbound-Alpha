@@ -307,6 +307,8 @@ export default function BattleAnimation({ report, onClose }) {
   const rafRef    = useRef(null)
   const [started, setStarted] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [speed, setSpeed] = useState(1)
+  const speedRef = useRef(1)
   const [currentRound, setCurrentRound] = useState(0)
   const [done, setDone] = useState(false)
   const pausedRef = useRef(false)
@@ -349,8 +351,8 @@ export default function BattleAnimation({ report, onClose }) {
     let roundStartTime = null
     let actionIdx = 0
     let lastTime = null
-    const ACTION_INTERVAL = 180
-    const ROUND_PAUSE = 800
+    const ACTION_INTERVAL = () => Math.round(180 / speedRef.current)
+    const ROUND_PAUSE = () => Math.round(800 / speedRef.current)
 
     stateRef.current = { pHp, nHp, pDead, nDead, explosions, activeProjectiles, aimAngles, roundIdx, roundStartTime, actionIdx, lastTime }
 
@@ -450,7 +452,7 @@ export default function BattleAnimation({ report, onClose }) {
         if (!st.roundStartTime) st.roundStartTime = now
 
         const elapsed = now - st.roundStartTime
-        const nextActionTime = st.actionIdx * ACTION_INTERVAL
+        const nextActionTime = st.actionIdx * ACTION_INTERVAL()
 
         if (st.actionIdx < actions.length && elapsed >= nextActionTime) {
           const action = actions[st.actionIdx]
@@ -493,8 +495,8 @@ export default function BattleAnimation({ report, onClose }) {
         // Runde beendet wenn alle Aktionen durch und Projektile weg
         const roundDone = st.actionIdx >= actions.length && st.activeProjectiles.length === 0 && st.explosions.length === 0
         if (roundDone) {
-          const sinceLastAction = now - (st.roundStartTime + (actions.length) * ACTION_INTERVAL)
-          if (sinceLastAction >= ROUND_PAUSE) {
+          const sinceLastAction = now - (st.roundStartTime + (actions.length) * ACTION_INTERVAL())
+          if (sinceLastAction >= ROUND_PAUSE()) {
             st.roundIdx++
             st.actionIdx = 0
             st.roundStartTime = null
@@ -576,13 +578,24 @@ export default function BattleAnimation({ report, onClose }) {
 
       {/* Controls — nur sichtbar wenn gestartet */}
       {started && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={togglePause}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
             style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: '#22d3ee' }}>
             {paused ? <><Play size={11} /> Weiter</> : <><Pause size={11} /> Pause</>}
           </button>
-          <span className="text-xs font-mono text-slate-600">
+          {[0.5, 1, 2, 3, 4].map(s => (
+            <button key={s} onClick={() => { setSpeed(s); speedRef.current = s }}
+              className="px-2 py-1.5 rounded text-xs font-mono transition-all"
+              style={{
+                background: speed === s ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${speed === s ? 'rgba(251,191,36,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                color: speed === s ? '#fbbf24' : '#64748b',
+              }}>
+              {s}×
+            </button>
+          ))}
+          <span className="text-xs font-mono text-slate-600 ml-1">
             Runde {Math.min(currentRound + 1, totalRounds)} / {totalRounds}
           </span>
           <button onClick={handleRestart}
