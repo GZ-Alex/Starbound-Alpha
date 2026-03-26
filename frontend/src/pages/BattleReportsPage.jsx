@@ -85,41 +85,39 @@ function RoundLog({ rounds }) {
                 className="overflow-hidden">
                 <div className="mt-1 space-y-0.5 pl-3">
                   {round.actions.map((action, i) => {
-                    const isNpcAttacker = !action.attackerName || action.attackerId?.startsWith('npc_')
-                    const isNpcTarget   = !action.targetName  || action.targetId?.startsWith('npc_')
-                    const wpnClass = action.weaponClass ?? '—'
-                    const wpnType  = action.weaponType  ? action.weaponType.charAt(0).toUpperCase() + action.weaponType.slice(1) : '—'
-                    const tgtClass = action.targetClass ?? '?'
+                    const isNpcAttacker = action.attackerId?.startsWith('npc_')
+                    const isNpcTarget   = action.targetId?.startsWith('npc_')
+                    const atkParty  = isNpcAttacker ? '(Pirat)' : '(Du)'
+                    const tgtParty  = isNpcTarget   ? '(Pirat)' : '(Du)'
+                    const wpnClass  = action.weaponClass ?? '—'
+                    const tgtClass  = action.targetClass  ?? '?'
                     return (
                       <div key={i}
-                        className="grid items-center gap-x-2 px-2 py-1 rounded text-xs font-mono whitespace-nowrap"
-                        style={{ background: 'rgba(0,0,0,0.2)', gridTemplateColumns: '20px minmax(0,1fr) 24px 60px 12px minmax(0,1fr) 24px 60px 60px auto' }}>
+                        className="flex items-center px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap"
+                        style={{ background: 'rgba(0,0,0,0.2)', gap: 0 }}>
                         {/* # */}
-                        <span className="text-slate-600 text-right">{i + 1}.</span>
+                        <span className="text-slate-600 text-right" style={{ width: 24, flexShrink: 0 }}>{i + 1}.</span>
                         {/* Angreifer Name */}
-                        <span className="text-slate-200 truncate">{action.attackerName ?? '—'}</span>
-                        {/* Angreifer Klasse */}
-                        <span className="text-slate-500 text-center">{action.attackerClass ?? '?'}</span>
-                        {/* Waffe */}
-                        <span className="text-slate-600">{wpnType} {wpnClass}</span>
+                        <span className="text-slate-200" style={{ width: 128, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{action.attackerName ?? '—'}</span>
+                        {/* Angreifer Partei */}
+                        <span className="text-slate-500" style={{ width: 56, flexShrink: 0 }}>{atkParty}</span>
+                        {/* Waffenklasse */}
+                        <span className="text-slate-400" style={{ width: 20, flexShrink: 0, textAlign: 'center' }}>{wpnClass}</span>
                         {/* Pfeil */}
-                        <span className="text-slate-600">→</span>
+                        <span className="text-slate-600" style={{ width: 24, flexShrink: 0, textAlign: 'center' }}>→</span>
                         {/* Ziel Name */}
-                        <span className="text-slate-200 truncate">{action.targetName ?? '—'}</span>
-                        {/* Ziel Klasse */}
-                        <span className="text-slate-500 text-center">{tgtClass}</span>
+                        <span className="text-slate-200" style={{ width: 112, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{action.targetName ?? '—'}</span>
                         {/* Ziel Partei */}
-                        <span className="text-slate-600">{isNpcTarget ? '(Pirat)' : '(Du)'}</span>
+                        <span className="text-slate-500" style={{ width: 56, flexShrink: 0 }}>{tgtParty}</span>
+                        {/* Ziel Klasse */}
+                        <span className="text-slate-400" style={{ width: 20, flexShrink: 0, textAlign: 'center' }}>{tgtClass}</span>
                         {/* Ergebnis */}
-                        {action.hit ? (
-                          <span style={{ color: '#4ade80' }}>Treffer</span>
-                        ) : (
-                          <span style={{ color: '#475569' }}>Verfehlt</span>
-                        )}
+                        <span style={{ width: 72, flexShrink: 0, color: action.hit ? '#4ade80' : '#475569' }}>
+                          {action.hit ? 'Treffer' : 'Verfehlt'}
+                        </span>
                         {/* Schaden */}
-                        <span style={{ color: action.hit ? '#f87171' : 'transparent', textAlign: 'right' }}>
-                          {action.hit ? `-${fmt(action.damage)}` : ''}
-                          {action.destroyed ? ' 💥' : ''}
+                        <span style={{ width: 64, flexShrink: 0, textAlign: 'right', color: '#f87171' }}>
+                          {action.hit ? `${fmt(action.damage)}${action.destroyed ? ' 💥' : ''}` : ''}
                         </span>
                       </div>
                     )
