@@ -196,22 +196,35 @@ export default function Dashboard() {
   const spentTotal = Object.values(skillPoints).reduce((a, b) => a + b, 0)
   const freePoints = totalPoints - spentTotal
 
-  // Tech-Boni: _fixed/_flat = absolute Zahlen, sonst Dezimal-Prozent (0.05 = 5%)
-  const isFlat = (key) => key.endsWith('_fixed') || key.endsWith('_flat')
+  // Tech-Boni: Werte < 1 = Dezimal-Prozent (0.05 = 5%), Werte >= 1 = absolute Zahlen
+  // Kategorien für Labels
+  const SHIP_KEYS = new Set(['attack','defense','hp','cargo','speed','accuracy','maneuver',
+    'military_speed','civilian_speed','ship_attack','ship_defense','ship_hp','ship_cargo',
+    'ship_speed','ship_accuracy','ship_maneuver'])
+  const DEF_KEYS  = new Set(['def_attack','def_defense','def_hp','def_accuracy'])
+  const RES_KEYS  = new Set(['research_chance','research_cost','researcher_cost'])
+  const getLabel = (key) => {
+    const base = key.replace(/_bonus$|_fixed$|_flat$/, '').replace(/_/g, ' ')
+    if (SHIP_KEYS.has(key.replace(/_bonus$/, ''))) return 'Schiff ' + base
+    if (DEF_KEYS.has(key.replace(/_bonus$/, '')))  return 'Abwehr ' + base
+    if (RES_KEYS.has(key.replace(/_bonus$/, '')))  return 'Forschung ' + base
+    return base.charAt(0).toUpperCase() + base.slice(1)
+  }
 
   const techBonuses = useMemo(() => {
-    const pct  = {}  // Dezimal-Prozent: 0.05 × level
-    const flat = {}  // Absolute Zahlen: 1 × level
+    const pct  = {}  // Dezimal-Prozent: 0.05 × level → anzeigen als %
+    const flat = {}  // Absolute Zahlen: 3 × level → anzeigen als Zahl
     for (const row of myTechRows) {
       const tech = allTechs.find(t => t.id === row.tech_id)
       if (!tech?.effects || (row.level ?? 0) <= 0) continue
       if ((row.level ?? 0) < (tech.reveal_level ?? 5)) continue
       for (const [k, v] of Object.entries(tech.effects)) {
         const per = typeof v === 'number' ? v : 0
-        if (isFlat(k)) {
-          flat[k] = (flat[k] ?? 0) + per * row.level
-        } else {
+        // Wert < 1 = Dezimal-Prozent, Wert >= 1 = absolute Zahl
+        if (Math.abs(per) < 1) {
           pct[k] = (pct[k] ?? 0) + per * row.level
+        } else {
+          flat[k] = (flat[k] ?? 0) + per * row.level
         }
       }
     }
@@ -394,12 +407,12 @@ export default function Dashboard() {
                       [
                         ...Object.entries(techBonuses.pct).map(([key, val]) => ({
                           key,
-                          label: 'Ship ' + key.replace(/_bonus$/, '').replace(/_/g, ' '),
+                          label: getLabel(key),
                           display: `${val * 100 > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`,
                         })),
                         ...Object.entries(techBonuses.flat).map(([key, val]) => ({
-                          key: key + '_flat',
-                          label: 'Ship ' + key.replace(/_fixed$|_flat$/, '').replace(/_/g, ' '),
+                          key: key + '_f',
+                          label: getLabel(key),
                           display: `${val > 0 ? '+' : ''}${Number.isInteger(val) ? val : val.toFixed(1)}`,
                         })),
                       ]
