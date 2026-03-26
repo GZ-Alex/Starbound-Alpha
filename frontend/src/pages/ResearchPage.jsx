@@ -769,7 +769,7 @@ function CheatButton({ allTechs, player, onRefresh }) {
   const go = async () => {
     if (!player || loading) return; setLoading(true)
     try {
-      const ups = allTechs.map(t => ({ player_id: player.id, tech_id: t.id, level: t.max_level ?? 99 }))
+      const ups = allTechs.map(t => ({ player_id: player.id, tech_id: t.id, level: Math.min(t.max_level ?? 20, 20) }))
       for (let i = 0; i < ups.length; i += 50)
         await supabase.from('player_technologies').upsert(ups.slice(i, i + 50), { onConflict: 'player_id,tech_id' })
       const dis = allTechs.map(t => ({ player_id: player.id, tech_id: t.id }))
