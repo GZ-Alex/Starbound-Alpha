@@ -113,6 +113,9 @@ Deno.serve(async (req) => {
       // ── 8. Flotten-Bewegungen ─────────────────────────────────────────────
       await processFleets(log)
 
+      // ── 8b. NPC-Spawn Reservierungen ──────────────────────────────────────
+      await processNpcSpawns(log)
+
       // ── 9. Kämpfe auflösen ────────────────────────────────────────────────
       await processCombat(log)
 
@@ -391,6 +394,8 @@ async function processFleets(log: string[]) {
       // Schiffe in der Flotte mitbewegen
       await supabase.from('ships').update({ x: newX, y: newY, z: newZ })
         .eq('fleet_id', fleet.id)
+      // Reservierung aufheben — Flotte ist angekommen
+      await supabase.from('npc_spawn_reservations').delete().eq('fleet_id', fleet.id)
 
       await notify(fleet.player_id, 'fleet_arrived',
         'Flotte angekommen',
@@ -608,6 +613,104 @@ async function processHQRepair(log: string[]) {
     }).eq('id', a.id)
     log.push(`hq_repaired(${a.id})`)
   }
+}
+
+// ─── NPC-Spawn Verwaltung ─────────────────────────────────────────────────────
+// Generiert NPC-Positionen deterministisch und schreibt sie in die DB
+// Reserviert Positionen für anfliegende Spielerflotten
+
+async function processNpcSpawns(log: string[]) {
+  const npcStep = 15
+  const timeSlot = Math.floor(Date.now() / 1000 / (5 * 60))  // 5 Min. (Test)
+
+  // Alle bestehenden NPC-Positionen laden (für Mindestabstand-Check)
+  const { data: existing } = await supabase
+    .from('npc_combat_fleets')
+    .select('x, y, z')
+    .gt('expires_at', new Date().toISOString())
+
+  const existingSet = new Set((existing ?? []).map((e: any) => `${e.x},${e.y},${e.z}`))
+
+  // Alle anfliegenden Spielerflotten laden — für Reservierungen
+  const { data: transitFleets } = await supabase
+    .from('fleets')
+    .select('id, target_x, target_y, target_z, arrive_at, player_id')
+    .eq('is_in_transit', true)
+    .not('target_x', 'is', null)
+
+  // Bereits reservierte Positionen
+  const { data: existingReservations } = await supabase
+    .from('npc_spawn_reservations')
+    .select('x, y, z, fleet_id')
+  const reservedFleetIds = new Set((existingReservations ?? []).map((r: any) => r.fleet_id))
+
+  let spawned = 0, reserved = 0
+
+  // Für jede anfliegende Flotte prüfen ob Zielkoord. einen NPC haben sollte
+  for (const fleet of transitFleets ?? []) {
+    if (!fleet.target_x || !fleet.target_y) continue
+    if (reservedFleetIds.has(fleet.id)) continue  // schon reserviert
+
+    const fx = fleet.target_x, fy = fleet.target_y, fz = fleet.target_z ?? 0
+
+    // Prüf ob Ziel auf NPC-Gitter liegt (gleiche Logik wie get_scan_objects)
+    const gx = Math.round(fx / npcStep) * npcStep
+    const gy = Math.round(fy / npcStep) * npcStep
+    const gz = Math.round(fz / npcStep) * npcStep
+    if (gx !== fx || gy !== fy || gz !== fz) continue
+    if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
+
+    // Cooldown prüfen
+    const { data: cooldown } = await supabase
+      .from('npc_spawn_cooldowns')
+      .select('blocked_until')
+      .eq('x', fx).eq('y', fy).eq('z', fz)
+      .maybeSingle()
+    if (cooldown) continue
+
+    // NPC-Typ berechnen (gleiche MD5-Logik wie get_scan_objects)
+    const hashInput = `${fx},${fy},${fz},${timeSlot}`
+    // Vereinfachter deterministischer Hash (Deno-kompatibel ohne crypto)
+    let h = 0
+    for (let i = 0; i < hashInput.length; i++) {
+      h = ((h << 5) - h + hashInput.charCodeAt(i)) & 0x7FFFFFFF
+    }
+    const npcH = h / 2147483647.0
+
+    const npcDiff = npcH < 0.30 ? 'rookie'
+                  : npcH < 0.65 ? 'seasoned'
+                  : npcH < 0.90 ? 'veteran'
+                  : npcH < 0.98 ? 'elite'
+                  : 'commander'
+
+    let sH = 0
+    const sInput = `${fx},${fz},${fy},${timeSlot+99}`
+    for (let i = 0; i < sInput.length; i++) {
+      sH = ((sH << 5) - sH + sInput.charCodeAt(i)) & 0x7FFFFFFF
+    }
+    const sizeH = sH / 2147483647.0
+    const npcSize = sizeH < 0.40 ? 'staffel'
+                  : sizeH < 0.70 ? 'geschwader'
+                  : sizeH < 0.90 ? 'flotte'
+                  : 'armada'
+
+    const npcType = npcDiff + '_' + npcSize
+
+    // Reservierung anlegen — hält bis Ankunft + 30 Min Puffer
+    const arriveAt = fleet.arrive_at ? new Date(fleet.arrive_at) : new Date()
+    const expiresAt = new Date(arriveAt.getTime() + 30 * 60 * 1000)
+
+    await supabase.from('npc_spawn_reservations').insert({
+      x: fx, y: fy, z: fz,
+      npc_type: npcType,
+      difficulty: npcDiff,
+      fleet_id: fleet.id,
+      expires_at: expiresAt.toISOString(),
+    })
+    reserved++
+  }
+
+  if (reserved > 0) log.push(`npc_reserved=${reserved}`)
 }
 
 async function processAsteroidTick(log: string[]) {
@@ -998,9 +1101,10 @@ async function processCombat(log: string[]) {
   if (!chassisDefs.length) return
   const partDefs = await supabase.from('ship_part_definitions').select('id, category, weapon_class, attack_bonus').then(r => r.data ?? [])
 
-  // ── 1. Abgelaufene NPC-Kampfflotten + Cooldowns löschen ───────────────────
+  // ── 1. Abgelaufene NPC-Kampfflotten + Cooldowns + Reservierungen löschen ──
   await supabase.from('npc_combat_fleets').delete().lt('expires_at', new Date().toISOString())
   await supabase.from('npc_spawn_cooldowns').delete().lt('blocked_until', new Date().toISOString())
+  await supabase.from('npc_spawn_reservations').delete().lt('expires_at', new Date().toISOString())
 
   // ── 2. Laufende Kämpfe: je eine Runde simulieren ──────────────────────────
   const { data: activeBattles } = await supabase
