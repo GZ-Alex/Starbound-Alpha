@@ -101,9 +101,16 @@ function fleetHpPct(ships) {
   return total > 0 ? Math.round((current / total) * 100) : 0
 }
 
-function fleetSpeed(ships) {
+function fleetSpeed(ships, stm) {
   if (!ships.length) return 0
-  return Math.min(...ships.map(sh => sh.ship_designs?.total_speed ?? 0).filter(s => s > 0))
+  const speeds = ships.map(sh => {
+    const base = sh.ship_designs?.total_speed ?? 0
+    if (!base) return 0
+    const cls = sh.ship_designs?.chassis_id?.startsWith('probe') || sh.ship_designs?.chassis_id?.startsWith('freighter') || sh.ship_designs?.chassis_id?.startsWith('station') ? 'Z' : 'M'
+    const mul = stm ? (cls === 'Z' ? (stm.civilianSpeed ?? 1) : (stm.militarySpeed ?? 1)) : 1
+    return Math.round(base * mul)
+  }).filter(s => s > 0)
+  return speeds.length ? Math.min(...speeds) : 0
 }
 
 // ─── Neue Flotte erstellen Modal ───────────────────────────────────────────────
@@ -427,7 +434,8 @@ function SetTargetModal({ fleet, fleetShips, playerId, initialTarget, onClose, o
   const [showBookmarks, setShowBookmarks] = useState(false)
 
   // Langsamste Geschwindigkeit in der Flotte (pc/h) × speed_percent
-  const baseSpeed = fleetSpeed(fleetShips)  // langsamstes Schiff, pc/h
+  const { shipTechMultipliers: stmLocal } = useGameStore()
+  const baseSpeed = fleetSpeed(fleetShips, stmLocal)  // langsamstes Schiff, pc/h
   const speedPercent = fleet.speed_percent ?? 100
 
   const txN = parseInt(tx), tyN = parseInt(ty), tzN = parseInt(tz)
@@ -953,7 +961,8 @@ function InlineTargetInput({ fleet, ships, initialTarget, onSaved }) {
 
   const txN = parseInt(tx), tyN = parseInt(ty), tzN = parseInt(tz)
   const coordsValid = !isNaN(txN) && !isNaN(tyN) && !isNaN(tzN)
-  const baseSpeed = fleetSpeed(ships)
+  const { shipTechMultipliers: stmInline } = useGameStore()
+  const baseSpeed = fleetSpeed(ships, stmInline)
   const speedPercent = fleet.speed_percent ?? 100
   const distance = coordsValid
     ? calcDistance(fleet.x ?? 0, fleet.y ?? 0, fleet.z ?? 0, txN, tyN, tzN)
