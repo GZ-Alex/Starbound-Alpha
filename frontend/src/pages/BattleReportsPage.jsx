@@ -37,113 +37,7 @@ const WINNER_CONFIG = {
   escaped:  { label: 'Geflohen',    color: '#94a3b8', icon: Minus  },
 }
 
-// ─── Kampfstatistik ───────────────────────────────────────────────────────────
-
-function CombatStats({ report }) {
-  const [open, setOpen] = useState(false)
-  const rounds = report.rounds ?? []
-  if (!rounds.length) return null
-
-  // Statistik pro Schiff-ID berechnen
-  const shipStats = {}
-  for (const round of rounds) {
-    for (const a of round.actions ?? []) {
-      if (!shipStats[a.attackerId]) {
-        shipStats[a.attackerId] = {
-          name: a.attackerName ?? a.attackerId,
-          shots: 0, hits: 0, misses: 0, damage: 0,
-        }
-      }
-      shipStats[a.attackerId].shots++
-      if (a.hit) { shipStats[a.attackerId].hits++; shipStats[a.attackerId].damage += a.damage ?? 0 }
-      else shipStats[a.attackerId].misses++
-    }
-  }
-
-  // Aufteilen in Angreifer (pPositions) und Verteidiger
-  const attackerIds = new Set((report.attacker_fleet?.ships ?? []).map(s => s.id))
-  const attackerStats = Object.entries(shipStats).filter(([id]) => attackerIds.has(id))
-  const defenderStats = Object.entries(shipStats).filter(([id]) => !attackerIds.has(id))
-
-  const StatTable = ({ entries, color }) => (
-    <div className="space-y-1">
-      <div className="grid text-xs font-mono text-slate-600 px-2 py-1 rounded"
-        style={{ gridTemplateColumns: '1fr 36px 36px 36px 60px', background: 'rgba(0,0,0,0.2)' }}>
-        <span>Schiff</span>
-        <span className="text-center">🎯</span>
-        <span className="text-center">✗</span>
-        <span className="text-center">/%</span>
-        <span className="text-right">Schaden</span>
-      </div>
-      {entries.map(([id, s]) => {
-        const acc = s.shots > 0 ? Math.round((s.hits / s.shots) * 100) : 0
-        return (
-          <div key={id} className="grid text-xs font-mono px-2 py-1 rounded"
-            style={{ gridTemplateColumns: '1fr 36px 36px 36px 60px', background: 'rgba(255,255,255,0.02)' }}>
-            <span className="text-slate-300 truncate">{s.name}</span>
-            <span className="text-center" style={{ color: '#4ade80' }}>{s.hits}</span>
-            <span className="text-center" style={{ color: '#f87171' }}>{s.misses}</span>
-            <span className="text-center text-slate-500">{acc}%</span>
-            <span className="text-right tabular-nums" style={{ color }}>{fmt(s.damage)}</span>
-          </div>
-        )
-      })}
-      {/* Summe */}
-      {entries.length > 1 && (() => {
-        const tot = entries.reduce((acc, [, s]) => ({
-          hits: acc.hits + s.hits, misses: acc.misses + s.misses,
-          shots: acc.shots + s.shots, damage: acc.damage + s.damage,
-        }), { hits: 0, misses: 0, shots: 0, damage: 0 })
-        const acc = tot.shots > 0 ? Math.round((tot.hits / tot.shots) * 100) : 0
-        return (
-          <div className="grid text-xs font-mono px-2 py-1 rounded border-t"
-            style={{ gridTemplateColumns: '1fr 36px 36px 36px 60px', borderColor: 'rgba(255,255,255,0.06)' }}>
-            <span className="text-slate-500 font-semibold">Gesamt</span>
-            <span className="text-center font-semibold" style={{ color: '#4ade80' }}>{tot.hits}</span>
-            <span className="text-center font-semibold" style={{ color: '#f87171' }}>{tot.misses}</span>
-            <span className="text-center text-slate-400">{acc}%</span>
-            <span className="text-right tabular-nums font-semibold" style={{ color }}>{fmt(tot.damage)}</span>
-          </div>
-        )
-      })()}
-    </div>
-  )
-
-  return (
-    <div>
-      <button onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 text-xs font-mono text-slate-500 hover:text-slate-300 transition-colors mb-2">
-        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-        Kampfstatistik
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-mono mb-1.5 flex items-center gap-1.5"
-                  style={{ color: '#38bdf8' }}>
-                  <span>⚔</span> Angreifer
-                </p>
-                <StatTable entries={attackerStats} color="#38bdf8" />
-              </div>
-              <div>
-                <p className="text-xs font-mono mb-1.5 flex items-center gap-1.5"
-                  style={{ color: '#f87171' }}>
-                  <span>🛡</span> Verteidiger
-                </p>
-                <StatTable entries={defenderStats} color="#f87171" />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-
+// ─── Rundenlog ────────────────────────────────────────────────────────────────
 
 function RoundLog({ rounds }) {
   const [expanded, setExpanded] = useState(null)
@@ -289,6 +183,12 @@ function BattleCard({ report, isOpen, onToggle, playerName }) {
             <span className="text-xs font-mono text-slate-600">
               {res.rounds_fought ?? '?'} Runden
             </span>
+            {report.status === 'in_progress' && (
+              <span className="text-xs font-mono px-2 py-0.5 rounded animate-pulse"
+                style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', color: '#fbbf24' }}>
+                ⚔ Laufend
+              </span>
+            )}
             <span className="text-xs font-mono text-slate-600">
               {formatDate(report.occurred_at)}
             </span>
@@ -373,7 +273,7 @@ function BattleCard({ report, isOpen, onToggle, playerName }) {
                 <div>
                   <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                     <Crosshair size={10} style={{ color: '#f87171' }} />
-                    {defenderNames} ({report.defender_fleet?.ships?.length ?? 0} Schiffe)
+                    {npcLabel} ({report.defender_fleet?.ships?.length ?? 0} Schiffe)
                   </p>
                   <div className="space-y-1">
                     {(report.defender_fleet?.ships ?? []).map((s, i) => (
@@ -389,9 +289,6 @@ function BattleCard({ report, isOpen, onToggle, playerName }) {
                   </div>
                 </div>
               </div>
-
-              {/* Kampfstatistik */}
-              <CombatStats report={report} />
 
               {/* Rundenlog */}
               {report.rounds?.length > 0 && (
@@ -445,12 +342,25 @@ export default function BattleReportsPage() {
     refetchInterval: 30000,
   })
 
+  const queryClient = useQueryClient()
+  const hasLive = reports.some(r => r.status === 'in_progress')
+  const handleRefresh = () => queryClient.invalidateQueries(['battle-reports', player?.id])
+
   return (
     <div className="max-w-4xl mx-auto space-y-5">
 
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">Kampfberichte</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-display font-bold text-cyan-400 tracking-wide">Kampfberichte</h2>
+          {hasLive && (
+            <button onClick={handleRefresh}
+              className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-mono font-semibold"
+              style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' }}>
+              ⟳ Aktualisieren
+            </button>
+          )}
+        </div>
         <p className="text-base text-slate-400 font-mono mt-1">
           {reports.length} Bericht{reports.length !== 1 ? 'e' : ''}
         </p>
