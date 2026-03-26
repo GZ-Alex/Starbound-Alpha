@@ -696,6 +696,15 @@ async function processNpcSpawns(log: string[]) {
 
     const npcType = npcDiff + '_' + npcSize
 
+    // ship_count berechnen und fixieren (gleiche Logik wie get_scan_objects)
+    const sizeConf = SIZE_SHIPS[npcSize as FleetSize] ?? SIZE_SHIPS['staffel']
+    let cH = 0
+    const cInput = `${fy},${fx},${fz},${timeSlot+1}`
+    for (let i = 0; i < cInput.length; i++) {
+      cH = ((cH << 5) - cH + cInput.charCodeAt(i)) & 0x7FFFFFFF
+    }
+    const shipCount = sizeConf.base + Math.floor((cH / 2147483647.0) * sizeConf.extra)
+
     // Reservierung anlegen — hält bis Ankunft + 30 Min Puffer
     const arriveAt = fleet.arrive_at ? new Date(fleet.arrive_at) : new Date()
     const expiresAt = new Date(arriveAt.getTime() + 30 * 60 * 1000)
@@ -704,6 +713,7 @@ async function processNpcSpawns(log: string[]) {
       x: fx, y: fy, z: fz,
       npc_type: npcType,
       difficulty: npcDiff,
+      ship_count: shipCount,
       fleet_id: fleet.id,
       expires_at: expiresAt.toISOString(),
     })
@@ -1254,6 +1264,17 @@ async function processCombat(log: string[]) {
 
     const fx = fleet.x ?? 0, fy = fleet.y ?? 0, fz = fleet.z ?? 0
 
+    // Kein NPC wenn eine ANDERE Spielerflotte bereits auf der Koordinate steht
+    // → gilt immer, auch wenn persistente NPC-Flotte existiert (verhindert Farm-Loops)
+    const { data: fleetsOnCoord } = await supabase
+      .from('fleets')
+      .select('id')
+      .eq('x', fx).eq('y', fy).eq('z', fz)
+      .eq('is_in_transit', false)
+      .neq('id', fleet.id)
+      .limit(1)
+    if (fleetsOnCoord?.length) continue
+
     // Persistente NPC-Flotte an dieser Position suchen
     let { data: npcFleetRow } = await supabase
       .from('npc_combat_fleets')
@@ -1270,20 +1291,7 @@ async function processCombat(log: string[]) {
         .select('blocked_until')
         .eq('x', fx).eq('y', fy).eq('z', fz)
         .maybeSingle()
-      if (cooldown) continue // Koordinate noch gesperrt
-    }
-
-    // Kein NPC-Spawn wenn bereits eine andere Spielerflotte auf der Koordinate steht
-    // → verhindert inaktives Farmen durch stehenlassen der Flotte
-    if (!npcFleetRow) {
-      const { data: fleetsOnCoord } = await supabase
-        .from('fleets')
-        .select('id')
-        .eq('x', fx).eq('y', fy).eq('z', fz)
-        .eq('is_in_transit', false)
-        .neq('id', fleet.id)  // eigene Flotte nicht zählen
-        .limit(1)
-      if (fleetsOnCoord?.length) continue  // Koordinate besetzt
+      if (cooldown) continue
     }
 
     // Wenn keine persistente NPC-Flotte: Modulo-Check ob NPC hier sein sollte
