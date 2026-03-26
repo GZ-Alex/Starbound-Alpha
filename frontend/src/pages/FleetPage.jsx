@@ -1509,8 +1509,14 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
         <p className="text-xs font-mono text-slate-700 mt-3">⚙ Ladung aufnehmen / abwerfen — WIP</p>
       </div>
 
-      {/* Scan-Bereich */}
-      <FleetScanArea fleet={fleet} ships={ships} onSetTarget={!isTransit ? handleQuickTarget : null} />
+      {/* Scan-Bereich — nur wenn nicht im Transit */}
+      {!isTransit ? (
+        <FleetScanArea fleet={fleet} ships={ships} onSetTarget={handleQuickTarget} />
+      ) : (
+        <div className="panel p-4 text-center">
+          <p className="text-xs font-mono text-slate-600">🚀 Scanner deaktiviert — Flotte ist unterwegs</p>
+        </div>
+      )}
 
       {/* Modals */}
       <AnimatePresence>
