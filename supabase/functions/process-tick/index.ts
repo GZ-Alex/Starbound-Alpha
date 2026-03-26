@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.014 — 26. März 2026
+// Version: 0.015 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1280,13 +1280,23 @@ async function processCombat(log: string[]) {
       await supabase.from('active_battles').delete().eq('id', battle.id)
       battlesResolved++
     } else {
-      // Kampf läuft weiter
+      // Kampf läuft weiter — Report aktualisieren
       const { error: updateErr } = await supabase.from('active_battles').update({
         player_ships: pShips, npc_ships: nShips,
         round: battle.round + 1, rounds_log: newRoundsLog,
       }).eq('id', battle.id)
       if (updateErr) console.error(`battle_update_err: ${updateErr.message}`)
       else console.log(`battle_round_done: id=${battle.id} round=${battle.round + 1} actions=${roundResult.actions.length}`)
+
+      // Live-Kampfbericht aktualisieren
+      await supabase.from('battle_reports')
+        .update({
+          rounds: newRoundsLog,
+          result: { winner: null, rounds_fought: battle.round + 1,
+            player_hp: roundResult.playerHpTotal, npc_hp: roundResult.npcHpTotal },
+        })
+        .eq('active_battle_id', battle.id)
+        .eq('status', 'in_progress')
     }
   }
 
@@ -1392,14 +1402,28 @@ async function processCombat(log: string[]) {
     if (!aliveNpcs.length) continue // NPC-Flotte bereits zerstört
 
     // Neuen Kampf starten
-    const newBattleTechBonuses = fleet.player_id ? await loadPlayerTechBonuses(fleet.player_id) : undefined
     const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs, partDefs))
-    await supabase.from('active_battles').insert({
+    const { data: newBattle } = await supabase.from('active_battles').insert({
       player_id: fleet.player_id, fleet_id: fleet.id,
       npc_fleet_id: npcFleetRow.id, x: fx, y: fy, z: fz,
       player_ships: pShips, npc_ships: npcShips,
       round: 0, rounds_log: [],
-    })
+    }).select().single()
+
+    // Sofort einen Live-Kampfbericht anlegen
+    if (newBattle) {
+      await supabase.from('battle_reports').insert({
+        attacker_id:    fleet.player_id,
+        x: fx, y: fy, z: fz,
+        attacker_fleet: { fleet_id: fleet.id, fleet_name: fleet.name, ships: pShips },
+        defender_fleet: { npc_type: npcFleetRow.npc_type, ships: npcShips },
+        rounds:  [],
+        result:  { winner: null, rounds_fought: 0 },
+        winner:  null,
+        status:  'in_progress',
+        active_battle_id: newBattle.id,
+      })
+    }
 
     await notify(fleet.player_id, 'battle',
       'Kampf begonnen',
@@ -1468,17 +1492,45 @@ async function finalizeBattle(
     }
   }
 
-  // Battle Report
-  const { data: reportData } = await supabase.from('battle_reports').insert({
-    attacker_id: battle.player_id, defender_id: null,
-    x: battle.x, y: battle.y, z: battle.z,
-    attacker_fleet: { fleet_id: battle.fleet_id, ships: pShips },
-    defender_fleet: { npc_fleet_id: battle.npc_fleet_id, ships: nShips },
-    rounds: battle.rounds_log ?? [],
-    result: { winner, player_survivors: playerSurvivors.length, npc_survivors: npcSurvivors.length, rounds_fought: battle.round, loot },
-    winner: winner === 'player' ? 'attacker' : winner === 'npc' ? 'defender' : 'draw',
-    loot,
-  }).select('id').single()
+  // Battle Report — existierenden Live-Report finalisieren oder neu anlegen
+  const finalResult = { winner, player_survivors: playerSurvivors.length, npc_survivors: npcSurvivors.length, rounds_fought: battle.round, loot }
+  const finalWinner = winner === 'player' ? 'attacker' : winner === 'npc' ? 'defender' : 'draw'
+
+  // Prüfen ob bereits ein Live-Report existiert
+  const { data: existingReport } = await supabase
+    .from('battle_reports')
+    .select('id')
+    .eq('active_battle_id', battle.id)
+    .eq('status', 'in_progress')
+    .maybeSingle()
+
+  let reportData: any
+  if (existingReport) {
+    // Bestehenden Report finalisieren
+    const { data: updated } = await supabase.from('battle_reports').update({
+      rounds: battle.rounds_log ?? [],
+      result: finalResult,
+      winner: finalWinner,
+      loot,
+      status: 'finished',
+      active_battle_id: null,
+    }).eq('id', existingReport.id).select('id').single()
+    reportData = updated
+  } else {
+    // Kein Live-Report vorhanden — neu anlegen
+    const { data: inserted } = await supabase.from('battle_reports').insert({
+      attacker_id: battle.player_id, defender_id: null,
+      x: battle.x, y: battle.y, z: battle.z,
+      attacker_fleet: { fleet_id: battle.fleet_id, ships: pShips },
+      defender_fleet: { npc_fleet_id: battle.npc_fleet_id, ships: nShips },
+      rounds: battle.rounds_log ?? [],
+      result: finalResult,
+      winner: finalWinner,
+      loot,
+      status: 'finished',
+    }).select('id').single()
+    reportData = inserted
+  }
 
   const winText = winner === 'player' ? 'gewonnen' : winner === 'npc' ? 'verloren' : 'unentschieden'
   await notify(battle.player_id, 'battle',
