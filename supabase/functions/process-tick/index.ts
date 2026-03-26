@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.016 — 26. März 2026
+// Version: 0.017 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -750,7 +750,7 @@ async function processNpcSpawns(log: string[]) {
     // ship_count aus npc_combat_fleets lesen (wurde oben geschrieben)
     const { data: npcRow } = await supabase
       .from('npc_combat_fleets')
-      .select('npc_type, difficulty, ship_count')
+      .select('id, npc_type, difficulty, ship_count, expires_at')
       .eq('x', fx).eq('y', fy).eq('z', fz)
       .eq('time_slot', timeSlot)
       .maybeSingle()
@@ -768,6 +768,14 @@ async function processNpcSpawns(log: string[]) {
       fleet_id:   fleet.id,
       expires_at: resExpiry.toISOString(),
     })
+
+    // NPC-Eintrag verlängern falls er vor Ankunft ablaufen würde
+    if (new Date(npcRow.expires_at) < resExpiry) {
+      await supabase.from('npc_combat_fleets')
+        .update({ expires_at: resExpiry.toISOString() })
+        .eq('id', npcRow.id)
+    }
+
     reserved++
   }
 
