@@ -111,7 +111,8 @@ function fleetSpeed(ships) {
 function CreateFleetModal({ onClose, onCreate }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
-  const { player, planet } = useGameStore()
+  const { player, planet, shipTechMultipliers } = useGameStore()
+  const stm = shipTechMultipliers ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
 
   const handleCreate = async () => {
     if (!name.trim() || saving) return
@@ -1391,19 +1392,19 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                   {/* Angriff */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-                      {fmt(ship.ship_designs?.total_attack ?? 0)}
+                      {fmt(Math.round((ship.ship_designs?.total_attack ?? 0) * stm.attack))}
                     </p>
                   </div>
                   {/* Geschw. */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
-                      {fmt(ship.ship_designs?.total_speed ?? 0)}
+                      {fmt(Math.round((ship.ship_designs?.total_speed ?? 0) * stm.militarySpeed))}
                     </p>
                   </div>
                   {/* Laderaum */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono text-slate-300">
-                      {fmt(ship.ship_designs?.total_cargo ?? 0)}
+                      {fmt(Math.round((ship.ship_designs?.total_cargo ?? 0) * stm.cargo))}
                     </p>
                   </div>
                   {/* Flucht + Detail */}
@@ -1568,7 +1569,8 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
 
 // ─── Fleet Row (Übersicht) ────────────────────────────────────────────────────
 
-function FleetRow({ fleet, ships, onClick }) {
+function FleetRow({ fleet, ships, onClick, stm }) {
+  const m = stm ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
   const hpPct = fleetHpPct(ships)
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
@@ -1622,7 +1624,7 @@ function FleetRow({ fleet, ships, onClick }) {
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-          {fmt(ships.reduce((s, sh) => s + (sh.ship_designs?.total_attack ?? 0), 0))}
+          {fmt(ships.reduce((s, sh) => s + Math.round((sh.ship_designs?.total_attack ?? 0) * m.attack), 0))}
         </p>
       </div>
 
@@ -1662,7 +1664,8 @@ function FleetRow({ fleet, ships, onClick }) {
 // ─── FleetPage ────────────────────────────────────────────────────────────────
 
 export default function FleetPage() {
-  const { player, planet } = useGameStore()
+  const { player, planet, shipTechMultipliers } = useGameStore()
+  const stm = shipTechMultipliers ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedFleet, setSelectedFleet] = useState(null)
@@ -1843,6 +1846,7 @@ export default function FleetPage() {
               fleet={fleet}
               ships={getShipsForFleet(fleet.id)}
               onClick={() => setSelectedFleet(fleet.id)}
+              stm={stm}
             />
           ))}
         </div>
