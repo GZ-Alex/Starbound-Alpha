@@ -941,6 +941,58 @@ interface Weapon {
   isPrimary: boolean
 }
 
+// ─── Tech-Boni für Kampf laden ────────────────────────────────────────────────
+// Gibt Multiplikatoren zurück: { attack: 1.15, defense: 1.10, hp: 1.05, ... }
+async function loadPlayerTechBonuses(playerId: string): Promise<{
+  attack: number; defense: number; hp: number;
+  militarySpeed: number; civilianSpeed: number; cargo: number
+}> {
+  const defaults = { attack: 1.0, defense: 1.0, hp: 1.0, militarySpeed: 1.0, civilianSpeed: 1.0, cargo: 1.0 }
+
+  const { data: techs } = await supabase
+    .from('player_technologies')
+    .select('tech_id, level')
+    .eq('player_id', playerId)
+    .gt('level', 0)
+
+  if (!techs?.length) return defaults
+
+  const techIds = techs.map((t: any) => t.tech_id)
+  const { data: defs } = await supabase
+    .from('tech_definitions')
+    .select('id, effects')
+    .in('id', techIds)
+
+  if (!defs?.length) return defaults
+
+  const levelMap: Record<string, number> = {}
+  for (const t of techs) levelMap[t.tech_id] = t.level
+
+  let atkBonus = 0, defBonus = 0, hpBonus = 0
+  let milSpdBonus = 0, civSpdBonus = 0, cargoBonus = 0
+
+  for (const def of defs) {
+    if (!def.effects) continue
+    const lvl = levelMap[def.id] ?? 1
+    const e = def.effects
+    if (e.ship_attack_bonus)    atkBonus    += e.ship_attack_bonus    * lvl
+    if (e.ship_defense_bonus)   defBonus    += e.ship_defense_bonus   * lvl
+    if (e.ship_hp_bonus)        hpBonus     += e.ship_hp_bonus        * lvl
+    if (e.military_speed_bonus) milSpdBonus += e.military_speed_bonus * lvl
+    if (e.civilian_speed_bonus) civSpdBonus += e.civilian_speed_bonus * lvl
+    if (e.ship_cargo_bonus)     cargoBonus  += e.ship_cargo_bonus     * lvl
+  }
+
+  return {
+    attack:       1.0 + atkBonus,
+    defense:      1.0 + defBonus,
+    hp:           1.0 + hpBonus,
+    militarySpeed: 1.0 + milSpdBonus,
+    civilianSpeed: 1.0 + civSpdBonus,
+    cargo:        1.0 + cargoBonus,
+  }
+}
+
 interface CombatShip {
   id: string; name: string; chassisClass: string
   hp: number; maxHp: number; attack: number; defense: number
@@ -949,7 +1001,9 @@ interface CombatShip {
   autoRetreatAt: number; isPlayer: true
 }
 
-function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): CombatShip {
+function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[], techBonuses?: { attack: number; defense: number; hp: number; militarySpeed: number; civilianSpeed: number; cargo: number }): CombatShip {
+  const tb = techBonuses ?? { attack: 1.0, defense: 1.0, hp: 1.0, militarySpeed: 1.0, civilianSpeed: 1.0, cargo: 1.0 }
+  const isMilitary = !['Z'].includes(ship.ship_designs?.chassis?.class ?? 'B')
   const d = ship.ship_designs
   const chassis = chassisDefs.find((c: any) => c.id === d?.chassis_id)
   const cls = chassis?.class ?? 'B'
@@ -998,14 +1052,30 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
     })
   }
 
+  const rawAtk  = d?.total_attack   ?? chassis?.base_attack   ?? 0
+  const rawDef  = d?.total_defense  ?? chassis?.base_defense  ?? 5
+  const rawHp   = ship.max_hp ?? 0
+  const rawSpd  = d?.total_speed    ?? chassis?.base_speed    ?? 20
+  const rawMnv  = d?.total_maneuver ?? chassis?.base_maneuver ?? 20
+  const speedMul = cls === 'Z' ? tb.civilianSpeed : tb.militarySpeed
+
+  // Waffen-Angriff auch mit Tech-Bonus skalieren
+  const boostedWeapons = weapons.map(w => ({
+    ...w,
+    attack: Math.round(w.attack * tb.attack),
+  }))
+
+  const boostedMaxHp = Math.round(rawHp * tb.hp)
+
   return {
     id: ship.id, name: ship.name ?? d?.name ?? 'Schiff', chassisClass: cls,
-    hp: ship.current_hp, maxHp: ship.max_hp,
-    attack:   d?.total_attack   ?? chassis?.base_attack   ?? 0,
-    defense:  d?.total_defense  ?? chassis?.base_defense  ?? 5,
-    speed:    d?.total_speed    ?? chassis?.base_speed    ?? 20,
-    maneuver: d?.total_maneuver ?? chassis?.base_maneuver ?? 20,
-    weapons,
+    hp: Math.min(ship.current_hp, boostedMaxHp),  // HP nie höher als boosted max
+    maxHp: boostedMaxHp,
+    attack:   Math.round(rawAtk * tb.attack),
+    defense:  Math.round(rawDef * tb.defense),
+    speed:    Math.round(rawSpd * speedMul),
+    maneuver: Math.round(rawMnv * tb.attack * 0.3 + rawMnv * 0.7),  // leichter Manöver-Bonus
+    weapons:  boostedWeapons,
     autoRetreatAt: ship.auto_retreat_at ?? 0,
     isPlayer: true,
   }
@@ -1114,6 +1184,9 @@ async function processCombat(log: string[]) {
   let battlesResolved = 0
 
   for (const battle of activeBattles ?? []) {
+    // Tech-Boni für diesen Spieler laden
+    const playerId = battle.fleets?.player_id
+    const techBonuses = playerId ? await loadPlayerTechBonuses(playerId) : undefined
     const pShips: CombatShip[] = battle.player_ships
     const nShips: NpcShip[]    = battle.npc_ships
     const alivePlayers = pShips.filter((s: CombatShip) => s.hp > 0)
@@ -1200,6 +1273,19 @@ async function processCombat(log: string[]) {
       if (cooldown) continue // Koordinate noch gesperrt
     }
 
+    // Kein NPC-Spawn wenn bereits eine andere Spielerflotte auf der Koordinate steht
+    // → verhindert inaktives Farmen durch stehenlassen der Flotte
+    if (!npcFleetRow) {
+      const { data: fleetsOnCoord } = await supabase
+        .from('fleets')
+        .select('id')
+        .eq('x', fx).eq('y', fy).eq('z', fz)
+        .eq('is_in_transit', false)
+        .neq('id', fleet.id)  // eigene Flotte nicht zählen
+        .limit(1)
+      if (fleetsOnCoord?.length) continue  // Koordinate besetzt
+    }
+
     // Wenn keine persistente NPC-Flotte: Modulo-Check ob NPC hier sein sollte
     // Gleiche Logik wie get_scan_objects: jeder 10. Gitterpunkt (npc_step=15)
     if (!npcFleetRow) {
@@ -1245,7 +1331,8 @@ async function processCombat(log: string[]) {
     if (!aliveNpcs.length) continue // NPC-Flotte bereits zerstört
 
     // Neuen Kampf starten
-    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs, partDefs))
+    const newBattleTechBonuses = fleet.player_id ? await loadPlayerTechBonuses(fleet.player_id) : undefined
+    const pShips = ships.map((s: any) => playerShipToCombat(s, chassisDefs, partDefs, newBattleTechBonuses))
     await supabase.from('active_battles').insert({
       player_id: fleet.player_id, fleet_id: fleet.id,
       npc_fleet_id: npcFleetRow.id, x: fx, y: fy, z: fz,
