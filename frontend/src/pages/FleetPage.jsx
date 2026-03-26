@@ -1401,19 +1401,19 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
                   {/* Angriff */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-                      {fmt(Math.round((ship.ship_designs?.total_attack ?? 0) * m.attack))}
+                      {fmt(ship.ship_designs?.total_attack ?? 0)}
                     </p>
                   </div>
                   {/* Geschw. */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono font-semibold" style={{ color: '#fbbf24' }}>
-                      {fmt(Math.round((ship.ship_designs?.total_speed ?? 0) * m.militarySpeed))}
+                      {fmt(ship.ship_designs?.total_speed ?? 0)}
                     </p>
                   </div>
                   {/* Laderaum */}
                   <div className="w-20 flex-shrink-0 text-center">
                     <p className="text-xs font-mono text-slate-300">
-                      {fmt(Math.round((ship.ship_designs?.total_cargo ?? 0) * m.cargo))}
+                      {fmt(ship.ship_designs?.total_cargo ?? 0)}
                     </p>
                   </div>
                   {/* Flucht + Detail */}
@@ -1633,7 +1633,7 @@ function FleetRow({ fleet, ships, onClick, stm }) {
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-          {fmt(ships.reduce((s, sh) => s + Math.round((sh.ship_designs?.total_attack ?? 0) * m.attack), 0))}
+          {fmt(ships.reduce((s, sh) => s + sh.ship_designs?.total_attack ?? 0, 0))}
         </p>
       </div>
 
