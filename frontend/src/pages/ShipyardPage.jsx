@@ -368,17 +368,25 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
           ? `${name} ${String(i + 1).padStart(2, '0')}`
           : name
 
+        const isZClass = chassis.class === 'Z'
+        const spdMul = isZClass ? (stm.civilianSpeed ?? 1) : (stm.militarySpeed ?? 1)
         const { data: design, error: designErr } = await supabase.from('ship_designs').insert({
           player_id:       player.id,
           name:            shipNameFinal,
           chassis_id:      chassis.id,
           installed_parts: selectedParts,
-          total_hp:        stats.hp,
-          total_defense:   stats.defense,
-          total_attack:    stats.attack,
-          total_speed:     stats.speed,
+          base_hp:         stats.hp,
+          base_defense:    stats.defense,
+          base_attack:     stats.attack,
+          base_speed:      stats.speed,
+          base_maneuver:   stats.maneuver,
+          base_cargo:      stats.cargo,
+          total_hp:        Math.round(stats.hp       * (stm.hp      ?? 1)),
+          total_defense:   Math.round(stats.defense  * (stm.defense ?? 1)),
+          total_attack:    Math.round(stats.attack   * (stm.attack  ?? 1)),
+          total_speed:     Math.round(stats.speed    * spdMul),
           total_maneuver:  stats.maneuver,
-          total_cargo:     stats.cargo,
+          total_cargo:     Math.round(stats.cargo    * (stm.cargo   ?? 1)),
           total_cells_used: totalCells,
           ast_scan_range:  stats.ast_scan_range ?? 0,
           npc_scan_range:  stats.npc_scan_range ?? 0,
@@ -568,12 +576,12 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
               </div>
               <div className="flex-1 grid grid-cols-2 gap-2">
                 {[
-                  ['HP', Math.round(stats.hp * stm.hp), Math.round(baseStats.hp * stm.hp)],
-                  ['Angriff', Math.round(stats.attack * stm.attack), Math.round(baseStats.attack * stm.attack)],
-                  ['Verteidigung', Math.round(stats.defense * stm.defense), Math.round(baseStats.defense * stm.defense)],
-                  ['Geschw.', Math.round(stats.speed * (chassis?.class === 'Z' ? stm.civilianSpeed : stm.militarySpeed)), Math.round(baseStats.speed * (chassis?.class === 'Z' ? stm.civilianSpeed : stm.militarySpeed))],
+                  ['HP', Math.round(stats.hp * (stm.hp ?? 1)), Math.round(baseStats.hp * (stm.hp ?? 1))],
+                  ['Angriff', Math.round(stats.attack * (stm.attack ?? 1)), Math.round(baseStats.attack * (stm.attack ?? 1))],
+                  ['Verteidigung', Math.round(stats.defense * (stm.defense ?? 1)), Math.round(baseStats.defense * (stm.defense ?? 1))],
+                  ['Geschw.', Math.round(stats.speed * (chassis?.class === 'Z' ? (stm.civilianSpeed ?? 1) : (stm.militarySpeed ?? 1))), Math.round(baseStats.speed * (chassis?.class === 'Z' ? (stm.civilianSpeed ?? 1) : (stm.militarySpeed ?? 1)))],
                   ['Manöver', stats.maneuver, baseStats.maneuver],
-                  ['Laderaum', Math.round(stats.cargo * stm.cargo), Math.round(baseStats.cargo * stm.cargo)],
+                  ['Laderaum', Math.round(stats.cargo * (stm.cargo ?? 1)), Math.round(baseStats.cargo * (stm.cargo ?? 1))],
                 ].map(([l, v, b]) => {
                   const origV = refitMode ? originalStats[{
                     HP: 'hp', Angriff: 'attack', Verteidigung: 'defense',
