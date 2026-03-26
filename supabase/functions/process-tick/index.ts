@@ -653,27 +653,45 @@ const SIZE_SHIPS: Record<FleetSize, { base: number; extra: number }> = {
   armada:     { base: 16, extra: 24 },  // 16–40  (Boss-Flotte)
 }
 
-// NPC-Label für den Scanner (was der Spieler sieht)
-const NPC_LABELS: Record<string, { name: string; difficulty: string }> = {}
-for (const diff of ['rookie','seasoned','veteran','elite','commander'] as Difficulty[]) {
-  for (const size of ['staffel','geschwader','flotte','armada'] as FleetSize[]) {
-    const key = diff + '_' + size
-    const sizeName = size.charAt(0).toUpperCase() + size.slice(1)
-    const diffName = diff.charAt(0).toUpperCase() + diff.slice(1)
-    NPC_LABELS[key] = { name: 'Piraten-' + sizeName, difficulty: diffName }
-  }
+// NPC-Label für den Scanner — statisch statt for-loop (Deno Edge kompatibel)
+const NPC_LABELS: Record<string, { name: string; difficulty: string }> = {
+  rookie_staffel:       { name: 'Piraten-Staffel',      difficulty: 'Rookie'    },
+  rookie_geschwader:    { name: 'Piraten-Geschwader',   difficulty: 'Rookie'    },
+  rookie_flotte:        { name: 'Piraten-Flotte',       difficulty: 'Rookie'    },
+  rookie_armada:        { name: 'Piraten-Armada',       difficulty: 'Rookie'    },
+  seasoned_staffel:     { name: 'Piraten-Staffel',      difficulty: 'Seasoned'  },
+  seasoned_geschwader:  { name: 'Piraten-Geschwader',   difficulty: 'Seasoned'  },
+  seasoned_flotte:      { name: 'Piraten-Flotte',       difficulty: 'Seasoned'  },
+  seasoned_armada:      { name: 'Piraten-Armada',       difficulty: 'Seasoned'  },
+  veteran_staffel:      { name: 'Piraten-Staffel',      difficulty: 'Veteran'   },
+  veteran_geschwader:   { name: 'Piraten-Geschwader',   difficulty: 'Veteran'   },
+  veteran_flotte:       { name: 'Piraten-Flotte',       difficulty: 'Veteran'   },
+  veteran_armada:       { name: 'Piraten-Armada',       difficulty: 'Veteran'   },
+  elite_staffel:        { name: 'Piraten-Staffel',      difficulty: 'Elite'     },
+  elite_geschwader:     { name: 'Piraten-Geschwader',   difficulty: 'Elite'     },
+  elite_flotte:         { name: 'Piraten-Flotte',       difficulty: 'Elite'     },
+  elite_armada:         { name: 'Piraten-Armada',       difficulty: 'Elite'     },
+  commander_staffel:    { name: 'Piraten-Staffel',      difficulty: 'Commander' },
+  commander_geschwader: { name: 'Piraten-Geschwader',   difficulty: 'Commander' },
+  commander_flotte:     { name: 'Piraten-Flotte',       difficulty: 'Commander' },
+  commander_armada:     { name: 'Piraten-Armada',       difficulty: 'Commander' },
+  haendler_konvoi:      { name: 'Händler-Konvoi',       difficulty: 'Rookie'    },
 }
-// Händler-Konvoi bleibt separat
-NPC_LABELS['haendler_konvoi'] = { name: 'Händler-Konvoi', difficulty: 'Rookie' }
 
-// Rückwärtskompatibilität: alte npc_types auf neues System mappen
-const NPC_DIFFICULTY: Record<string, string> = {}
-for (const diff of ['rookie','seasoned','veteran','elite','commander']) {
-  for (const size of ['staffel','geschwader','flotte','armada']) {
-    NPC_DIFFICULTY[diff + '_' + size] = diff
-  }
+// NPC-Typ → Schwierigkeit (statisch, kein for-loop)
+const NPC_DIFFICULTY: Record<string, string> = {
+  rookie_staffel: 'rookie',    rookie_geschwader: 'rookie',
+  rookie_flotte:  'rookie',    rookie_armada:     'rookie',
+  seasoned_staffel: 'seasoned', seasoned_geschwader: 'seasoned',
+  seasoned_flotte:  'seasoned', seasoned_armada:     'seasoned',
+  veteran_staffel: 'veteran',  veteran_geschwader: 'veteran',
+  veteran_flotte:  'veteran',  veteran_armada:     'veteran',
+  elite_staffel:   'elite',    elite_geschwader:   'elite',
+  elite_flotte:    'elite',    elite_armada:       'elite',
+  commander_staffel: 'commander', commander_geschwader: 'commander',
+  commander_flotte:  'commander', commander_armada:     'commander',
+  haendler_konvoi: 'rookie',
 }
-NPC_DIFFICULTY['haendler_konvoi'] = 'rookie'
 
 const CLASS_SHOTS: Record<string, number> = { Z: 0, A: 0, B: 1, C: 2, D: 3, E: 6 }
 
