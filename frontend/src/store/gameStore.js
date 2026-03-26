@@ -22,6 +22,7 @@ export const useGameStore = create((set, get) => ({
   race: null,           // Rassen-Daten inkl. mine_production_bonus
   playerSkills: {},     // { skill_key: points_spent }
   techEffects: {},      // { tech_id: { mine_production: 0.05, ... } }
+  techLevels:  {},      // { tech_id: level } — korrekte Level für Bonus-Berechnung
   mineProductionBonus: 1.0, // berechneter Multiplikator (1.0 = kein Bonus)
   scanRanges: { fleet: 10, npc: 20, asteroid: 40 }, // Scanreichweiten in pc
 
@@ -225,7 +226,7 @@ export const useGameStore = create((set, get) => ({
     }
     const techLevelMap = {}
     for (const t of techs ?? []) techLevelMap[t.tech_id] = t.level
-    set({ techEffects: techEffectsMap })
+    set({ techEffects: techEffectsMap, techLevels: techLevelMap })
 
     // Boni neu berechnen mit frischen Tech-Daten
     const { race, playerSkills } = get()
@@ -385,8 +386,7 @@ export const useGameStore = create((set, get) => ({
     const r = race ?? get().race
     const sk = skills ?? get().playerSkills
     const te = techEffects ?? get().techEffects
-    const tl = techLevels ?? (() => {
-      // techLevels aus technologies nicht verfügbar ohne level — Fallback 1
+    const tl = techLevels ?? get().techLevels ?? (() => {
       const map = {}
       for (const id of get().technologies) map[id] = 1
       return map
