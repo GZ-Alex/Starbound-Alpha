@@ -24,6 +24,10 @@ export const useGameStore = create((set, get) => ({
   techEffects: {},      // { tech_id: { mine_production: 0.05, ... } }
   techLevels:  {},      // { tech_id: level } — korrekte Level für Bonus-Berechnung
   mineProductionBonus: 1.0, // berechneter Multiplikator (1.0 = kein Bonus)
+  shipTechMultipliers: {    // Tech-Boni auf Schiffsstatistiken
+    attack: 1.0, defense: 1.0, hp: 1.0,
+    militarySpeed: 1.0, civilianSpeed: 1.0, cargo: 1.0,
+  },
   scanRanges: { fleet: 10, npc: 20, asteroid: 40 }, // Scanreichweiten in pc
 
   // UI state
@@ -228,6 +232,7 @@ export const useGameStore = create((set, get) => ({
     // Boni neu berechnen mit frischen Tech-Daten
     const { race, playerSkills } = get()
     get().recalcMineBonus(race, playerSkills, techEffectsMap, techLevelMap)
+    get().recalcShipBonuses()
     get().recalcScanRanges()
   },
 
@@ -406,6 +411,53 @@ export const useGameStore = create((set, get) => ({
     }
 
     set({ mineProductionBonus: 1.0 + bonus })
+  },
+
+  recalcShipBonuses: () => {
+    const te = get().techEffects
+    const tl = get().techLevels
+    const sk = get().playerSkills ?? {}
+    const race = get().race
+
+    let atkBonus = 0, defBonus = 0, hpBonus = 0
+    let milSpdBonus = 0, civSpdBonus = 0, cargoBonus = 0
+
+    // Rassen-Boni
+    if (race?.ship_attack_bonus)    atkBonus    += (race.ship_attack_bonus    ?? 0) / 100
+    if (race?.ship_defense_bonus)   defBonus    += (race.ship_defense_bonus   ?? 0) / 100
+    if (race?.ship_hp_bonus)        hpBonus     += (race.ship_hp_bonus        ?? 0) / 100
+    if (race?.military_speed_bonus) milSpdBonus += (race.military_speed_bonus ?? 0) / 100
+    if (race?.civilian_speed_bonus) civSpdBonus += (race.civilian_speed_bonus ?? 0) / 100
+
+    // Skillpunkte
+    if (sk.ship_attack)    atkBonus    += (sk.ship_attack    ?? 0) * 0.03
+    if (sk.ship_defense)   defBonus    += (sk.ship_defense   ?? 0) * 0.05
+    if (sk.ship_hp)        hpBonus     += (sk.ship_hp        ?? 0) * 0.02
+    if (sk.military_speed) milSpdBonus += (sk.military_speed ?? 0) * 0.04
+    if (sk.civilian_speed) civSpdBonus += (sk.civilian_speed ?? 0) * 0.04
+    if (sk.ship_cargo)     cargoBonus  += (sk.ship_cargo     ?? 0) * 0.03
+
+    // Tech-Boni
+    for (const [techId, effects] of Object.entries(te)) {
+      const lvl = tl[techId] ?? 1
+      if (effects?.ship_attack_bonus)    atkBonus    += effects.ship_attack_bonus    * lvl
+      if (effects?.ship_defense_bonus)   defBonus    += effects.ship_defense_bonus   * lvl
+      if (effects?.ship_hp_bonus)        hpBonus     += effects.ship_hp_bonus        * lvl
+      if (effects?.military_speed_bonus) milSpdBonus += effects.military_speed_bonus * lvl
+      if (effects?.civilian_speed_bonus) civSpdBonus += effects.civilian_speed_bonus * lvl
+      if (effects?.ship_cargo_bonus)     cargoBonus  += effects.ship_cargo_bonus     * lvl
+    }
+
+    set({
+      shipTechMultipliers: {
+        attack:        1.0 + atkBonus,
+        defense:       1.0 + defBonus,
+        hp:            1.0 + hpBonus,
+        militarySpeed: 1.0 + milSpdBonus,
+        civilianSpeed: 1.0 + civSpdBonus,
+        cargo:         1.0 + cargoBonus,
+      }
+    })
   },
 
   // Scan-Reichweiten live berechnen
