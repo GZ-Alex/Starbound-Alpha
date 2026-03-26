@@ -1128,7 +1128,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
   const flightMode = FLIGHT_MODE_LABELS[fleet.flight_mode] ?? FLIGHT_MODE_LABELS.neutral
-  const speed = fleetSpeed(ships)
+  const speed = fleetSpeed(ships, m)
   const cargoEntries = Object.entries(fleet.cargo ?? {}).filter(([, v]) => v > 0)
 
   // Flotte gilt als "im Flug" nur wenn arrive_at in der Zukunft liegt
@@ -1583,7 +1583,7 @@ function FleetRow({ fleet, ships, onClick, stm }) {
   const hpPct = fleetHpPct(ships)
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
-  const speed = fleetSpeed(ships)
+  const speed = fleetSpeed(ships, m)
   const eta = etaString(fleet.arrive_at)
 
   // Flotte gilt als "im Flug" nur wenn arrive_at in der Zukunft liegt
