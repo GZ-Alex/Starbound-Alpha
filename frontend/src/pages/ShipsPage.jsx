@@ -234,7 +234,7 @@ function BulkAssignModal({ ships, fleets, planet, onClose, onAssigned }) {
 
 // ─── Detail Popup ──────────────────────────────────────────────────────────────
 
-function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, onClose }) {
+function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, stm, onClose }) {
   const imgSrc = chassis?.image_key
     ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
@@ -760,6 +760,7 @@ export default function ShipsPage() {
             partDefs={partDefs}
             fleet={selectedFleet}
             planet={planet}
+            stm={stm}
             onClose={() => setSelectedShip(null)}
           />
         )}
