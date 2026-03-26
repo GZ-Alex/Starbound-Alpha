@@ -56,7 +56,8 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
   const [busy, setBuilding] = useState(false)
   const [shipName, setShipName] = useState('')
   const [quantity, setQuantity] = useState(1)
-  const { addNotification } = useGameStore()
+  const { addNotification, shipTechMultipliers } = useGameStore()
+  const stm = shipTechMultipliers ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
 
   const getAvailableParts = (category) => {
     const sortOrder = (id) => {
@@ -567,12 +568,12 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
               </div>
               <div className="flex-1 grid grid-cols-2 gap-2">
                 {[
-                  ['HP', stats.hp, baseStats.hp],
-                  ['Angriff', stats.attack, baseStats.attack],
-                  ['Verteidigung', stats.defense, baseStats.defense],
-                  ['Geschw.', stats.speed, baseStats.speed],
+                  ['HP', Math.round(stats.hp * stm.hp), Math.round(baseStats.hp * stm.hp)],
+                  ['Angriff', Math.round(stats.attack * stm.attack), Math.round(baseStats.attack * stm.attack)],
+                  ['Verteidigung', Math.round(stats.defense * stm.defense), Math.round(baseStats.defense * stm.defense)],
+                  ['Geschw.', Math.round(stats.speed * (chassis?.class === 'Z' ? stm.civilianSpeed : stm.militarySpeed)), Math.round(baseStats.speed * (chassis?.class === 'Z' ? stm.civilianSpeed : stm.militarySpeed))],
                   ['Manöver', stats.maneuver, baseStats.maneuver],
-                  ['Laderaum', stats.cargo, baseStats.cargo],
+                  ['Laderaum', Math.round(stats.cargo * stm.cargo), Math.round(baseStats.cargo * stm.cargo)],
                 ].map(([l, v, b]) => {
                   const origV = refitMode ? originalStats[{
                     HP: 'hp', Angriff: 'attack', Verteidigung: 'defense',
