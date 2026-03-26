@@ -1124,7 +1124,6 @@ async function processCombat(log: string[]) {
       const npcType = diff + '_' + size
       if (fleet.flight_mode === 'bounty' && diff === 'commander' && size === 'armada') continue
 
-      const diff = (NPC_DIFFICULTY[npcType] ?? 'rookie') as Difficulty
       const npcShips = buildNpcFleet(npcType, chassisDefs)
 
       const { data: inserted } = await supabase.from('npc_combat_fleets').insert({
