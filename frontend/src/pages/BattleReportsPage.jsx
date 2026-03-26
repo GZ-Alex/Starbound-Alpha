@@ -1,7 +1,7 @@
 // src/pages/BattleReportsPage.jsx — v1.1
 import { useState, useEffect } from 'react'
 import { useGameStore } from '@/store/gameStore'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Swords, ChevronLeft, ChevronDown, ChevronUp, Shield, Crosshair, Package, Trophy, Skull, Minus } from 'lucide-react'
