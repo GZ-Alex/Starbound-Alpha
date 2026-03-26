@@ -84,27 +84,46 @@ function RoundLog({ rounds }) {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden">
                 <div className="mt-1 space-y-0.5 pl-3">
-                  {round.actions.map((action, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2 py-1 rounded text-xs font-mono"
-                      style={{ background: 'rgba(0,0,0,0.2)' }}>
-                      <span className="text-slate-500 w-4 text-right flex-shrink-0">{i + 1}.</span>
-                      <span className="text-slate-300 flex-shrink-0 truncate max-w-[120px]">{action.attackerName}</span>
-                      <span className="text-slate-600">→</span>
-                      <span className="text-slate-300 flex-shrink-0 truncate max-w-[120px]">{action.targetName}</span>
-                      {action.hit ? (
-                        <>
-                          <span style={{ color: '#f87171' }} className="flex-shrink-0">
-                            -{fmt(action.damage)} HP
-                          </span>
-                          {action.destroyed && (
-                            <span style={{ color: '#ef4444' }} className="flex-shrink-0">💥 Zerstört</span>
-                          )}
-                        </>
-                      ) : (
-                        <span style={{ color: '#475569' }} className="flex-shrink-0">Verfehlt</span>
-                      )}
-                    </div>
-                  ))}
+                  {round.actions.map((action, i) => {
+                    const isNpcAttacker = !action.attackerName || action.attackerId?.startsWith('npc_')
+                    const isNpcTarget   = !action.targetName  || action.targetId?.startsWith('npc_')
+                    const wpnClass = action.weaponClass ?? '—'
+                    const wpnType  = action.weaponType  ? action.weaponType.charAt(0).toUpperCase() + action.weaponType.slice(1) : '—'
+                    const tgtClass = action.targetClass ?? '?'
+                    return (
+                      <div key={i}
+                        className="grid items-center gap-x-2 px-2 py-1 rounded text-xs font-mono whitespace-nowrap"
+                        style={{ background: 'rgba(0,0,0,0.2)', gridTemplateColumns: '20px minmax(0,1fr) 24px 60px 12px minmax(0,1fr) 24px 60px 60px auto' }}>
+                        {/* # */}
+                        <span className="text-slate-600 text-right">{i + 1}.</span>
+                        {/* Angreifer Name */}
+                        <span className="text-slate-200 truncate">{action.attackerName ?? '—'}</span>
+                        {/* Angreifer Klasse */}
+                        <span className="text-slate-500 text-center">{action.attackerClass ?? '?'}</span>
+                        {/* Waffe */}
+                        <span className="text-slate-600">{wpnType} {wpnClass}</span>
+                        {/* Pfeil */}
+                        <span className="text-slate-600">→</span>
+                        {/* Ziel Name */}
+                        <span className="text-slate-200 truncate">{action.targetName ?? '—'}</span>
+                        {/* Ziel Klasse */}
+                        <span className="text-slate-500 text-center">{tgtClass}</span>
+                        {/* Ziel Partei */}
+                        <span className="text-slate-600">{isNpcTarget ? '(Pirat)' : '(Du)'}</span>
+                        {/* Ergebnis */}
+                        {action.hit ? (
+                          <span style={{ color: '#4ade80' }}>Treffer</span>
+                        ) : (
+                          <span style={{ color: '#475569' }}>Verfehlt</span>
+                        )}
+                        {/* Schaden */}
+                        <span style={{ color: action.hit ? '#f87171' : 'transparent', textAlign: 'right' }}>
+                          {action.hit ? `-${fmt(action.damage)}` : ''}
+                          {action.destroyed ? ' 💥' : ''}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               </motion.div>
             )}
