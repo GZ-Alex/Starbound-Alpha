@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.017 — 26. März 2026
+// Version: 0.019 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -712,14 +712,16 @@ async function processNpcSpawns(log: string[]) {
     }
   }
 
-  // In Batches einfügen (max 500 pro Insert)
+  // In Batches einfügen — ON CONFLICT DO NOTHING für Duplikate
   console.log(`npc_spawns_toinsert=${toInsert.length}`)
   let spawned = 0
   for (let i = 0; i < toInsert.length; i += 500) {
     const batch = toInsert.slice(i, i + 500)
-    const { error } = await supabase.from('npc_combat_fleets').insert(batch)
-    if (!error) spawned += batch.length
-    else console.error(`npc_spawn_err: ${error.message} code=${error.code}`)
+    const { error, count } = await supabase.from('npc_combat_fleets')
+      .upsert(batch, { onConflict: 'x,y,z,time_slot', ignoreDuplicates: true })
+      .select('id')
+    if (error) console.error(`npc_spawn_err: ${error.message} code=${error.code}`)
+    else spawned += batch.length
   }
 
   if (spawned > 0) console.log(`npc_spawned=${spawned}`)
@@ -1362,14 +1364,19 @@ async function processCombat(log: string[]) {
 
     // NPC-Schiffe generieren falls noch nicht vorhanden (ships = [])
     if (!npcFleetRow.ships?.length) {
+      console.log(`building npc fleet: type=${npcFleetRow.npc_type} chassisDefs=${chassisDefs.length}`)
       const npcShips = buildNpcFleet(npcFleetRow.npc_type, chassisDefs)
+      console.log(`built ${npcShips.length} npc ships`)
       await supabase.from('npc_combat_fleets')
         .update({ ships: npcShips })
         .eq('id', npcFleetRow.id)
       npcFleetRow = { ...npcFleetRow, ships: npcShips }
     }
 
-    if (!npcFleetRow.ships?.length) continue  // buildNpcFleet hat nichts geliefert
+    if (!npcFleetRow.ships?.length) {
+      console.error(`no npc ships after build: type=${npcFleetRow.npc_type}`)
+      continue
+    }
 
     const npcShips: NpcShip[] = npcFleetRow.ships
     const aliveNpcs = npcShips.filter((s: NpcShip) => s.hp > 0)
