@@ -686,7 +686,6 @@ async function processNpcSpawns(log: string[]) {
                       : 'armada'
         const sizeConf = SIZE_SHIPS[npcSize as FleetSize] ?? SIZE_SHIPS['staffel']
         const shipCount = sizeConf.base + Math.floor(cntH * sizeConf.extra)
-        const npcShips = buildNpcFleet(`${npcDiff}_${npcSize}`, [])  // Schiffe ohne chassisDefs für Vorschau
 
         toInsert.push({
           npc_type:   `${npcDiff}_${npcSize}`,
