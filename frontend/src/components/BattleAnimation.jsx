@@ -39,7 +39,7 @@ function loadSprite(chassisId) {
   const img = new Image()
   img.onload  = () => { spriteCache[chassisId] = img }
   img.onerror = () => { spriteCache[chassisId] = false }  // false = kein Sprite
-  img.src = `/Starbound-Alpha/sprites/${chassisId}_sprite.png`
+  img.src = `/sprites/${chassisId}_sprite.png`
   return null
 }
 
@@ -59,6 +59,9 @@ function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chass
     : hpPct > 0.25 ? '#fbbf24'
     : '#ef4444'
 
+  // Rotationswinkel: Ruheposition + evtl. Ziel-Winkel beim Schießen
+  // Sprite zeigt nach unten (Süd = π) — Spieler zeigen nach oben = rotate(0), Feinde nach unten = rotate(π)
+  // aimAngle: null = Ruheposition, number = Winkel zum Ziel
   const baseAngle = isPlayer ? 0 : Math.PI
   const finalAngle = aimAngle !== null && aimAngle !== undefined ? aimAngle : baseAngle
 
@@ -66,6 +69,7 @@ function drawShip(ctx, x, y, cls, hp, maxHp, isPlayer, isDestroyed, label, chass
   ctx.translate(x, y)
   ctx.rotate(finalAngle)
 
+  // Sprite versuchen
   const sprite = chassisId ? loadSprite(chassisId) : false
   const s = cfg.size
 
@@ -161,11 +165,113 @@ function buildSimState(report) {
 
 // ─── Schiff-Positionen berechnen ──────────────────────────────────────────────
 
+
+// ─── Waffen-Draw-Funktionen ──────────────────────────────────────────────────
+
+function drawBeam(ctx, x1, y1, x2, y2, color, glow, progress) {
+  const alpha = progress < 0.3 ? progress / 0.3 : progress > 0.7 ? (1 - progress) / 0.3 : 1
+  ctx.save()
+  ctx.globalAlpha = alpha * 0.9
+  ctx.strokeStyle = glow
+  ctx.lineWidth = 4
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 8
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawProjectile(ctx, x1, y1, x2, y2, color, glow, progress, size) {
+  const px = x1 + (x2 - x1) * progress
+  const py = y1 + (y2 - y1) * progress
+  ctx.save()
+  ctx.globalAlpha = 0.95
+  ctx.fillStyle = glow
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 6
+  ctx.beginPath()
+  ctx.arc(px, py, size ?? 3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.arc(px, py, (size ?? 3) * 0.6, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawMissile(ctx, x1, y1, x2, y2, color, glow, progress) {
+  const px = x1 + (x2 - x1) * progress
+  const py = y1 + (y2 - y1) * progress
+  // Schweif
+  ctx.save()
+  ctx.globalAlpha = 0.5
+  const trailLen = 0.08
+  const tx = x1 + (x2 - x1) * Math.max(0, progress - trailLen)
+  const ty = y1 + (y2 - y1) * Math.max(0, progress - trailLen)
+  const grad = ctx.createLinearGradient(tx, ty, px, py)
+  grad.addColorStop(0, 'transparent')
+  grad.addColorStop(1, glow)
+  ctx.strokeStyle = grad
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(tx, ty)
+  ctx.lineTo(px, py)
+  ctx.stroke()
+  ctx.restore()
+  // Kopf
+  ctx.save()
+  ctx.globalAlpha = 0.95
+  ctx.fillStyle = color
+  ctx.shadowColor = glow
+  ctx.shadowBlur = 8
+  ctx.beginPath()
+  ctx.arc(px, py, 4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawExplosion(ctx, x, y, progress) {
+  const r = progress * 28
+  const alpha = 1 - progress
+  ctx.save()
+  ctx.globalAlpha = alpha * 0.7
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+  grad.addColorStop(0, '#fff')
+  grad.addColorStop(0.3, '#fbbf24')
+  grad.addColorStop(1, 'transparent')
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawHitEffect(ctx, x, y, weaponType, progress) {
+  const alpha = 1 - progress
+  ctx.save()
+  ctx.globalAlpha = alpha
+  const colors = { laser: '#f87171', ion: '#60a5fa', railgun: '#a78bfa', plasma: '#f97316', torpedo: '#fbbf24' }
+  const color = colors[weaponType] ?? '#f87171'
+  const r = progress * 15
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
+}
+
 function layoutShips(ships, side, canvasW, canvasH) {
   const MAX_ROWS = 3
   const perRow = Math.ceil(ships.length / MAX_ROWS)
-  const rows = Math.ceil(ships.length / perRow)
-  // Spacing: Canvas-Breite aufteilen, min 44px damit Schiffe nicht überlappen
   const spacing = Math.max(44, Math.min(80, Math.floor((canvasW - 20) / perRow)))
   const rowSpacing = 65
 
@@ -396,7 +502,7 @@ export default function BattleAnimation({ report, onClose }) {
           }
         }
       } else if (st.activeProjectiles.length === 0 && st.explosions.length === 0) {
-        // Alle Runden fertig — nur als done markieren wenn wirklich Runden existierten
+        // Alle Runden fertig — nur wenn tatsächlich Runden vorhanden
         if (sim.rounds.length > 0) setDone(true)
       }
 
