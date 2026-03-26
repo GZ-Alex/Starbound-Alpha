@@ -396,8 +396,8 @@ export default function BattleAnimation({ report, onClose }) {
           }
         }
       } else if (st.activeProjectiles.length === 0 && st.explosions.length === 0) {
-        // Alle Runden fertig
-        setDone(true)
+        // Alle Runden fertig — nur als done markieren wenn wirklich Runden existierten
+        if (sim.rounds.length > 0) setDone(true)
       }
 
       // ── Runden-Anzeige ────────────────────────────────────────────────────────
@@ -436,14 +436,21 @@ export default function BattleAnimation({ report, onClose }) {
         {!started && (
           <div className="absolute inset-0 flex items-center justify-center"
             style={{ background: 'rgba(4,13,26,0.85)', backdropFilter: 'blur(2px)' }}>
-            <button onClick={handleStart}
-              className="flex flex-col items-center gap-3 group transition-transform hover:scale-105">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center transition-all"
-                style={{ background: 'rgba(34,211,238,0.12)', border: '2px solid rgba(34,211,238,0.4)' }}>
-                <Play size={32} style={{ color: '#22d3ee', marginLeft: 4 }} />
+            {totalRounds > 0 ? (
+              <button onClick={handleStart}
+                className="flex flex-col items-center gap-3 group transition-transform hover:scale-105">
+                <div className="w-20 h-20 rounded-full flex items-center justify-center transition-all"
+                  style={{ background: 'rgba(34,211,238,0.12)', border: '2px solid rgba(34,211,238,0.4)' }}>
+                  <Play size={32} style={{ color: '#22d3ee', marginLeft: 4 }} />
+                </div>
+                <span className="text-xs font-mono text-slate-500">Kampf abspielen</span>
+              </button>
+            ) : (
+              <div className="text-center space-y-2">
+                <p className="text-sm font-mono text-slate-400 animate-pulse">⚔ Kampf läuft...</p>
+                <p className="text-xs font-mono text-slate-600">Aktualisieren wenn Runden verfügbar</p>
               </div>
-              <span className="text-xs font-mono text-slate-500">Kampf abspielen</span>
-            </button>
+            )}
           </div>
         )}
 
