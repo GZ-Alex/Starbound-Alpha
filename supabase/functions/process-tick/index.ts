@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.019 — 26. März 2026
+// Version: 0.020 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1393,7 +1393,7 @@ async function processCombat(log: string[]) {
 
     // Sofort einen Live-Kampfbericht anlegen
     if (newBattle) {
-      await supabase.from('battle_reports').insert({
+      const { error: reportErr } = await supabase.from('battle_reports').insert({
         attacker_id:    fleet.player_id,
         x: fx, y: fy, z: fz,
         attacker_fleet: { fleet_id: fleet.id, fleet_name: fleet.name, ships: pShips },
@@ -1404,6 +1404,8 @@ async function processCombat(log: string[]) {
         status:  'in_progress',
         active_battle_id: newBattle.id,
       })
+      if (reportErr) console.error(`battle_report_insert_err: ${reportErr.message} code=${reportErr.code}`)
+      else console.log(`battle_report_created: battle=${newBattle.id}`)
     }
 
     await notify(fleet.player_id, 'battle',
