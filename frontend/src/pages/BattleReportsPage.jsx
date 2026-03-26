@@ -273,7 +273,7 @@ function BattleCard({ report, isOpen, onToggle, playerName }) {
                 <div>
                   <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                     <Crosshair size={10} style={{ color: '#f87171' }} />
-                    {npcLabel} ({report.defender_fleet?.ships?.length ?? 0} Schiffe)
+                    {defenderNames} ({report.defender_fleet?.ships?.length ?? 0} Schiffe)
                   </p>
                   <div className="space-y-1">
                     {(report.defender_fleet?.ships ?? []).map((s, i) => (
