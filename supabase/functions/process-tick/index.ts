@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.020 — 26. März 2026
+// Version: 0.023 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1103,7 +1103,7 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
       weapons.push({
         weaponType: weaponTypeFromId(partId),
         weaponClass: wClass,
-        attack: (part.attack_bonus ?? 0) + baseAtk,
+        attack: (part.attack_bonus ?? 0) + baseAtk,  // Rohwert — wird unten skaliert
         targetClass: WEAPON_TARGET_CLASS[wClass] ?? cls,
         isPrimary: true,
       })
@@ -1112,7 +1112,7 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
       weapons.push({
         weaponType: weaponTypeFromId(partId),
         weaponClass: wClass,
-        attack: (part.attack_bonus ?? 0) + Math.floor(baseAtk / 2),
+        attack: (part.attack_bonus ?? 0) + Math.floor(baseAtk / 2),  // Rohwert
         targetClass: WEAPON_TARGET_CLASS[wClass] ?? cls,
         isPrimary: false,
       })
@@ -1129,6 +1129,16 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
       targetClass: cls,
       isPrimary: true,
     })
+  }
+
+  // Waffen-Angriff auf total_attack skalieren (enthält bereits Tech-Boni)
+  // total_attack = Summe aller Waffen-Rohwerte × Tech-Multiplikator
+  // Jede Waffe bekommt ihren proportionalen Anteil
+  const totalRawAtk = weapons.reduce((sum, w) => sum + w.attack, 0)
+  const boostedTotalAtk = d?.total_attack ?? totalRawAtk
+  if (totalRawAtk > 0 && weapons.length > 0) {
+    const scaleFactor = boostedTotalAtk / totalRawAtk
+    for (const w of weapons) w.attack = Math.round(w.attack * scaleFactor)
   }
 
   // total_* in ship_designs enthält bereits gebooste Werte (via recalc_ship_stats_for_player)
@@ -1149,8 +1159,8 @@ function playerShipToCombat(ship: any, chassisDefs: any[], partDefs: any[]): Com
 }
 
 interface RoundAction {
-  attackerId: string; attackerName: string
-  targetId: string; targetName: string
+  attackerId: string; attackerName: string; attackerClass: string
+  targetId: string; targetName: string; targetClass: string
   weaponType: string; weaponClass: string; isPrimary: boolean
   hit: boolean; damage: number; targetHpAfter: number; destroyed: boolean
 }
@@ -1193,8 +1203,8 @@ function simulateOneRound(
         const damage = hit ? calcDamage(weapon.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
         actions.push({
-          attackerId: attacker.id, attackerName: attacker.name,
-          targetId: target.id, targetName: target.name,
+          attackerId: attacker.id, attackerName: attacker.name, attackerClass: attacker.chassisClass,
+          targetId: target.id, targetName: target.name, targetClass: target.chassisClass,
           weaponType: weapon.weaponType, weaponClass: weapon.weaponClass, isPrimary: weapon.isPrimary,
           hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0,
         })
@@ -1213,8 +1223,8 @@ function simulateOneRound(
         const damage = hit ? calcDamage(attacker.attack, target.defense) : 0
         if (hit) target.hp = Math.max(0, target.hp - damage)
         actions.push({
-          attackerId: attacker.id, attackerName: attacker.name,
-          targetId: target.id, targetName: target.name,
+          attackerId: attacker.id, attackerName: attacker.name, attackerClass: attacker.chassisClass,
+          targetId: target.id, targetName: target.name, targetClass: target.chassisClass,
           weaponType: npcWeaponType, weaponClass: attacker.chassisClass, isPrimary: true,
           hit, damage, targetHpAfter: target.hp, destroyed: target.hp <= 0,
         })
@@ -1252,6 +1262,19 @@ async function processCombat(log: string[]) {
   let battlesResolved = 0
 
   for (const battle of activeBattles ?? []) {
+    // Kampf abbrechen wenn Flotte weggeflogen ist
+    const fleetData = battle.fleets as any
+    if (fleetData?.is_in_transit) {
+      const pShips: CombatShip[] = battle.player_ships
+      const nShips: NpcShip[]    = battle.npc_ships
+      await finalizeBattle({ ...battle }, pShips, nShips, chassisDefs, log)
+      await supabase.from('active_battles').delete().eq('id', battle.id)
+      await supabase.from('fleets').update({ flight_mode: 'neutral' }).eq('id', battle.fleet_id)
+      log.push(`battle_cancelled_fled: ${battle.id}`)
+      battlesResolved++
+      continue
+    }
+
     const pShips: CombatShip[] = battle.player_ships
     const nShips: NpcShip[]    = battle.npc_ships
     const alivePlayers = pShips.filter((s: CombatShip) => s.hp > 0)
