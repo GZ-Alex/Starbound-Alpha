@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.023 — 26. März 2026
+// Version: 0.024 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1262,15 +1262,23 @@ async function processCombat(log: string[]) {
   let battlesResolved = 0
 
   for (const battle of activeBattles ?? []) {
-    // Kampf abbrechen wenn Flotte weggeflogen ist
+    // Kampf abbrechen wenn Flotte nicht mehr auf den Kampfkoordinaten steht
     const fleetData = battle.fleets as any
-    if (fleetData?.is_in_transit) {
+    const fleetGone = !fleetData ||
+      fleetData.is_in_transit ||
+      fleetData.x !== battle.x ||
+      fleetData.y !== battle.y ||
+      fleetData.z !== battle.z
+
+    if (fleetGone) {
       const pShips: CombatShip[] = battle.player_ships
       const nShips: NpcShip[]    = battle.npc_ships
       await finalizeBattle({ ...battle }, pShips, nShips, chassisDefs, log)
       await supabase.from('active_battles').delete().eq('id', battle.id)
-      await supabase.from('fleets').update({ flight_mode: 'neutral' }).eq('id', battle.fleet_id)
-      log.push(`battle_cancelled_fled: ${battle.id}`)
+      if (fleetData && !fleetData.is_in_transit) {
+        await supabase.from('fleets').update({ flight_mode: 'neutral' }).eq('id', battle.fleet_id)
+      }
+      log.push(`battle_cancelled_fleet_left: ${battle.id}`)
       battlesResolved++
       continue
     }
