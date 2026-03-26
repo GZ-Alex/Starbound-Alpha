@@ -229,8 +229,18 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
       name: p.name,
       type: p.category === 'primary_weapon' ? 'Primär' : 'Sekundär',
       weaponClass: p.weapon_class ?? '—',
-      attack: weaponAttackBonus(p),
+      attackRaw: weaponAttackBonus(p),
     }))
+
+  // Gebooste Werte: total_attack (bereits mit Boni) proportional auf Waffen aufteilen
+  const totalRawWeaponAtk = installedWeapons.reduce((s, w) => s + w.attackRaw, 0)
+  const boostedTotalAtk = Math.round(stats.attack * (stm.attack ?? 1))
+  const installedWeaponsWithBoostedAtk = installedWeapons.map(w => ({
+    ...w,
+    attack: totalRawWeaponAtk > 0
+      ? Math.round(boostedTotalAtk * w.attackRaw / totalRawWeaponAtk)
+      : boostedTotalAtk,
+  }))
 
   // Original-Parts für Refit-Modus (zum Delta-Vergleich)
   const originalParts = refitMode && ship?.ship_designs?.installed_parts
@@ -626,7 +636,7 @@ export function ShipDesigner({ chassis, planet, player, partDefs, hasTech, onClo
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-widest font-mono mb-2">Bewaffnung</p>
                 <div className="space-y-1">
-                  {installedWeapons.map((w, i) => (
+                  {installedWeaponsWithBoostedAtk.map((w, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-1.5 rounded text-xs font-mono"
                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                       <span className="text-slate-300">{w.name}</span>
