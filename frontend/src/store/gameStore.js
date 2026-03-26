@@ -137,7 +137,7 @@ export const useGameStore = create((set, get) => ({
     if (player.race_id) {
       const { data: raceData } = await supabase
         .from('races')
-        .select('id, mine_production_bonus')
+        .select('id, mine_production_bonus, ship_attack_bonus, ship_defense_bonus, ship_hp_bonus, ship_cargo_bonus, military_speed_bonus, civilian_speed_bonus, def_attack_bonus, def_defense_bonus')
         .eq('id', player.race_id)
         .single()
       race = raceData
