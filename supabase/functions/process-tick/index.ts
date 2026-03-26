@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.003 — 26. März 2026
+// Version: 0.004 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -1339,7 +1339,7 @@ async function processCombat(log: string[]) {
       .limit(1)
       .maybeSingle()
 
-    // Kein NPC-Eintrag → kein Kampf (processNpcSpawns hat alle Positionen vorbelegt)
+    // Kein NPC-Eintrag → Fallback: Modulo-Check + direkter Spawn
     if (!npcFleetRow) {
       const { data: cooldown } = await supabase
         .from('npc_spawn_cooldowns')
@@ -1347,7 +1347,40 @@ async function processCombat(log: string[]) {
         .eq('x', fx).eq('y', fy).eq('z', fz)
         .maybeSingle()
       if (cooldown) continue
-      continue  // Keine NPC-Flotte in DB → kein Kampf
+
+      // Modulo-Check ob NPC hier sein sollte
+      const npcStep = 15
+      const gx = Math.round(fx / npcStep) * npcStep
+      const gy = Math.round(fy / npcStep) * npcStep
+      const gz = Math.round(fz / npcStep) * npcStep
+      if (gx !== fx || gy !== fy || gz !== fz) continue
+      if (((fx/npcStep + fy/npcStep * 37 + fz/npcStep * 1009) % 10) !== 0) continue
+
+      const { slot: timeSlot, expiresAt: slotExpiry } = getNpcTimeSlot()
+      const djb2 = (s: string) => {
+        let v = 5381
+        for (let i = 0; i < s.length; i++) v = ((v << 5) + v + s.charCodeAt(i)) & 0xFFFFFFFF
+        return (v >>> 0) / 4294967295.0
+      }
+      const npcDiff = djb2(`${fx},${fy},${fz},${timeSlot}`) < 0.30 ? 'rookie'
+                    : djb2(`${fx},${fy},${fz},${timeSlot}`) < 0.65 ? 'seasoned'
+                    : djb2(`${fx},${fy},${fz},${timeSlot}`) < 0.90 ? 'veteran'
+                    : djb2(`${fx},${fy},${fz},${timeSlot}`) < 0.98 ? 'elite'
+                    : 'commander'
+      const sh = djb2(`${fx},${fz},${fy},${timeSlot + 99}`)
+      const npcSize = sh < 0.40 ? 'staffel' : sh < 0.70 ? 'geschwader' : sh < 0.90 ? 'flotte' : 'armada'
+      const npcType = `${npcDiff}_${npcSize}`
+      const sizeConf = SIZE_SHIPS[npcSize as FleetSize] ?? SIZE_SHIPS['staffel']
+      const shipCount = sizeConf.base + Math.floor(djb2(`${fy},${fx},${fz},${timeSlot + 1}`) * sizeConf.extra)
+      const npcShips = buildNpcFleet(npcType, chassisDefs)
+
+      const { data: inserted } = await supabase.from('npc_combat_fleets').insert({
+        npc_type: npcType, difficulty: npcDiff,
+        x: fx, y: fy, z: fz,
+        ships: npcShips, ship_count: shipCount,
+        time_slot: timeSlot, expires_at: slotExpiry.toISOString(),
+      }).select().single()
+      npcFleetRow = inserted
     }
 
     // NPC-Schiffe generieren falls noch nicht vorhanden (ships = [])
