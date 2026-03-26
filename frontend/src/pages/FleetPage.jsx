@@ -101,15 +101,9 @@ function fleetHpPct(ships) {
   return total > 0 ? Math.round((current / total) * 100) : 0
 }
 
-function fleetSpeed(ships, stm) {
+function fleetSpeed(ships) {
   if (!ships.length) return 0
-  const speeds = ships.map(sh => {
-    const base = sh.ship_designs?.total_speed ?? 0
-    if (!base) return 0
-    const cls = sh.ship_designs?.chassis_id?.startsWith('probe') || sh.ship_designs?.chassis_id?.startsWith('freighter') || sh.ship_designs?.chassis_id?.startsWith('station') ? 'Z' : 'M'
-    const mul = stm ? (cls === 'Z' ? (stm.civilianSpeed ?? 1) : (stm.militarySpeed ?? 1)) : 1
-    return Math.round(base * mul)
-  }).filter(s => s > 0)
+  const speeds = ships.map(sh => sh.ship_designs?.total_speed ?? 0).filter(s => s > 0)
   return speeds.length ? Math.min(...speeds) : 0
 }
 
@@ -435,7 +429,7 @@ function SetTargetModal({ fleet, fleetShips, playerId, initialTarget, onClose, o
 
   // Langsamste Geschwindigkeit in der Flotte (pc/h) × speed_percent
   const { shipTechMultipliers: stmLocal } = useGameStore()
-  const baseSpeed = fleetSpeed(fleetShips, stmLocal)  // langsamstes Schiff, pc/h
+  const baseSpeed = fleetSpeed(fleetShips)  // langsamstes Schiff, pc/h
   const speedPercent = fleet.speed_percent ?? 100
 
   const txN = parseInt(tx), tyN = parseInt(ty), tzN = parseInt(tz)
@@ -962,7 +956,7 @@ function InlineTargetInput({ fleet, ships, initialTarget, onSaved }) {
   const txN = parseInt(tx), tyN = parseInt(ty), tzN = parseInt(tz)
   const coordsValid = !isNaN(txN) && !isNaN(tyN) && !isNaN(tzN)
   const { shipTechMultipliers: stmInline } = useGameStore()
-  const baseSpeed = fleetSpeed(ships, stmInline)
+  const baseSpeed = fleetSpeed(ships)
   const speedPercent = fleet.speed_percent ?? 100
   const distance = coordsValid
     ? calcDistance(fleet.x ?? 0, fleet.y ?? 0, fleet.z ?? 0, txN, tyN, tzN)
@@ -1128,7 +1122,7 @@ function FleetDetail({ fleet, ships, allShips, chassisDefs, playerId, planet, on
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
   const flightMode = FLIGHT_MODE_LABELS[fleet.flight_mode] ?? FLIGHT_MODE_LABELS.neutral
-  const speed = fleetSpeed(ships, m)
+  const speed = fleetSpeed(ships)
   const cargoEntries = Object.entries(fleet.cargo ?? {}).filter(([, v]) => v > 0)
 
   // Flotte gilt als "im Flug" nur wenn arrive_at in der Zukunft liegt
@@ -1583,7 +1577,7 @@ function FleetRow({ fleet, ships, onClick, stm }) {
   const hpPct = fleetHpPct(ships)
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 30 ? '#fbbf24' : '#f87171'
   const { current: cargoUsed, max: cargoMax } = fleetCargo(fleet, ships)
-  const speed = fleetSpeed(ships, m)
+  const speed = fleetSpeed(ships)
   const eta = etaString(fleet.arrive_at)
 
   // Flotte gilt als "im Flug" nur wenn arrive_at in der Zukunft liegt
@@ -1633,7 +1627,7 @@ function FleetRow({ fleet, ships, onClick, stm }) {
       <div className="w-20 flex-shrink-0 text-center">
         <p className="text-xs font-mono text-slate-600 mb-0.5">Angriff</p>
         <p className="text-xs font-mono font-semibold" style={{ color: '#f87171' }}>
-          {fmt(ships.reduce((s, sh) => s + sh.ship_designs?.total_attack ?? 0, 0))}
+          {fmt(ships.reduce((s, sh) => s + (sh.ship_designs?.total_attack ?? 0), 0))}
         </p>
       </div>
 
