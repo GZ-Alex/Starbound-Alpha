@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.009 — 26. März 2026
+// Version: 0.010 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -386,7 +386,11 @@ async function processFleets(log: string[]) {
     .not('arrive_at', 'is', null)
     .lte('arrive_at', new Date().toISOString())
 
-  if (!arrivedFleets?.length) return
+  if (!arrivedFleets?.length) {
+    console.log('processFleets: no arrived fleets found')
+    return
+  }
+  console.log(`processFleets: found ${arrivedFleets.length} arrived fleets`)
 
   let arrived = 0
   for (const fleet of arrivedFleets) {
@@ -407,7 +411,6 @@ async function processFleets(log: string[]) {
     }).eq('id', fleet.id)
 
     if (!error) {
-      // Schiffe in der Flotte mitbewegen
       await supabase.from('ships').update({ x: newX, y: newY, z: newZ })
         .eq('fleet_id', fleet.id)
       // Reservierung aufheben — Flotte ist angekommen
@@ -420,11 +423,12 @@ async function processFleets(log: string[]) {
       )
       arrived++
     } else {
-      log.push(`fleet_arrive_err(${fleet.id}): ${error.message}`)
+      console.error(`fleet_arrive_err(${fleet.id}): ${error.message} code=${error.code}`)
     }
   }
 
   if (arrived > 0) log.push(`fleets_arrived=${arrived}`)
+  console.log(`processFleets: arrived=${arrived}`)
 }
 
 // ─── Reparatur-Queue ──────────────────────────────────────────────────────────
