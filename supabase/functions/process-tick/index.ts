@@ -1,5 +1,5 @@
 // process-tick/index.ts
-// Version: 0.006 — 26. März 2026
+// Version: 0.007 — 26. März 2026
 // Änderungen v0.003:
 // - Flucht: Schiff flieht VOR dem Schießen (shoot-or-flee Regel)
 // - Flucht: HP bleibt beim Fliehen erhalten statt auf 1 gesetzt
@@ -638,7 +638,7 @@ async function processHQRepair(log: string[]) {
 async function processNpcSpawns(log: string[]) {
   const npcStep = 15
   const { slot: timeSlot, expiresAt: slotExpiry } = getNpcTimeSlot()
-  log.push(`npc_spawns_start: slot=${timeSlot} expiry=${slotExpiry.toISOString()}`)
+  console.log(`npc_spawns_start: slot=${timeSlot} expiry=${slotExpiry.toISOString()}`)
 
   // Bestehende NPC-Positionen für diesen Slot (nicht überschreiben)
   const { data: existing } = await supabase
@@ -709,17 +709,17 @@ async function processNpcSpawns(log: string[]) {
   }
 
   // In Batches einfügen (max 500 pro Insert)
-  log.push(`npc_spawns_toinsert=${toInsert.length}`)
+  console.log(`npc_spawns_toinsert=${toInsert.length}`)
   let spawned = 0
   for (let i = 0; i < toInsert.length; i += 500) {
     const batch = toInsert.slice(i, i + 500)
     const { error } = await supabase.from('npc_combat_fleets').insert(batch)
     if (!error) spawned += batch.length
-    else log.push(`npc_spawn_err: ${error.message}`)
+    else console.error(`npc_spawn_err: ${error.message} code=${error.code}`)
   }
 
-  if (spawned > 0) log.push(`npc_spawned=${spawned}`)
-  else if (toInsert.length > 0) log.push(`npc_spawn_failed: nothing inserted`)
+  if (spawned > 0) console.log(`npc_spawned=${spawned}`)
+  else if (toInsert.length > 0) console.error(`npc_spawn_failed: nothing inserted of ${toInsert.length}`)
 
   // Reservierungen für anfliegende Flotten anlegen
   const { data: transitFleets } = await supabase
