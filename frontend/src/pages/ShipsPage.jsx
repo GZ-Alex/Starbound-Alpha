@@ -249,11 +249,11 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, stm, 
 
   const stats = [
     { label: 'Hülle',       value: `${ship.current_hp} / ${ship.max_hp}`, color: '#4ade80' },
-    { label: 'Angriff',     value: fmt(Math.round((design?.total_attack ?? 0) * (stm?.attack ?? 1))),    color: '#f87171' },
-    { label: 'Verteidigung',value: fmt(Math.round((design?.total_defense ?? 0) * (stm?.defense ?? 1))), color: '#38bdf8' },
-    { label: 'Geschw.',     value: fmt(Math.round((design?.total_speed ?? 0) * (chassis?.class === 'Z' ? (stm?.civilianSpeed ?? 1) : (stm?.militarySpeed ?? 1)))), color: '#fbbf24' },
+    { label: 'Angriff',     value: fmt(design?.total_attack ?? 0),   color: '#f87171' },
+    { label: 'Verteidigung',value: fmt(design?.total_defense ?? 0),  color: '#38bdf8' },
+    { label: 'Geschw.',     value: fmt(design?.total_speed ?? 0),    color: '#fbbf24' },
     { label: 'Manöver',     value: fmt(design?.total_maneuver),            color: '#a78bfa' },
-    { label: 'Laderaum',    value: fmt(Math.round((design?.total_cargo ?? 0) * (stm?.cargo ?? 1))),      color: '#34d399' },
+    { label: 'Laderaum',    value: fmt(design?.total_cargo ?? 0),    color: '#34d399' },
     { label: 'Scanweite',   value: fmt(design?.total_scan_range),          color: '#67e8f9' },
     { label: 'Zellen',      value: `${design?.total_cells_used ?? 0}`,     color: '#94a3b8' },
   ]
@@ -370,9 +370,6 @@ function ShipDetailPopup({ ship, design, chassis, partDefs, fleet, planet, stm, 
 // ─── Ship Row ─────────────────────────────────────────────────────────────────
 
 function ShipRow({ ship, design, chassis, fleet, planet, partDefs, selected, onToggleSelect, onDetail, onAssign, onGoToFleet, onRetreatChange, stm }) {
-  const m = stm ?? { attack:1, defense:1, hp:1, militarySpeed:1, civilianSpeed:1, cargo:1 }
-  const isZClass = chassis?.class === 'Z'
-  const spdMul = isZClass ? m.civilianSpeed : m.militarySpeed
   const imgSrc = chassis?.image_key
     ? `/Starbound-Alpha/ships/${chassis.image_key}.png`
     : null
