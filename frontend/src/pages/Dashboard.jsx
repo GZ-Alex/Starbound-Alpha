@@ -1,3 +1,4 @@
+// Dashboard.jsx — v1.1
 // src/pages/Dashboard.jsx
 import { useState, useMemo } from 'react'
 import { useGameStore } from '@/store/gameStore'
@@ -196,19 +197,26 @@ export default function Dashboard() {
   const spentTotal = Object.values(skillPoints).reduce((a, b) => a + b, 0)
   const freePoints = totalPoints - spentTotal
 
-  // Tech-Boni: summiere alle effects × level, nur wenn revealed
+  // Tech-Boni: _fixed/_flat = absolute Zahlen, sonst Dezimal-Prozent (0.05 = 5%)
+  const isFlat = (key) => key.endsWith('_fixed') || key.endsWith('_flat')
+
   const techBonuses = useMemo(() => {
-    const totals = {}
+    const pct  = {}  // Dezimal-Prozent: 0.05 × level
+    const flat = {}  // Absolute Zahlen: 1 × level
     for (const row of myTechRows) {
       const tech = allTechs.find(t => t.id === row.tech_id)
       if (!tech?.effects || (row.level ?? 0) <= 0) continue
       if ((row.level ?? 0) < (tech.reveal_level ?? 5)) continue
       for (const [k, v] of Object.entries(tech.effects)) {
         const per = typeof v === 'number' ? v : 0
-        totals[k] = (totals[k] ?? 0) + per * row.level
+        if (isFlat(k)) {
+          flat[k] = (flat[k] ?? 0) + per * row.level
+        } else {
+          pct[k] = (pct[k] ?? 0) + per * row.level
+        }
       }
     }
-    return totals
+    return { pct, flat }
   }, [myTechRows, allTechs])
 
   const updateSkill = async (skillKey, delta) => {
@@ -363,7 +371,7 @@ export default function Dashboard() {
                 <FlaskConical size={12} className="text-slate-300" />
                 Technologie-Boni
                 <span className="text-xs font-mono text-slate-400">
-                  ({Object.keys(techBonuses).length})
+                  ({Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length})
                 </span>
               </span>
               {showTechs
@@ -380,30 +388,55 @@ export default function Dashboard() {
                   transition={{ duration: 0.15 }}
                   className="overflow-hidden">
                   <div className="pt-3 space-y-0.5">
-                    {Object.keys(techBonuses).length === 0 ? (
+                    {Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length === 0 ? (
                       <p className="text-sm text-slate-400 px-1">
                         Noch keine sichtbaren Technologieboni erforscht.
                       </p>
-                    ) : (
-                      Object.entries(techBonuses)
-                        .sort((a, b) => a[0].localeCompare(b[0]))
-                        .map(([key, val]) => {
-                          const isSmall = Math.abs(val) < 1
-                          const display = isSmall
-                            ? `${val > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`
-                            : `${val > 0 ? '+' : ''}${val % 1 === 0 ? val : val.toFixed(2)}`
-                          return (
+                    ) : (() => {
+                        const TECH_LABELS = {
+                          attack:          'Schiff Angriff',
+                          defense:         'Schiff Verteidigung',
+                          hp:              'Schiff HP',
+                          speed:           'Schiff Geschwindigkeit',
+                          military_speed:  'Schiff Militärgeschw.',
+                          civilian_speed:  'Schiff Zivilgeschw.',
+                          cargo:           'Schiff Laderaum',
+                          maneuver:        'Schiff Manöver',
+                          accuracy:        'Schiff Trefferchance',
+                          accuracy_fixed:  'Schiff Trefferchance',
+                          def_attack:      'Verteidigung Angriff',
+                          def_defense:     'Verteidigung Abwehr',
+                          def_hp:          'Verteidigung HP',
+                          research_chance: 'Forschung Chance',
+                          research_speed:  'Forschung Geschw.',
+                          mine_production: 'Planet Minenertrag',
+                          planet_defense:  'Planet Verteidigung',
+                        }
+                        const lbl = (key) => TECH_LABELS[key.replace(/_fixed$|_flat$|_bonus$/, '')] ?? key.replace(/_/g, ' ')
+                        return [
+                          ...Object.entries(techBonuses.pct).map(([key, val]) => ({
+                            key,
+                            label: lbl(key),
+                            display: `${val * 100 > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`,
+                          })),
+                          ...Object.entries(techBonuses.flat).map(([key, val]) => ({
+                            key: key + '_flat',
+                            label: lbl(key),
+                            display: `${val > 0 ? '+' : ''}${Number.isInteger(val) ? val : val.toFixed(1)}`,
+                          })),
+                        ]
+                          .sort((a, b) => a.label.localeCompare(b.label))
+                          .map(({ key, label, display }) => (
                             <div key={key}
                               className="flex justify-between items-center px-2 py-1 rounded"
                               style={{ background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.06)' }}>
-                              <span className="text-sm text-slate-400 font-mono">{key}</span>
+                              <span className="text-sm text-slate-400 font-mono">{label}</span>
                               <span className="text-sm font-mono font-semibold" style={{ color: '#34d399' }}>
                                 {display}
                               </span>
                             </div>
-                          )
-                        })
-                    )}
+                          ))
+                      })()
                   </div>
                 </motion.div>
               )}
@@ -411,9 +444,9 @@ export default function Dashboard() {
 
             {!showTechs && (
               <p className="text-xs text-slate-400 font-mono pt-3 px-1">
-                {Object.keys(techBonuses).length === 0
+                {Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length === 0
                   ? 'Noch keine sichtbaren Technologieboni.'
-                  : `${Object.keys(techBonuses).length} aktive Boni — zum Anzeigen klicken`}
+                  : `${Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length} aktive Boni — zum Anzeigen klicken`}
               </p>
             )}
           </div>
