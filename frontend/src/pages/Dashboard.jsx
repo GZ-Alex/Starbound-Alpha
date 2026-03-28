@@ -85,40 +85,6 @@ function SkillRow({ field, race, skillPoints, freePoints, onAdd, onRemove, savin
     ? `${field.bonusPerPt > 0 ? '+' : ''}${field.bonusPerPt}${field.flatUnit}`
     : `${field.bonusPerPt > 0 ? '+' : ''}${field.bonusPerPt}${field.flatUnit} / EP`
 
-
-  const TECH_LABELS = {
-    attack:          'Schiff Angriff',
-    defense:         'Schiff Verteidigung',
-    hp:              'Schiff HP',
-    speed:           'Schiff Geschwindigkeit',
-    military_speed:  'Schiff Militärgeschw.',
-    civilian_speed:  'Schiff Zivilgeschw.',
-    cargo:           'Schiff Laderaum',
-    maneuver:        'Schiff Manöver',
-    accuracy:        'Schiff Trefferchance',
-    accuracy_fixed:  'Schiff Trefferchance',
-    def_attack:      'Verteidigung Angriff',
-    def_defense:     'Verteidigung Abwehr',
-    def_hp:          'Verteidigung HP',
-    research_chance: 'Forschung Chance',
-    research_speed:  'Forschung Geschw.',
-    mine_production: 'Planet Minenertrag',
-    planet_defense:  'Planet Verteidigung',
-  }
-  const techLbl = (key) => TECH_LABELS[key.replace(/_fixed$|_flat$|_bonus$/, '')] ?? key.replace(/_/g, ' ')
-  const techBonusItems = [
-    ...Object.entries(techBonuses.pct).map(([key, val]) => ({
-      key,
-      label: techLbl(key),
-      display: `${val * 100 > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`,
-    })),
-    ...Object.entries(techBonuses.flat).map(([key, val]) => ({
-      key: key + '_flat',
-      label: techLbl(key),
-      display: `${val > 0 ? '+' : ''}${Number.isInteger(val) ? val : val.toFixed(1)}`,
-    })),
-  ].sort((a, b) => a.label.localeCompare(b.label))
-
   return (
     <div className="grid items-center py-2.5 px-3 rounded transition-colors hover:bg-white/[0.03]"
       style={{ gridTemplateColumns: '1fr 64px 96px 96px 72px', gap: '0 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -231,27 +197,56 @@ export default function Dashboard() {
   const spentTotal = Object.values(skillPoints).reduce((a, b) => a + b, 0)
   const freePoints = totalPoints - spentTotal
 
-  // Tech-Boni: _fixed/_flat = absolute Zahlen, sonst Dezimal-Prozent (0.05 = 5%)
-  const isFlat = (key) => key.endsWith('_fixed') || key.endsWith('_flat')
+  // Tech-Boni: summiere alle effects × level, nur wenn revealed
+  const TECH_LABELS = {
+    attack:          'Schiff Angriff',
+    defense:         'Schiff Verteidigung',
+    hp:              'Schiff HP',
+    speed:           'Schiff Geschwindigkeit',
+    military_speed:  'Schiff Militärgeschw.',
+    civilian_speed:  'Schiff Zivilgeschw.',
+    cargo:           'Schiff Laderaum',
+    maneuver:        'Schiff Manöver',
+    accuracy:        'Schiff Trefferchance',
+    accuracy_fixed:  'Schiff Trefferchance',
+    def_attack:      'Verteidigung Angriff',
+    def_defense:     'Verteidigung Abwehr',
+    def_hp:          'Verteidigung HP',
+    research_chance: 'Forschung Chance',
+    research_speed:  'Forschung Geschw.',
+    mine_production: 'Planet Minenertrag',
+    planet_defense:  'Planet Verteidigung',
+  }
 
   const techBonuses = useMemo(() => {
-    const pct  = {}  // Dezimal-Prozent: 0.05 × level
-    const flat = {}  // Absolute Zahlen: 1 × level
+    const pct = {}, flat = {}
+    const isFlat = (k) => k.endsWith('_fixed') || k.endsWith('_flat')
     for (const row of myTechRows) {
       const tech = allTechs.find(t => t.id === row.tech_id)
       if (!tech?.effects || (row.level ?? 0) <= 0) continue
       if ((row.level ?? 0) < (tech.reveal_level ?? 5)) continue
       for (const [k, v] of Object.entries(tech.effects)) {
         const per = typeof v === 'number' ? v : 0
-        if (isFlat(k)) {
-          flat[k] = (flat[k] ?? 0) + per * row.level
-        } else {
-          pct[k] = (pct[k] ?? 0) + per * row.level
-        }
+        if (isFlat(k)) flat[k] = (flat[k] ?? 0) + per * row.level
+        else            pct[k]  = (pct[k]  ?? 0) + per * row.level
       }
     }
     return { pct, flat }
   }, [myTechRows, allTechs])
+
+  const techLbl = (key) => TECH_LABELS[key.replace(/_fixed$|_flat$|_bonus$/, '')] ?? key.replace(/_/g, ' ')
+  const techBonusItems = [
+    ...Object.entries(techBonuses.pct).map(([key, val]) => ({
+      key,
+      label: techLbl(key),
+      display: `${val * 100 > 0 ? '+' : ''}${(val * 100).toFixed(1)}%`,
+    })),
+    ...Object.entries(techBonuses.flat).map(([key, val]) => ({
+      key: key + '_f',
+      label: techLbl(key),
+      display: `${val > 0 ? '+' : ''}${Number.isInteger(val) ? val : val.toFixed(1)}`,
+    })),
+  ].sort((a, b) => a.label.localeCompare(b.label))
 
   const updateSkill = async (skillKey, delta) => {
     if (saving || !player) return
@@ -405,7 +400,7 @@ export default function Dashboard() {
                 <FlaskConical size={12} className="text-slate-300" />
                 Technologie-Boni
                 <span className="text-xs font-mono text-slate-400">
-                  ({Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length})
+                  ({techBonusItems.length})
                 </span>
               </span>
               {showTechs
@@ -422,20 +417,20 @@ export default function Dashboard() {
                   transition={{ duration: 0.15 }}
                   className="overflow-hidden">
                   <div className="pt-3 space-y-0.5">
-                    {Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length === 0 ? (
+                    {techBonusItems.length === 0 ? (
                       <p className="text-sm text-slate-400 px-1">
                         Noch keine sichtbaren Technologieboni erforscht.
                       </p>
                     ) : techBonusItems.map(({ key, label, display }) => (
-                            <div key={key}
-                              className="flex justify-between items-center px-2 py-1 rounded"
-                              style={{ background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.06)' }}>
-                              <span className="text-sm text-slate-400 font-mono">{label}</span>
-                              <span className="text-sm font-mono font-semibold" style={{ color: '#34d399' }}>
-                                {display}
-                              </span>
-                            </div>
-                          ))
+                      <div key={key}
+                        className="flex justify-between items-center px-2 py-1 rounded"
+                        style={{ background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.06)' }}>
+                        <span className="text-sm text-slate-400 font-mono">{label}</span>
+                        <span className="text-sm font-mono font-semibold" style={{ color: '#34d399' }}>
+                          {display}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </motion.div>
               )}
@@ -443,9 +438,9 @@ export default function Dashboard() {
 
             {!showTechs && (
               <p className="text-xs text-slate-400 font-mono pt-3 px-1">
-                {Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length === 0
+                {Object.keys(techBonuses).length === 0
                   ? 'Noch keine sichtbaren Technologieboni.'
-                  : `${Object.keys(techBonuses.pct).length + Object.keys(techBonuses.flat).length} aktive Boni — zum Anzeigen klicken`}
+                  : `${techBonusItems.length} aktive Boni — zum Anzeigen klicken`}
               </p>
             )}
           </div>
